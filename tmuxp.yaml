@@ -1,0 +1,13 @@
+session_name: four-vertical-panes
+windows:
+  - window_name: winwin
+    layout: tiled
+    panes:
+      - shell_command:
+          - just run 1
+      - shell_command:
+          - just run 2
+      - shell_command:
+          - just run 3
+      - shell_command:
+          - just run 4
