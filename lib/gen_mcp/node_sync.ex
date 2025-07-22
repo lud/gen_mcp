@@ -98,6 +98,7 @@ defmodule GenMcp.NodeSync do
 
   defp register_random_node_id(attempt) when attempt < 10 do
     node_id = random_node_id()
+
     case :global.register_name({@scope, node_id}, self(), &:global.random_notify_name/3) do
       :yes -> {:ok, node_id}
       :no -> register_random_node_id(attempt + 1)
@@ -118,20 +119,17 @@ defmodule GenMcp.NodeSync do
   defp append_member([], member), do: [member]
 
   defp cleanup_member(cluster, member) do
-    cluster
-    |> Enum.flat_map(fn {id, members} ->
-      case members -- [member] do
-        [] -> []
-        rest -> [{id, rest}]
-      end
-    end)
-    |> Map.new()
+    filter_members(cluster, &(&1 != member))
   end
 
   defp cleanup_node(cluster, node) do
+    filter_members(cluster, fn {n, _} -> n != node end)
+  end
+
+  defp filter_members(cluster, f) do
     cluster
     |> Enum.flat_map(fn {id, members} ->
-      case Enum.filter(members, fn {n, _} -> n != node end) do
+      case Enum.filter(members, f) do
         [] -> []
         rest -> [{id, rest}]
       end
@@ -141,13 +139,16 @@ defmodule GenMcp.NodeSync do
 
   defp dump({:noreply, state}) do
     value = state.cluster
+
     case Process.get(:prev_dump_value, nil) do
       ^value ->
         :ok
+
       _ ->
-        Process.put(:prev_dump_value,value)
+        Process.put(:prev_dump_value, value)
         Logger.debug(inspect(state.cluster, pretty: true), ansi_color: :green)
     end
+
     {:noreply, state}
   end
 
