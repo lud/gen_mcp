@@ -22,11 +22,26 @@ defmodule GenMcp.Application do
   end
 
   def connect do
-    require Logger
+    # just to check transitive connectivity we will only connect to nodes with
+    # lower and greated integer value
+    str = Atom.to_string(node())
 
-    for i <- 0..10 do
-      node = :"genmcpdev-#{i}@127.0.0.1"
-      Node.connect(node)
+    case str do
+      "genmcpdev-" <> rest ->
+        {int, "@127.0.0.1"} = Integer.parse(rest)
+
+        case int do
+          0 ->
+            Node.connect(:"genmcpdev-#{1}@127.0.0.1")
+
+          n ->
+            Node.connect(:"genmcpdev-#{n - 1}@127.0.0.1")
+            Node.connect(:"genmcpdev-#{n + 1}@127.0.0.1")
+        end
+
+      _ ->
+        # In tests or "mix run" without the demo node names we do not connect
+        :ok
     end
   end
 end

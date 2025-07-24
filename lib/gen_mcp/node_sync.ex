@@ -4,8 +4,12 @@ defmodule GenMcp.NodeSync do
 
   @gen_opts ~w(name timeout debug spawn_opt hibernate_after)a
   @scope :gen_mcp_pg_scope
+  @glob :gen_mcp_global
   @group :node_sync
   @tag __MODULE__
+  @default_name __MODULE__
+  @node_id_bits 16
+  @max_node_id 2 ** @node_id_bits - 1
 
   def pg_child_spec do
     %{
@@ -16,13 +20,43 @@ defmodule GenMcp.NodeSync do
     }
   end
 
+  def gen_session_id(server \\ @default_name)
+
+  def gen_session_id(server) do
+    node_id = GenServer.call(server, :get_node_id)
+
+    Base.encode16(<<node_id::@node_id_bits>>) <>
+      "-" <> Base.url_encode64(:crypto.strong_rand_bytes(18))
+  end
+
+  def node_of(server \\ @default_name, session_id)
+
+  def node_of(server, session_id) when is_binary(session_id) do
+    with [node_b16 | _] <- String.split(session_id, "-", parts: 2),
+         {:ok, <<node_id::@node_id_bits>>} <- Base.decode16(node_b16) do
+      GenServer.call(server, {:get_node, node_id})
+    else
+      _ -> :error
+    end
+  end
+
+  def node_known?(server \\ @default_name, node) do
+    GenServer.call(server, {:node_known?, node})
+  end
+
   def start_link(opts) do
     {gen_opts, opts} = Keyword.split(opts, @gen_opts)
+    gen_opts = Keyword.put_new(gen_opts, :name, @default_name)
     GenServer.start_link(__MODULE__, opts, gen_opts)
+  end
+
+  def global_name(node_id) do
+    {@glob, node_id}
   end
 
   @impl true
   def init(_opts) do
+    Logger.metadata(node: node())
     :net_kernel.monitor_nodes(true)
 
     case register_random_node_id() do
@@ -58,18 +92,27 @@ defmodule GenMcp.NodeSync do
   def handle_info({mref, :leave, @group, pids}, %{mref: mref} = state) do
     state =
       Enum.reduce(pids, state, fn pid, state ->
+        Logger.debug("Node #{node(pid)} left")
         update_in(state.cluster, &cleanup_member(&1, {node(pid), pid}))
       end)
 
     dump({:noreply, state})
   end
 
-  def handle_info({@tag, node_id, node, pid}, state) do
+  def handle_info({@tag, node_id, node, pid}, state) when node == node() do
+    %{node_id: ^node_id} = state
+    ^pid = self()
+    {:noreply, state}
+  end
+
+  def handle_info({@tag, node_id, node, pid}, state) when node != node() do
     state =
       update_in(state.cluster[node_id], fn
         nil -> [{node, pid}]
         [_ | _] = list -> append_member(list, {node, pid})
       end)
+
+    Logger.debug("Node #{node} joined as #{node_id}")
 
     dump({:noreply, state})
   end
@@ -83,7 +126,7 @@ defmodule GenMcp.NodeSync do
     dump({:noreply, state})
   end
 
-  def handle_info({:global_name_conflict, {@scope, name}}, state) do
+  def handle_info({:global_name_conflict, {@glob, name}}, state) do
     Logger.warning("duplicated node id #{name}, shutting down")
     {:stop, :shutdown, state}
   end
@@ -94,12 +137,36 @@ defmodule GenMcp.NodeSync do
     dump({:noreply, state})
   end
 
+  @impl true
+  def handle_call(:get_node_id, _from, state) do
+    {:reply, state.node_id, state}
+  end
+
+  def handle_call({:get_node, node_id}, _from, state) do
+    reply =
+      case state.cluster do
+        %{^node_id => [{node, _} | _]} -> {:ok, node}
+        _ -> :error
+      end
+
+    {:reply, reply, state}
+  end
+
+  def handle_call({:node_known?, node}, _from, state) do
+    known? =
+      Enum.any?(state.cluster, fn {_id, members} ->
+        Enum.any?(members, fn {n, _} -> n == node end)
+      end)
+
+    {:reply, known?, state}
+  end
+
   defp register_random_node_id(attempt \\ 0)
 
   defp register_random_node_id(attempt) when attempt < 10 do
     node_id = random_node_id()
 
-    case :global.register_name({@scope, node_id}, self(), &:global.random_notify_name/3) do
+    case :global.register_name(global_name(node_id), self(), &:global.random_notify_name/3) do
       :yes -> {:ok, node_id}
       :no -> register_random_node_id(attempt + 1)
     end
@@ -111,12 +178,21 @@ defmodule GenMcp.NodeSync do
   end
 
   defp random_node_id do
-    Enum.random(0..65535)
+    # Enum.random(1..3)
+    Enum.random(0..@max_node_id)
   end
 
-  defp append_member([member | rest], member), do: [member | rest]
-  defp append_member([h | rest], member), do: [h | append_member(rest, member)]
-  defp append_member([], member), do: [member]
+  defp append_member([member | rest], member) do
+    [member | rest]
+  end
+
+  defp append_member([h | rest], member) do
+    [h | append_member(rest, member)]
+  end
+
+  defp append_member([], member) do
+    [member]
+  end
 
   defp cleanup_member(cluster, member) do
     filter_members(cluster, &(&1 != member))

@@ -1,4 +1,9 @@
-# Used by "mix format"
+locals_without_parens = []
+
 [
-  inputs: ["{mix,.formatter}.exs", "{config,lib,test}/**/*.{ex,exs}"]
+  import_deps: [:phoenix, :jsv, :plug],
+  inputs: ["*.exs", "{config,lib,test,tmp}/**/*.{ex,exs}"],
+  force_do_end_blocks: true,
+  locals_without_parens: locals_without_parens,
+  export: [locals_without_parens: locals_without_parens]
 ]
