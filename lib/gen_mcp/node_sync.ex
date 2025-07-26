@@ -20,13 +20,16 @@ defmodule GenMcp.NodeSync do
     }
   end
 
+  def node_id(server \\ @default_name) do
+    GenServer.call(server, :node_id)
+  end
+
   def gen_session_id(server \\ @default_name)
 
   def gen_session_id(server) do
-    node_id = GenServer.call(server, :get_node_id)
-
-    Base.encode16(<<node_id::@node_id_bits>>) <>
-      "-" <> Base.url_encode64(:crypto.strong_rand_bytes(18))
+    node_id =
+      Base.encode16(<<node_id()::@node_id_bits>>) <>
+        "-" <> Base.url_encode64(:crypto.strong_rand_bytes(18))
   end
 
   def node_of(server \\ @default_name, session_id)
@@ -138,7 +141,7 @@ defmodule GenMcp.NodeSync do
   end
 
   @impl true
-  def handle_call(:get_node_id, _from, state) do
+  def handle_call(:node_id, _from, state) do
     {:reply, state.node_id, state}
   end
 

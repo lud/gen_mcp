@@ -32,14 +32,16 @@ defmodule GenMcp.MixProject do
   defp deps do
     [
       {:phoenix, ">= 1.7.0"},
-      {:jsv, "~> 0.10"},
+      {:jsv, path: "../jsv"},
+      {:abnf_parsec, "~> 2.0"},
 
       # Test
       {:req, "~> 0.5", only: :test},
       {:local_cluster, "~> 2.0", only: [:test]},
       {:bandit, "~> 1.0", only: [:dev, :test]},
       {:jason, "~> 1.0", only: [:dev, :test]},
-      mcp_validator()
+      mcp_validator(),
+      mcp_schemas()
     ]
   end
 
@@ -47,6 +49,16 @@ defmodule GenMcp.MixProject do
     {:mcp_validator,
      git: "https://github.com/Janix-ai/mcp-validator.git",
      ref: "v0.3.1",
+     only: [:dev, :test],
+     compile: false,
+     app: false}
+  end
+
+  defp mcp_schemas do
+    {:modelcontextprotocol,
+     git: "https://github.com/modelcontextprotocol/modelcontextprotocol.git",
+     sparse: "schema/2025-06-18",
+     ref: "2025-06-18",
      only: [:dev, :test],
      compile: false,
      app: false}

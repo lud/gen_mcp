@@ -12,3 +12,5 @@ config :gen_mcp, GenMcp.TestWeb.Endpoint,
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
   metadata: [:node]
+
+config :phoenix, :logger, true

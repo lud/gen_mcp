@@ -3,14 +3,28 @@ defmodule GenMcp.TestWeb.Endpoint do
 
   @moduledoc false
 
-  # This is only there so Firefox will be happy with a favicon and stop
-  # generating errors in the logs when testing.
-  plug Plug.Static, at: "/", from: "test/support/test_web/assets", only: ~w(favicon.ico)
+  plug Plug.RequestId
+  plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
+    body_reader: {__MODULE__, :read_body, []},
     json_decoder: Phoenix.json_library()
 
   plug GenMcp.TestWeb.Router
+
+  def read_body(conn, opts) do
+    with {:ok, body, conn} <- Plug.Conn.read_body(conn, opts) do
+      require(Logger).debug(
+        """
+        INPUT BODY
+        #{body}
+        """,
+        ansi_color: :light_blue
+      )
+
+      {:ok, body, conn}
+    end
+  end
 end

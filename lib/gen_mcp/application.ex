@@ -5,15 +5,25 @@ defmodule GenMcp.Application do
 
   use Application
 
-  @impl true
   IO.warn("@todo remove autoconnect")
 
+  def env do
+    unquote(Mix.env())
+  end
+
+  @impl true
   def start(_type, _args) do
-    children = [
-      GenMcp.NodeSync.pg_child_spec(),
-      GenMcp.NodeSync,
-      {Task, &connect/0}
-    ]
+    children =
+      [
+        GenMcp.NodeSync.pg_child_spec(),
+        GenMcp.NodeSync,
+        {Task, &connect/0}
+      ] ++
+        if env() == :dev do
+          [GenMcp.TestWeb.Endpoint]
+        else
+          []
+        end
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
