@@ -74,6 +74,7 @@ defmodule GenMcp.MixProject do
     [
       mount: [
         {GenMcp.TestWeb, "test/support/test_web", flavor: :phoenix},
+        {GenMcp.Test, "test/support"},
         {GenMcp.ConnCase, "test/support/conn_case"},
         {GenMcp, "lib/gen_mcp"},
         {Mix.Tasks, "lib/mix/tasks", flavor: :mix_task},

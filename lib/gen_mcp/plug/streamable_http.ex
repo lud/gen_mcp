@@ -19,9 +19,6 @@ defmodule GenMcp.Plug.StreamableHttp do
 end
 
 defmodule GenMcp.Plug.StreamableHttp.Impl do
-  alias GenMcp.NodeSync
-  alias GenMcp.Entities.ListToolsResult
-  alias GenMcp.Entities.ListToolsRequest
   alias GenMcp.Entities.InitializeRequest
   alias GenMcp.Entities.InitializeResult
   alias GenMcp.Entities.JSONRPCResponse
