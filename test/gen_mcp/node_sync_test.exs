@@ -20,7 +20,7 @@ defmodule GenMcp.NodeSyncTest do
   end
 
   test "is registered as global" do
-    node_id = GenServer.call(NodeSync, :get_node_id)
+    node_id = NodeSync.node_id()
     assert Process.whereis(NodeSync) == :global.whereis_name(NodeSync.global_name(node_id))
   end
 
@@ -43,8 +43,9 @@ defmodule GenMcp.NodeSyncTest do
 
     assert :pong = Node.ping(peer)
 
+    peer |> dbg()
     # We can ask a session id on this node
-    session_id = NodeSync.gen_session_id({NodeSync, peer})
+    session_id = NodeSync.gen_session_id({NodeSync, peer}) |> dbg()
     # When known
     await_known_node(peer)
     assert {:ok, peer} == NodeSync.node_of(session_id)

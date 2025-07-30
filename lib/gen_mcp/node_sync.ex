@@ -27,9 +27,8 @@ defmodule GenMcp.NodeSync do
   def gen_session_id(server \\ @default_name)
 
   def gen_session_id(server) do
-    node_id =
-      Base.encode16(<<node_id()::@node_id_bits>>) <>
-        "-" <> Base.url_encode64(:crypto.strong_rand_bytes(18))
+    Base.encode16(<<node_id(server)::@node_id_bits>>) <>
+      "-" <> Base.url_encode64(:crypto.strong_rand_bytes(18))
   end
 
   def node_of(server \\ @default_name, session_id)

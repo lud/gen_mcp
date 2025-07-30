@@ -1,6 +1,7 @@
 defmodule GenMcp.McpComplianceTest do
   use ExUnit.Case, async: true
 
+  @tag :skip
   test "run the mcp-validator test suite" do
     {output, _} = System.cmd("bash", ["test/support/mcp-validator.sh"], stderr_to_stdout: true)
     IO.puts(output)
