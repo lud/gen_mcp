@@ -48,7 +48,7 @@ defmodule GenMcp.DefaultServer do
     end
   end
 
-  def handle_request(%ListToolsRequest{} = req, state) do
+  def handle_request(%ListToolsRequest{}, state) do
     page = Enum.map(state.tools, fn {_name, tool} -> GenMcp.Tool.describe(tool) end) |> dbg()
     {:reply, %{tools: page}, state}
   end

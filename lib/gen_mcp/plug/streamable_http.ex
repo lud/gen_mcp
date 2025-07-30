@@ -47,22 +47,46 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
     end
   end
 
+  def http_post(conn, opts) do
+    send_error_sessionless(conn, nil, "unknown protocol")
+  end
+
   defp send_error_sessionless(conn, msgid, %JSV.ValidationError{} = jsv_err) do
     Logger.error("invalid request sent to #{inspect(__MODULE__)}")
 
+    do_send_error(conn, 400, msgid, "request validation failed", JSV.normalize_error(jsv_err))
+  end
+
+  defp send_error_sessionless(conn, msgid, errmsg) when is_binary(errmsg) do
+    Logger.error("invalid request sent to #{inspect(__MODULE__)}")
+
+    do_send_error(conn, 400, msgid, errmsg, nil)
+  end
+
+  defp do_send_error(conn, status, msgid, message, data) do
     payload = %GenMcp.Entities.JSONRPCError{
       error: %{
         code: 1,
-        data: JSV.normalize_error(jsv_err),
-        message: "request validation failed"
+        data: data,
+        message: message
       },
       # no session, we do not know what client that is,
       id: msgid,
       jsonrpc: "2.0"
     }
 
-    send_json(conn, 400, payload)
+    send_json(conn, status, payload)
   end
+
+  IO.warn("""
+  We should map on the method and validate the corresponding schema only.
+
+  No need to have errors for all anyOf entries.
+
+  reuse the validator module with a matcher, and use it from tests too.
+
+
+  """)
 
   # TODO use for server-initiated requests
   # defp impersistent_msgid do
