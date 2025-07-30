@@ -114,8 +114,9 @@ defmodule Generator do
   defp generate_module({name, schema}) do
     IO.puts("generating #{name}")
     module = module_name(name)
+    title = Atom.to_string(name)
 
-    case prepare_schema(schema) do
+    case prepare_schema(schema, title) do
       {:struct, schema} ->
         """
         defmodule #{inspect(module)} do
@@ -137,13 +138,18 @@ defmodule Generator do
     end
   end
 
-  defp prepare_schema(schema) do
+  defp prepare_schema(schema, title) do
     schema
-    |> jsvize()
-    |> classify_fix()
+    |> use_schema_api()
+    |> atomize()
+    |> dbg()
+    |> case do
+      {:struct, schema} -> {:struct, Map.put(schema, :title, title)}
+      {:generic, _} = gen -> gen
+    end
   end
 
-  defp jsvize(schema) do
+  defp use_schema_api(schema) do
     schema
     |> JSV.Helpers.Traverse.prewalk(fn
       {:val, %{_meta: meta} = prop} ->
@@ -235,7 +241,7 @@ defmodule Generator do
     |> Enum.sort_by(&elem(&1, 0))
   end
 
-  defp classify_fix(%{type: "object", properties: _} = schema) do
+  defp atomize(%{type: "object", properties: _} = schema) do
     schema =
       case schema do
         %{required: keys} -> %{schema | required: Enum.map(keys, &String.to_atom/1)}
@@ -245,7 +251,7 @@ defmodule Generator do
     {:struct, schema}
   end
 
-  defp classify_fix(schema) do
+  defp atomize(schema) do
     {:generic, schema}
   end
 
@@ -258,9 +264,9 @@ defmodule Generator do
   end
 end
 
-raise """
+IO.warn("""
 concrete requests should still bear the message id, it's easier to keep track of
 it when passing to tools, and easier for users to debug.
-"""
+""")
 
 Generator.run()

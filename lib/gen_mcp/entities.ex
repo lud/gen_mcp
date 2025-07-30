@@ -151,6 +151,7 @@ defmodule GenMcp.Entities.Annotations do
         type: "number"
       }
     },
+    title: "Annotations",
     type: "object"
   }
 end
@@ -173,6 +174,7 @@ defmodule GenMcp.Entities.AudioContent do
       type: const("audio")
     },
     required: [:data, :mimeType, :type],
+    title: "AudioContent",
     type: "object"
   }
 end
@@ -197,6 +199,7 @@ defmodule GenMcp.Entities.BaseMetadata do
         )
     },
     required: [:name],
+    title: "BaseMetadata",
     type: "object"
   }
 end
@@ -216,6 +219,7 @@ defmodule GenMcp.Entities.BlobResourceContents do
       uri: uri(description: "The URI of this resource.")
     },
     required: [:blob, :uri],
+    title: "BlobResourceContents",
     type: "object"
   }
 end
@@ -232,6 +236,7 @@ defmodule GenMcp.Entities.BooleanSchema do
       type: const("boolean")
     },
     required: [:type],
+    title: "BooleanSchema",
     type: "object"
   }
 end
@@ -247,6 +252,7 @@ defmodule GenMcp.Entities.CallToolRequest do
       params: GenMcp.Entities.CallToolRequestParams
     },
     required: [:method, :params],
+    title: "CallToolRequest",
     type: "object"
   }
 end
@@ -261,6 +267,7 @@ defmodule GenMcp.Entities.CallToolRequestParams do
       name: string()
     },
     required: [:name],
+    title: "CallToolRequestParams",
     type: "object"
   }
 end
@@ -292,6 +299,7 @@ defmodule GenMcp.Entities.CallToolResult do
       }
     },
     required: [:content],
+    title: "CallToolResult",
     type: "object"
   }
 end
@@ -319,6 +327,7 @@ defmodule GenMcp.Entities.CancelledNotification do
       }
     },
     required: [:method, :params],
+    title: "CancelledNotification",
     type: "object"
   }
 end
@@ -364,6 +373,7 @@ defmodule GenMcp.Entities.ClientCapabilities do
         type: "object"
       }
     },
+    title: "ClientCapabilities",
     type: "object"
   }
 end
@@ -462,6 +472,7 @@ defmodule GenMcp.Entities.CompleteRequest do
       }
     },
     required: [:method, :params],
+    title: "CompleteRequest",
     type: "object"
   }
 end
@@ -497,6 +508,7 @@ defmodule GenMcp.Entities.CompleteResult do
       }
     },
     required: [:completion],
+    title: "CompleteResult",
     type: "object"
   }
 end
@@ -556,6 +568,7 @@ defmodule GenMcp.Entities.CreateMessageRequest do
       }
     },
     required: [:method, :params],
+    title: "CreateMessageRequest",
     type: "object"
   }
 end
@@ -581,6 +594,7 @@ defmodule GenMcp.Entities.CreateMessageResult do
       stopReason: string(description: "The reason why sampling stopped, if known.")
     },
     required: [:content, :model, :role],
+    title: "CreateMessageResult",
     type: "object"
   }
 end
@@ -625,6 +639,7 @@ defmodule GenMcp.Entities.ElicitRequest do
       }
     },
     required: [:method, :params],
+    title: "ElicitRequest",
     type: "object"
   }
 end
@@ -646,6 +661,7 @@ defmodule GenMcp.Entities.ElicitResult do
       }
     },
     required: [:action],
+    title: "ElicitResult",
     type: "object"
   }
 end
@@ -666,6 +682,7 @@ defmodule GenMcp.Entities.EmbeddedResource do
       type: const("resource")
     },
     required: [:resource, :type],
+    title: "EmbeddedResource",
     type: "object"
   }
 end
@@ -691,6 +708,7 @@ defmodule GenMcp.Entities.EnumSchema do
       type: const("string")
     },
     required: [:enum, :type],
+    title: "EnumSchema",
     type: "object"
   }
 end
@@ -717,6 +735,7 @@ defmodule GenMcp.Entities.GetPromptRequest do
       }
     },
     required: [:method, :params],
+    title: "GetPromptRequest",
     type: "object"
   }
 end
@@ -733,6 +752,7 @@ defmodule GenMcp.Entities.GetPromptResult do
       messages: array_of(GenMcp.Entities.PromptMessage)
     },
     required: [:messages],
+    title: "GetPromptResult",
     type: "object"
   }
 end
@@ -755,6 +775,7 @@ defmodule GenMcp.Entities.ImageContent do
       type: const("image")
     },
     required: [:data, :mimeType, :type],
+    title: "ImageContent",
     type: "object"
   }
 end
@@ -780,6 +801,7 @@ defmodule GenMcp.Entities.Implementation do
       version: string()
     },
     required: [:name, :version],
+    title: "Implementation",
     type: "object"
   }
 end
@@ -796,6 +818,7 @@ defmodule GenMcp.Entities.InitializeRequest do
       params: GenMcp.Entities.InitializeRequestParams
     },
     required: [:method, :params],
+    title: "InitializeRequest",
     type: "object"
   }
 end
@@ -815,6 +838,7 @@ defmodule GenMcp.Entities.InitializeRequestParams do
         )
     },
     required: [:capabilities, :clientInfo, :protocolVersion],
+    title: "InitializeRequestParams",
     type: "object"
   }
 end
@@ -842,6 +866,7 @@ defmodule GenMcp.Entities.InitializeResult do
       serverInfo: GenMcp.Entities.Implementation
     },
     required: [:capabilities, :protocolVersion, :serverInfo],
+    title: "InitializeResult",
     type: "object"
   }
 end
@@ -862,6 +887,7 @@ defmodule GenMcp.Entities.InitializedNotification do
       }
     },
     required: [:method],
+    title: "InitializedNotification",
     type: "object"
   }
 end
@@ -893,6 +919,7 @@ defmodule GenMcp.Entities.JSONRPCError do
       jsonrpc: const("2.0")
     },
     required: [:error, :id, :jsonrpc],
+    title: "JSONRPCError",
     type: "object"
   }
 end
@@ -930,6 +957,7 @@ defmodule GenMcp.Entities.JSONRPCNotification do
       }
     },
     required: [:jsonrpc, :method],
+    title: "JSONRPCNotification",
     type: "object"
   }
 end
@@ -959,6 +987,7 @@ defmodule GenMcp.Entities.JSONRPCRequest do
       }
     },
     required: [:id, :jsonrpc, :method],
+    title: "JSONRPCRequest",
     type: "object"
   }
 end
@@ -975,6 +1004,7 @@ defmodule GenMcp.Entities.JSONRPCResponse do
       result: GenMcp.Entities.Result
     },
     required: [:id, :jsonrpc, :result],
+    title: "JSONRPCResponse",
     type: "object"
   }
 end
@@ -1000,6 +1030,7 @@ defmodule GenMcp.Entities.ListPromptsRequest do
       }
     },
     required: [:method],
+    title: "ListPromptsRequest",
     type: "object"
   }
 end
@@ -1020,6 +1051,7 @@ defmodule GenMcp.Entities.ListPromptsResult do
       prompts: array_of(GenMcp.Entities.Prompt)
     },
     required: [:prompts],
+    title: "ListPromptsResult",
     type: "object"
   }
 end
@@ -1044,6 +1076,7 @@ defmodule GenMcp.Entities.ListResourceTemplatesRequest do
       }
     },
     required: [:method],
+    title: "ListResourceTemplatesRequest",
     type: "object"
   }
 end
@@ -1064,6 +1097,7 @@ defmodule GenMcp.Entities.ListResourceTemplatesResult do
       resourceTemplates: array_of(GenMcp.Entities.ResourceTemplate)
     },
     required: [:resourceTemplates],
+    title: "ListResourceTemplatesResult",
     type: "object"
   }
 end
@@ -1088,6 +1122,7 @@ defmodule GenMcp.Entities.ListResourcesRequest do
       }
     },
     required: [:method],
+    title: "ListResourcesRequest",
     type: "object"
   }
 end
@@ -1108,6 +1143,7 @@ defmodule GenMcp.Entities.ListResourcesResult do
       resources: array_of(GenMcp.Entities.Resource)
     },
     required: [:resources],
+    title: "ListResourcesResult",
     type: "object"
   }
 end
@@ -1136,6 +1172,7 @@ defmodule GenMcp.Entities.ListRootsRequest do
       }
     },
     required: [:method],
+    title: "ListRootsRequest",
     type: "object"
   }
 end
@@ -1152,6 +1189,7 @@ defmodule GenMcp.Entities.ListRootsResult do
       roots: array_of(GenMcp.Entities.Root)
     },
     required: [:roots],
+    title: "ListRootsResult",
     type: "object"
   }
 end
@@ -1176,6 +1214,7 @@ defmodule GenMcp.Entities.ListToolsRequest do
       }
     },
     required: [:method],
+    title: "ListToolsRequest",
     type: "object"
   }
 end
@@ -1196,6 +1235,7 @@ defmodule GenMcp.Entities.ListToolsResult do
       tools: array_of(GenMcp.Entities.Tool)
     },
     required: [:tools],
+    title: "ListToolsResult",
     type: "object"
   }
 end
@@ -1231,6 +1271,7 @@ defmodule GenMcp.Entities.LoggingMessageNotification do
       }
     },
     required: [:method, :params],
+    title: "LoggingMessageNotification",
     type: "object"
   }
 end
@@ -1249,6 +1290,7 @@ defmodule GenMcp.Entities.ModelHint do
             "A hint for a model name.\n\nThe client SHOULD treat this as a substring of a model name; for example:\n - `claude-3-5-sonnet` should match `claude-3-5-sonnet-20241022`\n - `sonnet` should match `claude-3-5-sonnet-20241022`, `claude-3-sonnet-20240229`, etc.\n - `claude` should match any Claude model\n\nThe client MAY also map the string to a different provider's model name or a different model family, as long as it fills a similar niche; for example:\n - `gemini-1.5-flash` could match `claude-3-haiku-20240307`"
         )
     },
+    title: "ModelHint",
     type: "object"
   }
 end
@@ -1289,6 +1331,7 @@ defmodule GenMcp.Entities.ModelPreferences do
         type: "number"
       }
     },
+    title: "ModelPreferences",
     type: "object"
   }
 end
@@ -1307,6 +1350,7 @@ defmodule GenMcp.Entities.Notification do
       }
     },
     required: [:method],
+    title: "Notification",
     type: "object"
   }
 end
@@ -1324,6 +1368,7 @@ defmodule GenMcp.Entities.NumberSchema do
       type: string_enum_to_atom([:integer, :number])
     },
     required: [:type],
+    title: "NumberSchema",
     type: "object"
   }
 end
@@ -1347,6 +1392,7 @@ defmodule GenMcp.Entities.PaginatedRequest do
       }
     },
     required: [:method],
+    title: "PaginatedRequest",
     type: "object"
   }
 end
@@ -1364,6 +1410,7 @@ defmodule GenMcp.Entities.PaginatedResult do
             "An opaque token representing the pagination position after the last returned result.\nIf present, there may be more results available."
         )
     },
+    title: "PaginatedResult",
     type: "object"
   }
 end
@@ -1392,6 +1439,7 @@ defmodule GenMcp.Entities.PingRequest do
       }
     },
     required: [:method],
+    title: "PingRequest",
     type: "object"
   }
 end
@@ -1442,6 +1490,7 @@ defmodule GenMcp.Entities.ProgressNotification do
       }
     },
     required: [:method, :params],
+    title: "ProgressNotification",
     type: "object"
   }
 end
@@ -1484,6 +1533,7 @@ defmodule GenMcp.Entities.Prompt do
         )
     },
     required: [:name],
+    title: "Prompt",
     type: "object"
   }
 end
@@ -1509,6 +1559,7 @@ defmodule GenMcp.Entities.PromptArgument do
         )
     },
     required: [:name],
+    title: "PromptArgument",
     type: "object"
   }
 end
@@ -1529,6 +1580,7 @@ defmodule GenMcp.Entities.PromptListChangedNotification do
       }
     },
     required: [:method],
+    title: "PromptListChangedNotification",
     type: "object"
   }
 end
@@ -1545,6 +1597,7 @@ defmodule GenMcp.Entities.PromptMessage do
       role: GenMcp.Entities.Role
     },
     required: [:content, :role],
+    title: "PromptMessage",
     type: "object"
   }
 end
@@ -1569,6 +1622,7 @@ defmodule GenMcp.Entities.PromptReference do
       type: const("ref/prompt")
     },
     required: [:name, :type],
+    title: "PromptReference",
     type: "object"
   }
 end
@@ -1594,6 +1648,7 @@ defmodule GenMcp.Entities.ReadResourceRequest do
       }
     },
     required: [:method, :params],
+    title: "ReadResourceRequest",
     type: "object"
   }
 end
@@ -1612,6 +1667,7 @@ defmodule GenMcp.Entities.ReadResourceResult do
         })
     },
     required: [:contents],
+    title: "ReadResourceResult",
     type: "object"
   }
 end
@@ -1638,6 +1694,7 @@ defmodule GenMcp.Entities.Request do
       }
     },
     required: [:method],
+    title: "Request",
     type: "object"
   }
 end
@@ -1686,6 +1743,7 @@ defmodule GenMcp.Entities.Resource do
       uri: uri(description: "The URI of this resource.")
     },
     required: [:name, :uri],
+    title: "Resource",
     type: "object"
   }
 end
@@ -1702,6 +1760,7 @@ defmodule GenMcp.Entities.ResourceContents do
       uri: uri(description: "The URI of this resource.")
     },
     required: [:uri],
+    title: "ResourceContents",
     type: "object"
   }
 end
@@ -1741,6 +1800,7 @@ defmodule GenMcp.Entities.ResourceLink do
       uri: uri(description: "The URI of this resource.")
     },
     required: [:name, :type, :uri],
+    title: "ResourceLink",
     type: "object"
   }
 end
@@ -1761,6 +1821,7 @@ defmodule GenMcp.Entities.ResourceListChangedNotification do
       }
     },
     required: [:method],
+    title: "ResourceListChangedNotification",
     type: "object"
   }
 end
@@ -1801,6 +1862,7 @@ defmodule GenMcp.Entities.ResourceTemplate do
         )
     },
     required: [:name, :uriTemplate],
+    title: "ResourceTemplate",
     type: "object"
   }
 end
@@ -1816,6 +1878,7 @@ defmodule GenMcp.Entities.ResourceTemplateReference do
       uri: string_of("uri-template", description: "The URI or URI template of the resource.")
     },
     required: [:type, :uri],
+    title: "ResourceTemplateReference",
     type: "object"
   }
 end
@@ -1842,6 +1905,7 @@ defmodule GenMcp.Entities.ResourceUpdatedNotification do
       }
     },
     required: [:method, :params],
+    title: "ResourceUpdatedNotification",
     type: "object"
   }
 end
@@ -1853,6 +1917,7 @@ defmodule GenMcp.Entities.Result do
   defschema %{
     additionalProperties: %{},
     properties: %{_meta: GenMcp.Entities.Meta},
+    title: "Result",
     type: "object"
   }
 end
@@ -1885,6 +1950,7 @@ defmodule GenMcp.Entities.Root do
         )
     },
     required: [:uri],
+    title: "Root",
     type: "object"
   }
 end
@@ -1905,6 +1971,7 @@ defmodule GenMcp.Entities.RootsListChangedNotification do
       }
     },
     required: [:method],
+    title: "RootsListChangedNotification",
     type: "object"
   }
 end
@@ -1926,6 +1993,7 @@ defmodule GenMcp.Entities.SamplingMessage do
       role: GenMcp.Entities.Role
     },
     required: [:content, :role],
+    title: "SamplingMessage",
     type: "object"
   }
 end
@@ -1995,6 +2063,7 @@ defmodule GenMcp.Entities.ServerCapabilities do
         type: "object"
       }
     },
+    title: "ServerCapabilities",
     type: "object"
   }
 end
@@ -2068,6 +2137,7 @@ defmodule GenMcp.Entities.SetLevelRequest do
       }
     },
     required: [:method, :params],
+    title: "SetLevelRequest",
     type: "object"
   }
 end
@@ -2086,6 +2156,7 @@ defmodule GenMcp.Entities.StringSchema do
       type: const("string")
     },
     required: [:type],
+    title: "StringSchema",
     type: "object"
   }
 end
@@ -2112,6 +2183,7 @@ defmodule GenMcp.Entities.SubscribeRequest do
       }
     },
     required: [:method, :params],
+    title: "SubscribeRequest",
     type: "object"
   }
 end
@@ -2129,6 +2201,7 @@ defmodule GenMcp.Entities.TextContent do
       type: const("text")
     },
     required: [:text, :type],
+    title: "TextContent",
     type: "object"
   }
 end
@@ -2149,6 +2222,7 @@ defmodule GenMcp.Entities.TextResourceContents do
       uri: uri(description: "The URI of this resource.")
     },
     required: [:text, :uri],
+    title: "TextResourceContents",
     type: "object"
   }
 end
@@ -2214,6 +2288,7 @@ defmodule GenMcp.Entities.Tool do
         )
     },
     required: [:inputSchema, :name],
+    title: "Tool",
     type: "object"
   }
 end
@@ -2247,6 +2322,7 @@ defmodule GenMcp.Entities.ToolAnnotations do
         ),
       title: string(description: "A human-readable title for the tool.")
     },
+    title: "ToolAnnotations",
     type: "object"
   }
 end
@@ -2267,6 +2343,7 @@ defmodule GenMcp.Entities.ToolListChangedNotification do
       }
     },
     required: [:method],
+    title: "ToolListChangedNotification",
     type: "object"
   }
 end
@@ -2289,6 +2366,7 @@ defmodule GenMcp.Entities.UnsubscribeRequest do
       }
     },
     required: [:method, :params],
+    title: "UnsubscribeRequest",
     type: "object"
   }
 end
