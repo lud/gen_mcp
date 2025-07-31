@@ -248,6 +248,7 @@ defmodule GenMcp.Entities.CallToolRequest do
   defschema %{
     description: "Used by the client to invoke a tool provided by the server.",
     properties: %{
+      id: GenMcp.Entities.RequestId,
       method: const("tools/call"),
       params: GenMcp.Entities.CallToolRequestParams
     },
@@ -439,6 +440,7 @@ defmodule GenMcp.Entities.CompleteRequest do
   defschema %{
     description: "A request from the client to the server, to ask for completion options.",
     properties: %{
+      id: GenMcp.Entities.RequestId,
       method: const("completion/complete"),
       params: %{
         properties: %{
@@ -720,6 +722,7 @@ defmodule GenMcp.Entities.GetPromptRequest do
   defschema %{
     description: "Used by the client to get a prompt provided by the server.",
     properties: %{
+      id: GenMcp.Entities.RequestId,
       method: const("prompts/get"),
       params: %{
         properties: %{
@@ -814,6 +817,7 @@ defmodule GenMcp.Entities.InitializeRequest do
     description:
       "This request is sent from the client to the server when it first connects, asking it to begin initialization.",
     properties: %{
+      id: GenMcp.Entities.RequestId,
       method: const("initialize"),
       params: GenMcp.Entities.InitializeRequestParams
     },
@@ -1017,6 +1021,7 @@ defmodule GenMcp.Entities.ListPromptsRequest do
     description:
       "Sent from the client to request a list of prompts and prompt templates the server has.",
     properties: %{
+      id: GenMcp.Entities.RequestId,
       method: const("prompts/list"),
       params: %{
         properties: %{
@@ -1063,6 +1068,7 @@ defmodule GenMcp.Entities.ListResourceTemplatesRequest do
   defschema %{
     description: "Sent from the client to request a list of resource templates the server has.",
     properties: %{
+      id: GenMcp.Entities.RequestId,
       method: const("resources/templates/list"),
       params: %{
         properties: %{
@@ -1109,6 +1115,7 @@ defmodule GenMcp.Entities.ListResourcesRequest do
   defschema %{
     description: "Sent from the client to request a list of resources the server has.",
     properties: %{
+      id: GenMcp.Entities.RequestId,
       method: const("resources/list"),
       params: %{
         properties: %{
@@ -1201,6 +1208,7 @@ defmodule GenMcp.Entities.ListToolsRequest do
   defschema %{
     description: "Sent from the client to request a list of tools the server has.",
     properties: %{
+      id: GenMcp.Entities.RequestId,
       method: const("tools/list"),
       params: %{
         properties: %{
@@ -1423,6 +1431,7 @@ defmodule GenMcp.Entities.PingRequest do
     description:
       "A ping, issued by either the server or the client, to check that the other party is still alive. The receiver must promptly respond, or else may be disconnected.",
     properties: %{
+      id: GenMcp.Entities.RequestId,
       method: const("ping"),
       params: %{
         additionalProperties: %{},
@@ -1634,6 +1643,7 @@ defmodule GenMcp.Entities.ReadResourceRequest do
   defschema %{
     description: "Sent from the client to the server, to read a specific resource URI.",
     properties: %{
+      id: GenMcp.Entities.RequestId,
       method: const("resources/read"),
       params: %{
         properties: %{
@@ -2129,6 +2139,7 @@ defmodule GenMcp.Entities.SetLevelRequest do
   defschema %{
     description: "A request from the client to the server, to enable or adjust logging.",
     properties: %{
+      id: GenMcp.Entities.RequestId,
       method: const("logging/setLevel"),
       params: %{
         properties: %{level: GenMcp.Entities.LoggingLevel},
@@ -2169,6 +2180,7 @@ defmodule GenMcp.Entities.SubscribeRequest do
     description:
       "Sent from the client to request resources/updated notifications from the server whenever a particular resource changes.",
     properties: %{
+      id: GenMcp.Entities.RequestId,
       method: const("resources/subscribe"),
       params: %{
         properties: %{
@@ -2356,6 +2368,7 @@ defmodule GenMcp.Entities.UnsubscribeRequest do
     description:
       "Sent from the client to request cancellation of resources/updated notifications from the server. This should follow a previous resources/subscribe request.",
     properties: %{
+      id: GenMcp.Entities.RequestId,
       method: const("resources/unsubscribe"),
       params: %{
         properties: %{

@@ -33,17 +33,11 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
     send_resp(conn, 405, "Method Not Allowed")
   end
 
-  def http_post(%{body_params: %{"jsonrpc" => "2.0", "id" => msgid} = body_params} = conn, opts) do
-    case Validator.validate_request(body_params) do
-      {:ok, req} -> dispatch_req(conn, msgid, req, opts)
-      {:error, e} -> send_error_sessionless(conn, msgid, e)
-    end
-  end
-
   def http_post(%{body_params: %{"jsonrpc" => "2.0"} = body_params} = conn, opts) do
-    case Validator.validate_notification(body_params) do
-      {:ok, notif} -> dispatch_notif(conn, notif, opts)
-      {:error, e} -> send_error_sessionless(conn, nil, e)
+    case Validator.validate_request(body_params) do
+      # {:error, e} -> send_error_sessionless(conn, msgid, e)
+      {:ok, :request, %{id: msgid} = req} -> dispatch_req(conn, msgid, req, opts)
+      {:ok, :notification, req} -> dispatch_notif(conn, req, opts)
     end
   end
 

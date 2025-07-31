@@ -62,7 +62,8 @@ defmodule GenMcp.Validator do
   IO.warn("test unknown method")
 
   @doc """
-  Validates request or notifications
+  Validates request but also notifications, and returns the kind
+  (:request/:notification) with the cast message.
   """
   def validate_request(%{"method" => method} = request) do
     with {:ok, kind, jsv_key} <- jsv_key(method),

@@ -48,6 +48,24 @@ defmodule Generator do
     :ok
   end
 
+  defp requires_message_id?(name) do
+    name in [
+      :InitializeRequest,
+      :PingRequest,
+      :ListResourcesRequest,
+      :ListResourceTemplatesRequest,
+      :ReadResourceRequest,
+      :SubscribeRequest,
+      :UnsubscribeRequest,
+      :ListPromptsRequest,
+      :GetPromptRequest,
+      :ListToolsRequest,
+      :CallToolRequest,
+      :SetLevelRequest,
+      :CompleteRequest
+    ]
+  end
+
   def swap_sub_schema(defs, path, name) do
     {sub_schema, defs} =
       get_and_update_in(defs, path, fn sub -> {sub, %{"$ref": "#/definitions/#{name}"}} end)
@@ -114,9 +132,8 @@ defmodule Generator do
   defp generate_module({name, schema}) do
     IO.puts("generating #{name}")
     module = module_name(name)
-    title = Atom.to_string(name)
 
-    case prepare_schema(schema, title) do
+    case prepare_schema(schema, name) do
       {:struct, schema} ->
         """
         defmodule #{inspect(module)} do
@@ -138,14 +155,31 @@ defmodule Generator do
     end
   end
 
-  defp prepare_schema(schema, title) do
+  defp prepare_schema(schema, name) do
     schema
+    |> enforce_id(name)
     |> use_schema_api()
-    |> atomize()
-    |> dbg()
+    |> maybe_format_for_struct()
     |> case do
-      {:struct, schema} -> {:struct, Map.put(schema, :title, title)}
+      {:struct, schema} -> {:struct, Map.put(schema, :title, Atom.to_string(name))}
       {:generic, _} = gen -> gen
+    end
+  end
+
+  # Adds the :id property into schema requests so we keep it on casting to
+  # structs. The given official JSON schema does not inherit properties from the
+  # generic request in specific requests.
+  defp enforce_id(schema, name) do
+    if requires_message_id?(name) do
+      case schema do
+        %{properties: %{id: _}} ->
+          raise "id already defined"
+
+        %{properties: props} ->
+          %{schema | properties: Map.put(props, :id, %{"$ref": "#/definitions/RequestId"})}
+      end
+    else
+      schema
     end
   end
 
@@ -241,7 +275,7 @@ defmodule Generator do
     |> Enum.sort_by(&elem(&1, 0))
   end
 
-  defp atomize(%{type: "object", properties: _} = schema) do
+  defp maybe_format_for_struct(%{type: "object", properties: _} = schema) do
     schema =
       case schema do
         %{required: keys} -> %{schema | required: Enum.map(keys, &String.to_atom/1)}
@@ -251,7 +285,7 @@ defmodule Generator do
     {:struct, schema}
   end
 
-  defp atomize(schema) do
+  defp maybe_format_for_struct(schema) do
     {:generic, schema}
   end
 
@@ -263,10 +297,5 @@ defmodule Generator do
     Module.concat(base_module(), name)
   end
 end
-
-IO.warn("""
-concrete requests should still bear the message id, it's easier to keep track of
-it when passing to tools, and easier for users to debug.
-""")
 
 Generator.run()
