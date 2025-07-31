@@ -28,6 +28,9 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
   import Plug.Conn
   require Logger
 
+  @errno_bad_rpc 1
+  @errno_jsv_err 2
+
   def http_get(conn, _opts) do
     Logger.debug("RESPONSE\nMethod Not Allowed", ansi_color: :light_yellow)
     send_resp(conn, 405, "Method Not Allowed")
@@ -35,35 +38,46 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
 
   def http_post(%{body_params: %{"jsonrpc" => "2.0"} = body_params} = conn, opts) do
     case Validator.validate_request(body_params) do
-      # {:error, e} -> send_error_sessionless(conn, msgid, e)
+      {:error, jsv_err} -> send_error_sessionless(conn, msgid_from_req(body_params), jsv_err)
       {:ok, :request, %{id: msgid} = req} -> dispatch_req(conn, msgid, req, opts)
       {:ok, :notification, req} -> dispatch_notif(conn, req, opts)
     end
   end
 
   def http_post(conn, opts) do
-    send_error_sessionless(conn, nil, "unknown protocol")
+    send_error_sessionless(conn, nil, :bad_rpc)
+  end
+
+  defp msgid_from_req(body) do
+    case body do
+      %{"id" => id} -> id
+      _ -> nil
+    end
   end
 
   defp send_error_sessionless(conn, msgid, %JSV.ValidationError{} = jsv_err) do
     Logger.error("invalid request sent to #{inspect(__MODULE__)}")
 
-    do_send_error(conn, 400, msgid, "request validation failed", JSV.normalize_error(jsv_err))
+    do_send_error(conn, 400, msgid, %{
+      code: @errno_jsv_err,
+      data: JSV.normalize_error(jsv_err),
+      message: "request validation failed"
+    })
   end
 
-  defp send_error_sessionless(conn, msgid, errmsg) when is_binary(errmsg) do
+  defp send_error_sessionless(conn, msgid, :bad_rpc) do
     Logger.error("invalid request sent to #{inspect(__MODULE__)}")
 
-    do_send_error(conn, 400, msgid, errmsg, nil)
+    do_send_error(conn, 400, msgid, %{
+      code: @errno_bad_rpc,
+      data: nil,
+      message: "invalid JSON-RPC payload"
+    })
   end
 
-  defp do_send_error(conn, status, msgid, message, data) do
+  defp do_send_error(conn, status, msgid, err_payload) do
     payload = %GenMcp.Entities.JSONRPCError{
-      error: %{
-        code: 1,
-        data: data,
-        message: message
-      },
+      error: err_payload,
       # no session, we do not know what client that is,
       id: msgid,
       jsonrpc: "2.0"
@@ -71,16 +85,6 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
 
     send_json(conn, status, payload)
   end
-
-  IO.warn("""
-  We should map on the method and validate the corresponding schema only.
-
-  No need to have errors for all anyOf entries.
-
-  reuse the validator module with a matcher, and use it from tests too.
-
-
-  """)
 
   # TODO use for server-initiated requests
   # defp impersistent_msgid do

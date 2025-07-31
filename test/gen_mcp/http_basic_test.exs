@@ -56,15 +56,15 @@ defmodule GenMcp.HttpBasicTest do
     body
   end
 
-  test "basic server does not support GET" do
-    assert 405 = Req.get!(url()).status
+  defp post_invalid_message(data) do
+    data = JSV.Normalizer.normalize(data)
+    %{status: status, body: body} = Req.post!(url(), json: data)
+    assert status in [400]
+    body
   end
 
-  test "requires RPC protocol" do
-    assert %{
-             "error" => %{"code" => 1, "data" => nil, "message" => "unknown protocol"},
-             "jsonrpc" => "2.0"
-           } = Req.post!(url(), json: %{}).body
+  test "basic server does not support GET" do
+    assert 405 = Req.get!(url()).status
   end
 
   test "can list tools without initialization" do
@@ -116,6 +116,49 @@ defmodule GenMcp.HttpBasicTest do
                jsonrpc: "2.0",
                method: "notifications/initialized",
                params: %{}
+             })
+  end
+
+  test "sending non json rpc" do
+    assert %{
+             status: 400,
+             body: %{
+               "error" => %{"code" => 1, "data" => nil, "message" => "invalid JSON-RPC payload"},
+               "jsonrpc" => "2.0"
+             }
+           } = Req.post!(url(), json: %{"hello" => "world"})
+
+    # same if we send non-json request (it's not parsed) (parse error should be handled differently)
+
+    assert %{
+             status: 400,
+             body: %{
+               "error" => %{"code" => 1, "data" => nil, "message" => "invalid JSON-RPC payload"},
+               "jsonrpc" => "2.0"
+             }
+           } = Req.post!(url(), body: "hello")
+  end
+
+  test "send invalid request" do
+    assert %{
+             # We still get the ID if provided
+             "id" => 123,
+             "jsonrpc" => "2.0",
+             "error" => %{
+               "code" => 2,
+               "data" => %{"details" => _, "valid" => false},
+               "message" => "request validation failed"
+             }
+           } =
+             post_invalid_message(%{
+               jsonrpc: "2.0",
+               id: 123,
+               method: "initialize",
+               params: %{
+                 # missing capabilities in payload
+                 clientInfo: %{name: "test client", version: "0.0.0"},
+                 protocolVersion: "2025-06-18"
+               }
              })
   end
 end

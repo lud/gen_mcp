@@ -3,8 +3,6 @@ defmodule GenMcp.Test.Tools.Calculator do
   alias GenMcp.Entities.TextContent
   use JSV.Schema
 
-  @name "calculator"
-
   def name() do
     "Calculator"
   end
