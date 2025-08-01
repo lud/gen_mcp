@@ -14,7 +14,7 @@ defmodule GenMcp.DefaultServer do
         list when is_list(list) -> list
         _ -> []
       end
-      |> Map.new(fn
+      |> Enum.map(fn
         module when is_atom(module) -> {module.name(), {module, []}}
         {module, arg} when is_atom(module) -> {module.name(), {module, arg}}
       end)
@@ -30,8 +30,8 @@ defmodule GenMcp.DefaultServer do
   def capabilities(state) do
     %ServerCapabilities{
       tools:
-        case map_size(state.tools) do
-          0 -> nil
+        case state.tools do
+          [] -> nil
           _ -> %{}
         end
     }

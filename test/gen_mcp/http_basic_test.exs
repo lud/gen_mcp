@@ -81,6 +81,7 @@ defmodule GenMcp.HttpBasicTest do
                    "name" => "Calculator",
                    "outputSchema" => %{}
                  }
+                 | _
                ]
              }
            } = post_message(%{jsonrpc: "2.0", id: 123, method: "tools/list", params: %{}})
