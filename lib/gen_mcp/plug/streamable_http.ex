@@ -127,7 +127,7 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
   IO.warn("@todo build channel according to session/persistent (persistent implies session)")
 
   defp build_channel(conn, _opts) do
-    {:local, [:alias | :erlang.alias()]}
+    %GenMcp.Channel{kind: :local, client: [:alias | :erlang.alias()], session: nil}
   end
 
   defp dispatch_notif(conn, notif, opts) do

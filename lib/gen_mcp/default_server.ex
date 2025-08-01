@@ -57,7 +57,7 @@ defmodule GenMcp.DefaultServer do
   def handle_request(%CallToolRequest{} = req, channel, state) do
     case List.keyfind(state.tools, req.params.name, 0) do
       {_, tool} ->
-        case GenMcp.Tool.call(tool, req.params.arguments) do
+        case GenMcp.Tool.call(tool, channel, req.params.arguments) do
           {:reply, reply} ->
             {:reply, reply, state}
 

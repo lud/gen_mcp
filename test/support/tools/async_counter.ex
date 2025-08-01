@@ -1,6 +1,7 @@
 defmodule GenMcp.Test.Tools.AsyncCounter do
-  alias JSV.Codec
   alias GenMcp.Entities.TextContent
+  alias JSV.Codec
+  require Logger
   use JSV.Schema
 
   def name() do
@@ -25,13 +26,14 @@ defmodule GenMcp.Test.Tools.AsyncCounter do
     }
   end
 
-  def call(arguments, _opts) do
+  def call(arguments, _channel, _opts) do
     %{"upto" => upto} = arguments
-    {:stream, Task.async(fn -> count_upto(upto, 0) end)}
+    {:stream, Task.async(fn -> count_upto(upto, 0, channel) end)}
   end
 
   defp count_upto(upto, n) when n < upto do
     Logger.debug("Counting #{n}/#{upto}")
+    GenMcp.Channel.notify()
     Process.sleep(1000)
     count_upto(upto, n + 1)
   end

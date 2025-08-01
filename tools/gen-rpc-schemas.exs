@@ -221,6 +221,12 @@ defmodule Generator do
       {:val, %{type: "integer", description: descr} = schema} when map_size(schema) == 2 ->
         CodeWrapper.of(:integer, [[description: descr]])
 
+      {:val, %{type: "number"} = schema} when map_size(schema) == 1 ->
+        CodeWrapper.of(:number)
+
+      {:val, %{type: "number", description: descr} = schema} when map_size(schema) == 2 ->
+        CodeWrapper.of(:number, [[description: descr]])
+
       {:val, %{type: "string"} = schema} when map_size(schema) == 1 ->
         CodeWrapper.of(:string)
 

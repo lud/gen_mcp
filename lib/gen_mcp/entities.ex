@@ -563,7 +563,7 @@ defmodule GenMcp.Entities.CreateMessageRequest do
               description:
                 "An optional system prompt the server wants to use for sampling. The client MAY modify or omit this prompt."
             ),
-          temperature: %{type: "number"}
+          temperature: number()
         },
         required: ["maxTokens", "messages"],
         type: "object"
@@ -1482,17 +1482,17 @@ defmodule GenMcp.Entities.ProgressNotification do
       params: %{
         properties: %{
           message: string(description: "An optional message describing the current progress."),
-          progress: %{
-            description:
-              "The progress thus far. This should increase every time progress is made, even if the total is unknown.",
-            type: "number"
-          },
+          progress:
+            number(
+              description:
+                "The progress thus far. This should increase every time progress is made, even if the total is unknown."
+            ),
           progressToken: GenMcp.Entities.ProgressToken,
-          total: %{
-            description:
-              "Total number of items to process (or total progress required), if known.",
-            type: "number"
-          }
+          total:
+            number(
+              description:
+                "Total number of items to process (or total progress required), if known."
+            )
         },
         required: ["progress", "progressToken"],
         type: "object"
