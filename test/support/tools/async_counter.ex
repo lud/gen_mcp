@@ -26,19 +26,19 @@ defmodule GenMcp.Test.Tools.AsyncCounter do
     }
   end
 
-  def call(arguments, _channel, _opts) do
+  def call(arguments, channel, _opts) do
     %{"upto" => upto} = arguments
     {:stream, Task.async(fn -> count_upto(upto, 0, channel) end)}
   end
 
-  defp count_upto(upto, n) when n < upto do
+  defp count_upto(upto, n, channel) when n < upto do
     Logger.debug("Counting #{n}/#{upto}")
     GenMcp.Channel.notify()
     Process.sleep(1000)
-    count_upto(upto, n + 1)
+    count_upto(upto, n + 1, channel)
   end
 
-  defp count_upto(upto, upto) do
+  defp count_upto(upto, upto, channel) do
     Logger.debug("Counting #{upto}/#{upto}")
 
     output = %{

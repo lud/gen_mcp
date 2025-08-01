@@ -48,22 +48,27 @@ defmodule Generator do
     :ok
   end
 
+  defp module_config(name) do
+    case name do
+      :InitializeRequest -> [msg_id?: true]
+      :PingRequest -> [msg_id?: true]
+      :ListResourcesRequest -> [msg_id?: true]
+      :ListResourceTemplatesRequest -> [msg_id?: true]
+      :ReadResourceRequest -> [msg_id?: true]
+      :SubscribeRequest -> [msg_id?: true]
+      :UnsubscribeRequest -> [msg_id?: true]
+      :ListPromptsRequest -> [msg_id?: true]
+      :GetPromptRequest -> [msg_id?: true]
+      :ListToolsRequest -> [msg_id?: true]
+      :CallToolRequest -> [msg_id?: true]
+      :SetLevelRequest -> [msg_id?: true]
+      :CompleteRequest -> [msg_id?: true]
+      _ -> []
+    end
+  end
+
   defp requires_message_id?(name) do
-    name in [
-      :InitializeRequest,
-      :PingRequest,
-      :ListResourcesRequest,
-      :ListResourceTemplatesRequest,
-      :ReadResourceRequest,
-      :SubscribeRequest,
-      :UnsubscribeRequest,
-      :ListPromptsRequest,
-      :GetPromptRequest,
-      :ListToolsRequest,
-      :CallToolRequest,
-      :SetLevelRequest,
-      :CompleteRequest
-    ]
+    true == Keyword.get(module_config(name), :msg_id?)
   end
 
   def swap_sub_schema(defs, path, name) do
