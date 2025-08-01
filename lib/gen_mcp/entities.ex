@@ -119,6 +119,21 @@ defmodule Elixir.GenMcp.Entities.Meta do
       additionalProperties: %{},
       description:
         "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
+      properties: %{progressToken: GenMcp.Entities.ProgressToken},
+      type: "object"
+    }
+  end
+end
+
+defmodule Elixir.GenMcp.Entities.RequestMeta do
+  use JSV.Schema
+
+  def json_schema do
+    %{
+      additionalProperties: %{},
+      description:
+        "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
+      properties: %{progressToken: GenMcp.Entities.ProgressToken},
       type: "object"
     }
   end
@@ -264,6 +279,7 @@ defmodule GenMcp.Entities.CallToolRequestParams do
 
   defschema %{
     properties: %{
+      _meta: GenMcp.Entities.RequestMeta,
       arguments: %{additionalProperties: %{}, type: "object"},
       name: string()
     },
@@ -444,6 +460,7 @@ defmodule GenMcp.Entities.CompleteRequest do
       method: const("completion/complete"),
       params: %{
         properties: %{
+          _meta: GenMcp.Entities.RequestMeta,
           argument: %{
             description: "The argument's information",
             properties: %{
@@ -726,6 +743,7 @@ defmodule GenMcp.Entities.GetPromptRequest do
       method: const("prompts/get"),
       params: %{
         properties: %{
+          _meta: GenMcp.Entities.RequestMeta,
           arguments: %{
             additionalProperties: string(),
             description: "Arguments to use for templating the prompt.",
@@ -833,6 +851,7 @@ defmodule GenMcp.Entities.InitializeRequestParams do
 
   defschema %{
     properties: %{
+      _meta: GenMcp.Entities.RequestMeta,
       capabilities: GenMcp.Entities.ClientCapabilities,
       clientInfo: GenMcp.Entities.Implementation,
       protocolVersion:
@@ -1025,6 +1044,7 @@ defmodule GenMcp.Entities.ListPromptsRequest do
       method: const("prompts/list"),
       params: %{
         properties: %{
+          _meta: GenMcp.Entities.RequestMeta,
           cursor:
             string(
               description:
@@ -1072,6 +1092,7 @@ defmodule GenMcp.Entities.ListResourceTemplatesRequest do
       method: const("resources/templates/list"),
       params: %{
         properties: %{
+          _meta: GenMcp.Entities.RequestMeta,
           cursor:
             string(
               description:
@@ -1119,6 +1140,7 @@ defmodule GenMcp.Entities.ListResourcesRequest do
       method: const("resources/list"),
       params: %{
         properties: %{
+          _meta: GenMcp.Entities.RequestMeta,
           cursor:
             string(
               description:
@@ -1212,6 +1234,7 @@ defmodule GenMcp.Entities.ListToolsRequest do
       method: const("tools/list"),
       params: %{
         properties: %{
+          _meta: GenMcp.Entities.RequestMeta,
           cursor:
             string(
               description:
@@ -1435,15 +1458,7 @@ defmodule GenMcp.Entities.PingRequest do
       method: const("ping"),
       params: %{
         additionalProperties: %{},
-        properties: %{
-          _meta: %{
-            additionalProperties: %{},
-            description:
-              "See [specification/2025-06-18/basic/index#general-fields] for notes on _meta usage.",
-            properties: %{progressToken: GenMcp.Entities.ProgressToken},
-            type: "object"
-          }
-        },
+        properties: %{_meta: GenMcp.Entities.RequestMeta},
         type: "object"
       }
     },
@@ -1647,6 +1662,7 @@ defmodule GenMcp.Entities.ReadResourceRequest do
       method: const("resources/read"),
       params: %{
         properties: %{
+          _meta: GenMcp.Entities.RequestMeta,
           uri:
             uri(
               description:
@@ -2142,7 +2158,10 @@ defmodule GenMcp.Entities.SetLevelRequest do
       id: GenMcp.Entities.RequestId,
       method: const("logging/setLevel"),
       params: %{
-        properties: %{level: GenMcp.Entities.LoggingLevel},
+        properties: %{
+          _meta: GenMcp.Entities.RequestMeta,
+          level: GenMcp.Entities.LoggingLevel
+        },
         required: ["level"],
         type: "object"
       }
@@ -2184,6 +2203,7 @@ defmodule GenMcp.Entities.SubscribeRequest do
       method: const("resources/subscribe"),
       params: %{
         properties: %{
+          _meta: GenMcp.Entities.RequestMeta,
           uri:
             uri(
               description:
@@ -2372,6 +2392,7 @@ defmodule GenMcp.Entities.UnsubscribeRequest do
       method: const("resources/unsubscribe"),
       params: %{
         properties: %{
+          _meta: GenMcp.Entities.RequestMeta,
           uri: uri(description: "The URI of the resource to unsubscribe from.")
         },
         required: ["uri"],

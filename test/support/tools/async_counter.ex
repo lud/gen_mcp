@@ -28,6 +28,7 @@ defmodule GenMcp.Test.Tools.AsyncCounter do
 
   def call(arguments, channel, _opts) do
     %{"upto" => upto} = arguments
+    channel |> dbg()
     {:stream, Task.async(fn -> count_upto(upto, 0, channel) end)}
   end
 

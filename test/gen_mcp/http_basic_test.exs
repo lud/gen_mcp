@@ -179,6 +179,7 @@ defmodule GenMcp.HttpBasicTest do
                id: 456,
                method: "tools/call",
                params: %{
+                 _meta: %{progressToken: "hello"},
                  name: "Calculator",
                  arguments: %{operator: "+", operands: [7, 8]}
                }

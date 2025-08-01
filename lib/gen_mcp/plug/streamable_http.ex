@@ -118,16 +118,28 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
   end
 
   defp dispatch_req(conn, msgid, req, opts) do
+    req |> dbg()
     server = Keyword.get(opts, :server, GenMcp.DefaultServer)
     {:ok, state} = server.init(opts)
-    {:reply, resp, _state} = server.handle_request(req, build_channel(conn, opts), state)
+    {:reply, resp, _state} = server.handle_request(req, build_channel(conn, req, opts), state)
     rpc_reply(conn, 200, msgid, resp)
   end
 
   IO.warn("@todo build channel according to session/persistent (persistent implies session)")
 
-  defp build_channel(conn, _opts) do
-    %GenMcp.Channel{kind: :local, client: [:alias | :erlang.alias()], session: nil}
+  defp build_channel(conn, req, _opts) do
+    progress_token =
+      case req do
+        %{params: %{_meta: %{"progressToken" => pt}}} -> pt
+        _ -> nil
+      end
+
+    %GenMcp.Channel{
+      kind: :local,
+      client: [:alias | :erlang.alias()],
+      session: nil,
+      progress_token: progress_token
+    }
   end
 
   defp dispatch_notif(conn, notif, opts) do

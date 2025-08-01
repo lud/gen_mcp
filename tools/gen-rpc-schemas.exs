@@ -30,6 +30,7 @@ defmodule Generator do
     defs =
       schema
       |> Map.fetch!(:definitions)
+      |> inherit_schemas()
       |> swap_sub_schemas()
       |> Enum.sort()
 
@@ -50,25 +51,41 @@ defmodule Generator do
 
   defp module_config(name) do
     case name do
-      :InitializeRequest -> [msg_id?: true]
-      :PingRequest -> [msg_id?: true]
-      :ListResourcesRequest -> [msg_id?: true]
-      :ListResourceTemplatesRequest -> [msg_id?: true]
-      :ReadResourceRequest -> [msg_id?: true]
-      :SubscribeRequest -> [msg_id?: true]
-      :UnsubscribeRequest -> [msg_id?: true]
-      :ListPromptsRequest -> [msg_id?: true]
-      :GetPromptRequest -> [msg_id?: true]
-      :ListToolsRequest -> [msg_id?: true]
-      :CallToolRequest -> [msg_id?: true]
-      :SetLevelRequest -> [msg_id?: true]
-      :CompleteRequest -> [msg_id?: true]
+      :CallToolRequest -> [msg_id: true, request_meta: true]
+      :CompleteRequest -> [msg_id: true, request_meta: true]
+      :GetPromptRequest -> [msg_id: true, request_meta: true]
+      :InitializeRequest -> [msg_id: true, request_meta: true]
+      :ListPromptsRequest -> [msg_id: true, request_meta: true]
+      :ListResourcesRequest -> [msg_id: true, request_meta: true]
+      :ListResourceTemplatesRequest -> [msg_id: true, request_meta: true]
+      :ListToolsRequest -> [msg_id: true, request_meta: true]
+      :PingRequest -> [msg_id: true, request_meta: true]
+      :ReadResourceRequest -> [msg_id: true, request_meta: true]
+      :SetLevelRequest -> [msg_id: true, request_meta: true]
+      :SubscribeRequest -> [msg_id: true, request_meta: true]
+      :UnsubscribeRequest -> [msg_id: true, request_meta: true]
       _ -> []
     end
   end
 
   defp requires_message_id?(name) do
-    true == Keyword.get(module_config(name), :msg_id?)
+    true == Keyword.get(module_config(name), :msg_id)
+  end
+
+  defp use_request_meta?(name) do
+    true == Keyword.get(module_config(name), :request_meta)
+  end
+
+  defp inherit_schemas(defs) do
+    Map.new(defs, fn {name, schema} ->
+      schema =
+        schema
+        |> enforce_id(name)
+        |> dbg()
+        |> enforce_request_meta(name)
+
+      {name, schema}
+    end)
   end
 
   def swap_sub_schema(defs, path, name) do
@@ -97,6 +114,20 @@ defmodule Generator do
         %{
           additionalProperties: %{},
           description: "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
+          properties: %{progressToken: GenMcp.Entities.ProgressToken},
+          type: "object"
+        }
+      end
+    end
+
+    defmodule #{module_name("RequestMeta")} do
+      use JSV.Schema
+
+      def json_schema do
+        %{
+          additionalProperties: %{},
+          description: "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
+          properties: %{progressToken: GenMcp.Entities.ProgressToken},
           type: "object"
         }
       end
@@ -162,7 +193,6 @@ defmodule Generator do
 
   defp prepare_schema(schema, name) do
     schema
-    |> enforce_id(name)
     |> use_schema_api()
     |> maybe_format_for_struct()
     |> case do
@@ -183,6 +213,16 @@ defmodule Generator do
         %{properties: props} ->
           %{schema | properties: Map.put(props, :id, %{"$ref": "#/definitions/RequestId"})}
       end
+    else
+      schema
+    end
+  end
+
+  defp enforce_request_meta(schema, name) do
+    if use_request_meta?(name) do
+      put_in(schema, [:properties, :params, :properties, :_meta], %{
+        "$ref": "#/definitions/RequestMeta"
+      })
     else
       schema
     end
