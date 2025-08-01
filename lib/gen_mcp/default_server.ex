@@ -19,7 +19,7 @@ defmodule GenMcp.DefaultServer do
         {module, arg} when is_atom(module) -> {module.name(), {module, arg}}
       end)
 
-    {:ok, %{tools: tools, log?: true, server_info: opts[:server_info]}}
+    {:ok, %{tools: tools, log?: true, server_info: opts[:server_info], tasks: %{}}}
   end
 
   def client_init(req, state) do
@@ -54,11 +54,15 @@ defmodule GenMcp.DefaultServer do
   end
 
   # we should pass the request id to the tool for streamed responses
-  def handle_request(%CallToolRequest{} = req, state) do
+  def handle_request(%CallToolRequest{} = req, channel, state) do
     case List.keyfind(state.tools, req.params.name, 0) do
       {_, tool} ->
         case GenMcp.Tool.call(tool, req.params.arguments) do
-          {:reply, reply} -> {:reply, reply, state}
+          {:reply, reply} ->
+            {:reply, reply, state}
+
+          {:stream, %Task{} = task} ->
+            {:stream, "", put_in(state.tasks[task.ref], channel) |> dbg()}
         end
     end
   end

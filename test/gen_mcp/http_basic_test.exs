@@ -163,7 +163,7 @@ defmodule GenMcp.HttpBasicTest do
              })
   end
 
-  test "calling a tool" do
+  test "calling a sync tool" do
     assert %{
              "id" => 456,
              "jsonrpc" => "2.0",
@@ -181,6 +181,28 @@ defmodule GenMcp.HttpBasicTest do
                params: %{
                  name: "Calculator",
                  arguments: %{operator: "+", operands: [7, 8]}
+               }
+             })
+  end
+
+  test "calling an async tool" do
+    assert %{
+             "id" => 456,
+             "jsonrpc" => "2.0",
+             "result" => %{
+               "content" => [
+                 %{"text" => "{\"result\":15}", "type" => "text"}
+               ],
+               "structuredContent" => %{"result" => 15}
+             }
+           } =
+             post_message(%{
+               jsonrpc: "2.0",
+               id: 456,
+               method: "tools/call",
+               params: %{
+                 name: "AsyncCounter",
+                 arguments: %{upto: 3}
                }
              })
   end

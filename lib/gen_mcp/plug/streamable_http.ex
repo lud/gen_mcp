@@ -120,8 +120,14 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
   defp dispatch_req(conn, msgid, req, opts) do
     server = Keyword.get(opts, :server, GenMcp.DefaultServer)
     {:ok, state} = server.init(opts)
-    {:reply, resp, _state} = server.handle_request(req, state)
+    {:reply, resp, _state} = server.handle_request(req, build_channel(conn, opts), state)
     rpc_reply(conn, 200, msgid, resp)
+  end
+
+  IO.warn("@todo build channel according to session/persistent (persistent implies session)")
+
+  defp build_channel(conn, _opts) do
+    {:local, [:alias | :erlang.alias()]}
   end
 
   defp dispatch_notif(conn, notif, opts) do
