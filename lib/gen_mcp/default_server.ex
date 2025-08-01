@@ -55,10 +55,11 @@ defmodule GenMcp.DefaultServer do
 
   # we should pass the request id to the tool for streamed responses
   def handle_request(%CallToolRequest{} = req, state) do
-    with {:ok, tool} <- Map.fetch(state.tools, req.params.name) do
-      case GenMcp.Tool.call(tool, req.params.arguments) do
-        {:reply, reply} -> {:reply, reply, state}
-      end
+    case List.keyfind(state.tools, req.params.name, 0) do
+      {_, tool} ->
+        case GenMcp.Tool.call(tool, req.params.arguments) do
+          {:reply, reply} -> {:reply, reply, state}
+        end
     end
   end
 

@@ -162,4 +162,26 @@ defmodule GenMcp.HttpBasicTest do
                }
              })
   end
+
+  test "calling a tool" do
+    assert %{
+             "id" => 456,
+             "jsonrpc" => "2.0",
+             "result" => %{
+               "content" => [
+                 %{"text" => "{\"result\":15}", "type" => "text"}
+               ],
+               "structuredContent" => %{"result" => 15}
+             }
+           } =
+             post_message(%{
+               jsonrpc: "2.0",
+               id: 456,
+               method: "tools/call",
+               params: %{
+                 name: "Calculator",
+                 arguments: %{operator: "+", operands: [7, 8]}
+               }
+             })
+  end
 end
