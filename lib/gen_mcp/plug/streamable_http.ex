@@ -121,8 +121,15 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
     req |> dbg()
     server = Keyword.get(opts, :server, GenMcp.DefaultServer)
     {:ok, state} = server.init(opts)
-    {:reply, resp, _state} = server.handle_request(req, build_channel(conn, req, opts), state)
-    rpc_reply(conn, 200, msgid, resp)
+
+    # TODO here if we have a persistent server we must send a message instead of
+    # directly calling the module. The channel could have infos for both
+    # directions: how to call the server implementation from the transport, and
+    # how to send to the transport from the server.
+    case server.handle_request(req, build_channel(conn, req, opts), state) do
+      {:reply, resp, _state} -> rpc_reply(conn, 200, msgid, resp)
+      {:stream, state} -> rpc_stream(conn, 200, msgid, server, state)
+    end
   end
 
   IO.warn("@todo build channel according to session/persistent (persistent implies session)")
@@ -149,9 +156,9 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
     send_accepted(conn)
   end
 
-  defp rpc_reply(conn, status, id, result) do
+  defp rpc_reply(conn, status, msgid, result) do
     payload = %JSONRPCResponse{
-      id: id,
+      id: msgid,
       jsonrpc: "2.0",
       result: result
     }
@@ -159,20 +166,63 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
     send_json(conn, status, payload)
   end
 
+  defp rpc_stream(conn, 200, msgid, server, state) do
+    conn = put_resp_header(conn, "content-type", "text/event-stream")
+    conn = send_chunked(conn, 200)
+    rpc_stream_loop(conn, msgid, server, state)
+  end
+
+  defp rpc_stream_loop(conn, msgid, server, state) do
+    # Here too server should be the bi-directional channel if we need to call a
+    # process
+    Process.info(self(), :links) |> dbg()
+
+    receive do
+      other
+      when other != {:plug_conn, :sent} and not (is_tuple(other) and elem(other, 0) == :bandit) ->
+        case server.handle_info(other, state) do
+          {:reply, result, state} ->
+            payload = %JSONRPCResponse{
+              id: msgid,
+              jsonrpc: "2.0",
+              result: result
+            }
+
+            # On reply we can stop streaming
+            {:ok, conn} = send_data_event(conn, payload)
+            conn
+        end
+    end
+  end
+
   defp send_json(conn, status, payload) do
-    body =
-      payload
-      |> JSV.Helpers.Traverse.prewalk(fn
-        {:struct, v} -> MapExt.from_struct_no_nils(v)
-        other -> elem(other, 1)
-      end)
-      |> Codec.format_to_iodata!()
+    body = json_encode(payload, true)
 
     Logger.debug(["RESPONSE\n", body], ansi_color: :light_yellow)
 
     conn
     |> put_resp_content_type("application/json")
     |> send_resp(status, body)
+  end
+
+  defp send_data_event(conn, payload) do
+    json = json_encode(payload)
+    event = "data: #{json}\n\n"
+    chunk(conn, event)
+  end
+
+  defp json_encode(payload, pretty? \\ false) do
+    normal =
+      JSV.Helpers.Traverse.prewalk(payload, fn
+        {:struct, v} -> MapExt.from_struct_no_nils(v)
+        other -> elem(other, 1)
+      end)
+
+    if pretty? do
+      Codec.format_to_iodata!(normal)
+    else
+      Codec.encode_to_iodata!(normal)
+    end
   end
 
   defp send_accepted(conn) do

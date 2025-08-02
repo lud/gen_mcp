@@ -55,7 +55,7 @@ defmodule GenMcp.Tool do
     |> dbg()
   end
 
-  def call({module, opts}, channel, arguments) do
+  def call({module, opts}, arguments, channel) do
     case validate_input(module, arguments) do
       {:ok, arguments} -> do_call(module, arguments, channel, opts)
     end
@@ -63,6 +63,10 @@ defmodule GenMcp.Tool do
 
   defp do_call(module, arguments, channel, opts) do
     module.call(arguments, channel, opts)
+  end
+
+  def next({module, opts}, data, tool_state, channel) do
+    module.next(data, tool_state, channel, opts)
   end
 
   # TODO we should propose to define the input_schema as options to `use

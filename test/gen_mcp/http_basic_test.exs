@@ -187,24 +187,33 @@ defmodule GenMcp.HttpBasicTest do
   end
 
   test "calling an async tool" do
+    body =
+      post_message(%{
+        jsonrpc: "2.0",
+        id: 456,
+        method: "tools/call",
+        params: %{
+          name: "AsyncCounter",
+          arguments: %{upto: 3}
+        }
+      })
+
+    assert "data: " <> json = body
+
     assert %{
              "id" => 456,
              "jsonrpc" => "2.0",
              "result" => %{
                "content" => [
-                 %{"text" => "{\"result\":15}", "type" => "text"}
-               ],
-               "structuredContent" => %{"result" => 15}
+                 %{
+                   "type" => "text",
+                   "text" => "I counted up to 3"
+                 }
+               ]
              }
-           } =
-             post_message(%{
-               jsonrpc: "2.0",
-               id: 456,
-               method: "tools/call",
-               params: %{
-                 name: "AsyncCounter",
-                 arguments: %{upto: 3}
-               }
-             })
+           } = JSV.Codec.decode!(json)
   end
+
+  test "calling async tool with progressToken notifications"
+  test "calling async tool with keepalive SSE comments"
 end
