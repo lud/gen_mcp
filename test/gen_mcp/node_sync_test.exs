@@ -20,7 +20,7 @@ defmodule GenMcp.NodeSyncTest do
   end
 
   test "is registered as global" do
-    node_id = GenServer.call(NodeSync, :get_node_id)
+    node_id = NodeSync.node_id()
     assert Process.whereis(NodeSync) == :global.whereis_name(NodeSync.global_name(node_id))
   end
 

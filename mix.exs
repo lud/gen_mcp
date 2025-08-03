@@ -40,18 +40,9 @@ defmodule GenMcp.MixProject do
       {:local_cluster, "~> 2.0", only: [:test]},
       {:bandit, "~> 1.0", only: [:dev, :test]},
       {:jason, "~> 1.0", only: [:dev, :test]},
-      mcp_validator(),
+      {:libdev, "~> 0.1.2", only: [:dev, :test]},
       mcp_schemas()
     ]
-  end
-
-  defp mcp_validator do
-    {:mcp_validator,
-     git: "https://github.com/Janix-ai/mcp-validator.git",
-     ref: "v0.3.1",
-     only: [:dev, :test],
-     compile: false,
-     app: false}
   end
 
   defp mcp_schemas do

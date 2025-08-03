@@ -30,6 +30,7 @@ defmodule Generator do
     defs =
       schema
       |> Map.fetch!(:definitions)
+      |> inherit_schemas()
       |> swap_sub_schemas()
       |> Enum.sort()
 
@@ -46,6 +47,45 @@ defmodule Generator do
     {_, 0} = System.cmd("mix", ~w(format --migrate))
 
     :ok
+  end
+
+  defp module_config(name) do
+    case name do
+      :CallToolRequest -> [msg_id: true, request_meta: true]
+      :CompleteRequest -> [msg_id: true, request_meta: true]
+      :GetPromptRequest -> [msg_id: true, request_meta: true]
+      :InitializeRequest -> [msg_id: true, request_meta: true]
+      :ListPromptsRequest -> [msg_id: true, request_meta: true]
+      :ListResourcesRequest -> [msg_id: true, request_meta: true]
+      :ListResourceTemplatesRequest -> [msg_id: true, request_meta: true]
+      :ListToolsRequest -> [msg_id: true, request_meta: true]
+      :PingRequest -> [msg_id: true, request_meta: true]
+      :ReadResourceRequest -> [msg_id: true, request_meta: true]
+      :SetLevelRequest -> [msg_id: true, request_meta: true]
+      :SubscribeRequest -> [msg_id: true, request_meta: true]
+      :UnsubscribeRequest -> [msg_id: true, request_meta: true]
+      _ -> []
+    end
+  end
+
+  defp requires_message_id?(name) do
+    true == Keyword.get(module_config(name), :msg_id)
+  end
+
+  defp use_request_meta?(name) do
+    true == Keyword.get(module_config(name), :request_meta)
+  end
+
+  defp inherit_schemas(defs) do
+    Map.new(defs, fn {name, schema} ->
+      schema =
+        schema
+        |> enforce_id(name)
+        |> dbg()
+        |> enforce_request_meta(name)
+
+      {name, schema}
+    end)
   end
 
   def swap_sub_schema(defs, path, name) do
@@ -74,6 +114,20 @@ defmodule Generator do
         %{
           additionalProperties: %{},
           description: "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
+          properties: %{progressToken: GenMcp.Entities.ProgressToken},
+          type: "object"
+        }
+      end
+    end
+
+    defmodule #{module_name("RequestMeta")} do
+      use JSV.Schema
+
+      def json_schema do
+        %{
+          additionalProperties: %{},
+          description: "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
+          properties: %{progressToken: GenMcp.Entities.ProgressToken},
           type: "object"
         }
       end
@@ -115,7 +169,7 @@ defmodule Generator do
     IO.puts("generating #{name}")
     module = module_name(name)
 
-    case prepare_schema(schema) do
+    case prepare_schema(schema, name) do
       {:struct, schema} ->
         """
         defmodule #{inspect(module)} do
@@ -137,13 +191,44 @@ defmodule Generator do
     end
   end
 
-  defp prepare_schema(schema) do
+  defp prepare_schema(schema, name) do
     schema
-    |> jsvize()
-    |> classify_fix()
+    |> use_schema_api()
+    |> maybe_format_for_struct()
+    |> case do
+      {:struct, schema} -> {:struct, Map.put(schema, :title, Atom.to_string(name))}
+      {:generic, _} = gen -> gen
+    end
   end
 
-  defp jsvize(schema) do
+  # Adds the :id property into schema requests so we keep it on casting to
+  # structs. The given official JSON schema does not inherit properties from the
+  # generic request in specific requests.
+  defp enforce_id(schema, name) do
+    if requires_message_id?(name) do
+      case schema do
+        %{properties: %{id: _}} ->
+          raise "id already defined"
+
+        %{properties: props} ->
+          %{schema | properties: Map.put(props, :id, %{"$ref": "#/definitions/RequestId"})}
+      end
+    else
+      schema
+    end
+  end
+
+  defp enforce_request_meta(schema, name) do
+    if use_request_meta?(name) do
+      put_in(schema, [:properties, :params, :properties, :_meta], %{
+        "$ref": "#/definitions/RequestMeta"
+      })
+    else
+      schema
+    end
+  end
+
+  defp use_schema_api(schema) do
     schema
     |> JSV.Helpers.Traverse.prewalk(fn
       {:val, %{_meta: meta} = prop} ->
@@ -180,6 +265,12 @@ defmodule Generator do
 
       {:val, %{type: "integer", description: descr} = schema} when map_size(schema) == 2 ->
         CodeWrapper.of(:integer, [[description: descr]])
+
+      {:val, %{type: "number"} = schema} when map_size(schema) == 1 ->
+        CodeWrapper.of(:number)
+
+      {:val, %{type: "number", description: descr} = schema} when map_size(schema) == 2 ->
+        CodeWrapper.of(:number, [[description: descr]])
 
       {:val, %{type: "string"} = schema} when map_size(schema) == 1 ->
         CodeWrapper.of(:string)
@@ -235,7 +326,7 @@ defmodule Generator do
     |> Enum.sort_by(&elem(&1, 0))
   end
 
-  defp classify_fix(%{type: "object", properties: _} = schema) do
+  defp maybe_format_for_struct(%{type: "object", properties: _} = schema) do
     schema =
       case schema do
         %{required: keys} -> %{schema | required: Enum.map(keys, &String.to_atom/1)}
@@ -245,7 +336,7 @@ defmodule Generator do
     {:struct, schema}
   end
 
-  defp classify_fix(schema) do
+  defp maybe_format_for_struct(schema) do
     {:generic, schema}
   end
 
@@ -257,10 +348,5 @@ defmodule Generator do
     Module.concat(base_module(), name)
   end
 end
-
-raise """
-concrete requests should still bear the message id, it's easier to keep track of
-it when passing to tools, and easier for users to debug.
-"""
 
 Generator.run()

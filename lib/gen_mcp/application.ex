@@ -8,7 +8,7 @@ defmodule GenMcp.Application do
   IO.warn("@todo remove autoconnect")
 
   def env do
-    unquote(Mix.env())
+    Process.get(:never_defined, unquote(Mix.env()))
   end
 
   @impl true

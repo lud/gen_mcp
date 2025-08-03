@@ -7,6 +7,11 @@ defmodule GenMcp.TestWeb.Router do
   end
 
   scope "/mcp" do
-    forward "/basic", GenMcp.Plug.StreamableHttp, tools: [GenMcp.Test.Tools.Calculator]
+    forward "/basic", GenMcp.Plug.StreamableHttp,
+      tools: [
+        GenMcp.Test.Tools.Calculator,
+        GenMcp.Test.Tools.AsyncCounter,
+        GenMcp.Test.Tools.Sleeper
+      ]
   end
 end

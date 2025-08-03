@@ -3,8 +3,6 @@ defmodule GenMcp.Test.Tools.Calculator do
   alias GenMcp.Entities.TextContent
   use JSV.Schema
 
-  @name "calculator"
-
   def name() do
     "Calculator"
   end
@@ -41,7 +39,7 @@ defmodule GenMcp.Test.Tools.Calculator do
     %{idempotentHint: true, openWorldHint: false, title: title()}
   end
 
-  def call(arguments, _opts) do
+  def call(arguments, channel, _opts) do
     result =
       case arguments do
         %{"operator" => :+, "operands" => [a, b]} -> a + b
