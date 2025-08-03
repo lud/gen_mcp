@@ -1,84 +1,13 @@
 defmodule GenMcp.HttpBasicTest do
+  import GenMcp.Test.Client
   use ExUnit.Case, async: true
 
-  defp url(path) do
-    GenMcp.TestWeb.Endpoint.url()
-    |> URI.parse()
-    |> URI.merge(path)
-  end
-
-  [
-    # Requests
-    GenMcp.Entities.InitializeRequest,
-    GenMcp.Entities.PingRequest,
-    GenMcp.Entities.ListResourcesRequest,
-    GenMcp.Entities.ListResourceTemplatesRequest,
-    GenMcp.Entities.ReadResourceRequest,
-    GenMcp.Entities.SubscribeRequest,
-    GenMcp.Entities.UnsubscribeRequest,
-    GenMcp.Entities.ListPromptsRequest,
-    GenMcp.Entities.GetPromptRequest,
-    GenMcp.Entities.ListToolsRequest,
-    GenMcp.Entities.CallToolRequest,
-    GenMcp.Entities.SetLevelRequest,
-    GenMcp.Entities.CompleteRequest,
-    # Notifications
-    GenMcp.Entities.CancelledNotification,
-    GenMcp.Entities.InitializedNotification,
-    GenMcp.Entities.ProgressNotification,
-    GenMcp.Entities.RootsListChangedNotification
-  ]
-  |> Enum.map(fn mod ->
-    method = mod.json_schema().properties.method.const
-    {method, JSV.build!(mod)}
-  end)
-  |> Enum.each(fn {method, root} ->
-    def jsv_root(unquote(method)) do
-      unquote(Macro.escape(root))
-    end
-  end)
-
-  @req_root JSV.build!(GenMcp.Entities.ClientRequest)
-  defp validate_request(%{"method" => method} = data) do
-    JSV.validate!(data, jsv_root(method))
-    :ok
+  defp path do
+    "/mcp/basic"
   end
 
   defp url do
-    url("/mcp/basic")
-  end
-
-  defp post_message(data, req_opts \\ []) do
-    data = JSV.Normalizer.normalize(data)
-    :ok = validate_request(data)
-    resp = Req.post!(url(), [json: data, receive_timeout: :timer.minutes(1)] ++ req_opts)
-    assert resp.status in [200, 202]
-    resp
-  end
-
-  defp post_invalid_message(data) do
-    data = JSV.Normalizer.normalize(data)
-    resp = Req.post!(url(), json: data)
-    assert resp.status in [400]
-    resp
-  end
-
-  defp read_chunk(resp) do
-    Req.parse_message(
-      resp,
-      receive do
-        msg -> msg
-      end
-    )
-  end
-
-  defp stream_chunks(resp) do
-    Stream.unfold(resp, fn resp ->
-      case read_chunk(resp) do
-        {:ok, [:done]} -> nil
-        {:ok, [data: data]} -> {data, resp}
-      end
-    end)
+    url(path())
   end
 
   test "basic server does not support GET" do
@@ -102,7 +31,8 @@ defmodule GenMcp.HttpBasicTest do
                  | _
                ]
              }
-           } = post_message(%{jsonrpc: "2.0", id: 123, method: "tools/list", params: %{}}).body
+           } =
+             post_message(path(), %{jsonrpc: "2.0", id: 123, method: "tools/list", params: %{}}).body
   end
 
   test "we can run the initialization" do
@@ -119,7 +49,7 @@ defmodule GenMcp.HttpBasicTest do
                }
              }
            } =
-             post_message(%{
+             post_message(path(), %{
                jsonrpc: "2.0",
                id: 123,
                method: "initialize",
@@ -131,7 +61,7 @@ defmodule GenMcp.HttpBasicTest do
              }).body
 
     assert "" =
-             post_message(%{
+             post_message(path(), %{
                jsonrpc: "2.0",
                method: "notifications/initialized",
                params: %{}
@@ -169,7 +99,7 @@ defmodule GenMcp.HttpBasicTest do
                "message" => "request validation failed"
              }
            } =
-             post_invalid_message(%{
+             post_invalid_message(path(), %{
                jsonrpc: "2.0",
                id: 123,
                method: "initialize",
@@ -192,7 +122,7 @@ defmodule GenMcp.HttpBasicTest do
                "structuredContent" => %{"result" => 15}
              }
            } =
-             post_message(%{
+             post_message(path(), %{
                jsonrpc: "2.0",
                id: 456,
                method: "tools/call",
@@ -206,7 +136,7 @@ defmodule GenMcp.HttpBasicTest do
 
   test "calling an async tool" do
     resp =
-      post_message(%{
+      post_message(path(), %{
         jsonrpc: "2.0",
         id: 456,
         method: "tools/call",
@@ -235,6 +165,7 @@ defmodule GenMcp.HttpBasicTest do
   test "calling async tool with progressToken notifications" do
     resp =
       post_message(
+        path(),
         %{
           jsonrpc: "2.0",
           id: 456,
@@ -252,7 +183,6 @@ defmodule GenMcp.HttpBasicTest do
       resp
       |> stream_chunks()
       |> Enum.map(fn "data: " <> json -> JSV.Codec.decode!(json) end)
-      |> dbg()
 
     assert [
              %{
@@ -300,7 +230,7 @@ defmodule GenMcp.HttpBasicTest do
              "id" => 456,
              "jsonrpc" => "2.0"
            } ==
-             post_invalid_message(%{
+             post_invalid_message(path(), %{
                jsonrpc: "2.0",
                id: 456,
                method: "tools/call",
@@ -315,6 +245,7 @@ defmodule GenMcp.HttpBasicTest do
   test "calling async tool with keepalive SSE comments" do
     resp =
       post_message(
+        path(),
         %{
           jsonrpc: "2.0",
           id: 456,
