@@ -16,6 +16,18 @@ defmodule GenMcp.Plug.StreamableHttp do
     require(Logger).debug("RESPONSE\404", ansi_color: :light_yellow)
     send_resp(conn, 404, "Not found")
   end
+
+  defmacro delegate(module) do
+    module = Macro.expand_literals(module, __CALLER__)
+
+    {:module, mod, _, _} =
+      defmodule module do
+        defdelegate init(opts), to: GenMcp.Plug.StreamableHttp
+        defdelegate call(conn, opts), to: GenMcp.Plug.StreamableHttp
+      end
+
+    mod
+  end
 end
 
 defmodule GenMcp.Plug.StreamableHttp.Impl do

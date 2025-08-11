@@ -1,16 +1,21 @@
 defmodule GenMcp.MixProject do
   use Mix.Project
 
+@source_url "https://github.com/lud/gen_mcp"
+@version "0.1.0"
   def project do
     [
       app: :gen_mcp,
-      version: "0.1.0",
+      version: @version,
+      description: "A generic MCP server behaviour, plus predefined server implementations and plugs to get started immediately.",
       elixir: "~> 1.18",
       start_permanent: true,
       elixirc_paths: elixirc_paths(Mix.env()),
+      source_url: @source_url,
       deps: deps(),
       aliases: aliases(),
-      modkit: modkit()
+      modkit: modkit(),
+      package: package(),
     ]
   end
 
@@ -32,7 +37,7 @@ defmodule GenMcp.MixProject do
   defp deps do
     [
       {:phoenix, ">= 1.7.0"},
-      {:jsv, path: "../jsv"},
+      {:jsv, "~> 0.10.1"},
       {:abnf_parsec, "~> 2.0"},
 
       # Test
@@ -71,6 +76,16 @@ defmodule GenMcp.MixProject do
         {Mix.Tasks, "lib/mix/tasks", flavor: :mix_task},
         {Plug, "test/support/test_web/plug"}
       ]
+    ]
+  end
+
+    defp package do
+    [
+      licenses: ["MIT"],
+      links: %{
+        "Github" => @source_url,
+        "Changelog" => "https://github.com/lud/gen_mcl/blob/main/CHANGELOG.md"
+      }
     ]
   end
 end
