@@ -19,6 +19,7 @@ defmodule GenMcp.Plug.StreamableHttp do
 
   defmacro delegate(module) do
     module = Macro.expand_literals(module, __CALLER__)
+    IO.puts("-----------------------\n#{inspect(module)}\n-----------------------\n")
 
     {:module, mod, _, _} =
       defmodule module do

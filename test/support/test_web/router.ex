@@ -1,3 +1,6 @@
+StreamableHttp.delegate(GenMcp.TestWeb.Router.McpBasic)
+StreamableHttp.delegate(GenMcp.TestWeb.Router.McpStateful)
+
 defmodule GenMcp.TestWeb.Router do
   use Phoenix.Router
   require GenMcp.Plug.StreamableHttp, as: StreamableHttp
@@ -8,13 +11,13 @@ defmodule GenMcp.TestWeb.Router do
   end
 
   scope "/mcp" do
-    forward "/basic", StreamableHttp.delegate(__MODULE__.McpBasic),
+    forward "/basic", GenMcp.TestWeb.Router.McpBasic,
       tools: [
         GenMcp.Test.Tools.Calculator,
         GenMcp.Test.Tools.AsyncCounter,
         GenMcp.Test.Tools.Sleeper
       ]
 
-    forward "/stateful", StreamableHttp.delegate(__MODULE__.McpStateful)
+    forward "/stateful", GenMcp.TestWeb.Router.McpStateful
   end
 end

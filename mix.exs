@@ -1,13 +1,14 @@
 defmodule GenMcp.MixProject do
   use Mix.Project
 
-@source_url "https://github.com/lud/gen_mcp"
-@version "0.1.0"
+  @source_url "https://github.com/lud/gen_mcp"
+  @version "0.1.0"
   def project do
     [
       app: :gen_mcp,
       version: @version,
-      description: "A generic MCP server behaviour, plus predefined server implementations and plugs to get started immediately.",
+      description:
+        "A generic MCP server behaviour, plus predefined server implementations and plugs to get started immediately.",
       elixir: "~> 1.18",
       start_permanent: true,
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -15,7 +16,7 @@ defmodule GenMcp.MixProject do
       deps: deps(),
       aliases: aliases(),
       modkit: modkit(),
-      package: package(),
+      package: package()
     ]
   end
 
@@ -79,7 +80,7 @@ defmodule GenMcp.MixProject do
     ]
   end
 
-    defp package do
+  defp package do
     [
       licenses: ["MIT"],
       links: %{
