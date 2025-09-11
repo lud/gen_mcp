@@ -80,7 +80,6 @@ defmodule GenMcp.Tool do
   end
 
   def next(module, data, channel, state) do
-    binding() |> IO.inspect(limit: :infinity, label: "binding()")
     module.next(data, channel, state)
   end
 

@@ -39,7 +39,7 @@ defmodule GenMcp.Test.Tools.AsyncCounter do
     count_upto(upto, n + 1, sleep, channel)
   end
 
-  defp count_upto(upto, upto, _sleep, channel) do
+  defp count_upto(upto, upto, _sleep, _channel) do
     Logger.debug("Counting #{upto}/#{upto}")
 
     {:count_done, upto}

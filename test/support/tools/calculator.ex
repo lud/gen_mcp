@@ -40,8 +40,6 @@ defmodule GenMcp.Test.Tools.Calculator do
   end
 
   def call(arguments, channel, _state) do
-    _state |> dbg(limit: :infinity)
-
     result =
       case arguments do
         %{"operator" => :+, "operands" => [a, b]} -> a + b

@@ -16,7 +16,7 @@ defmodule GenMcp.Test.Tools.MemoryAdd do
   end
 
   def input_schema do
-    props(item: string()) |> dbg()
+    props(item: string())
   end
 
   def output_schema do
