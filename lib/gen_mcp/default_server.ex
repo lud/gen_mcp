@@ -86,7 +86,8 @@ defmodule GenMcp.DefaultServer do
 
     case Map.fetch(state.tools, tool_name) do
       {:ok, tool} ->
-        {state, tool_state} = ensure_tool_initialized(state, tool_name, tool)
+        state = ensure_tool_initialized(state, tool_name, tool)
+        tool_state = tool_state(state, tool_name)
         result = GenMcp.Tool.call(tool.module, req.params.arguments, channel, tool_state)
         handle_tool_call_result(result, tool_name, channel, state)
 
@@ -96,15 +97,13 @@ defmodule GenMcp.DefaultServer do
   end
 
   defp ensure_tool_initialized(state, tool_name, tool) do
-    {_state, _tool_state} =
-      case tool do
-        %{module: module, mode: :init, opts: opts} ->
-          case GenMcp.Tool.init(module, opts) do
-            {:state, tool_state} ->
-              state = put_in(state.tools[tool_name], %{tool | mode: :state, state: tool_state})
-              {state, tool_state}
-          end
-      end
+    case tool do
+      %{module: module, mode: :init, opts: opts} ->
+        case GenMcp.Tool.init(module, opts) do
+          {:state, tool_state} ->
+            put_in(state.tools[tool_name], %{tool | mode: :state, state: tool_state})
+        end
+    end
   end
 
   def handle_notification(notif, state) do
@@ -122,7 +121,7 @@ defmodule GenMcp.DefaultServer do
         {:reply, reply, state}
 
       {:async, %Task{} = task, tool_state} ->
-        state = put_in(state.refs[task.ref], {channel, {:tool, tool_name}, task, tool_state})
+        state = put_in(state.refs[task.ref], {channel, {:tool, tool_name}, task})
         state = put_tool_state(state, tool_name, tool_state)
         {:stream, state}
     end
@@ -136,7 +135,7 @@ defmodule GenMcp.DefaultServer do
   end
 
   defp handle_ref(ref, data, state) do
-    {{channel, {kind, name}, ref_from, sub_state}, state} = pop_in(state.refs[ref])
+    {{channel, {kind, name}, ref_from}, state} = pop_in(state.refs[ref])
 
     # If the reference is a task, and we are trapping exits, we need to ignore
     # the normal exit message
@@ -159,15 +158,22 @@ defmodule GenMcp.DefaultServer do
 
     case kind do
       :tool ->
-        continue_tool(name, data, sub_state, channel, state)
+        continue_tool(name, data, channel, state)
     end
   end
 
   # TODO allow to return a new async task
-  defp continue_tool(tool_name, data, tool_state, channel, state) do
+  defp continue_tool(tool_name, data, channel, state) do
     tool = Map.fetch!(state.tools, tool_name)
-    result = GenMcp.Tool.next(tool.module, data, channel, tool_state)
+    tool_state = tool_state(state, tool_name)
+    result = GenMcp.Tool.continue(tool.module, data, channel, tool_state)
     handle_tool_call_result(result, tool, channel, state)
+  end
+
+  def tool_state(state, tool_name) do
+    case Map.fetch!(state.tools, tool_name) do
+      %{mode: :state, state: state} -> state
+    end
   end
 
   defp log(state, level \\ :debug, message) do

@@ -45,7 +45,7 @@ defmodule GenMcp.Test.Tools.AsyncCounter do
     {:count_done, upto}
   end
 
-  def next({:count_done, upto}, _channel, :some_state) do
+  def continue({:count_done, upto}, _channel, :some_state) do
     output = %{
       content: [
         %TextContent{type: "text", text: "I counted up to #{upto}"}

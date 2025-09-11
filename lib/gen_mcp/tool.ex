@@ -79,8 +79,8 @@ defmodule GenMcp.Tool do
     module.call(arguments, channel, opts)
   end
 
-  def next(module, data, channel, state) do
-    module.next(data, channel, state)
+  def continue(module, data, channel, state) do
+    module.continue(data, channel, state)
   end
 
   # TODO we should propose to define the input_schema as options to `use
