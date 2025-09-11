@@ -1,6 +1,6 @@
 require GenMcp.Plug.StreamableHttp, as: StreamableHttp
-StreamableHttp.delegate(GenMcp.TestWeb.Router.McpBasic)
-StreamableHttp.delegate(GenMcp.TestWeb.Router.McpStateful)
+StreamableHttp.defplug(GenMcp.TestWeb.Router.McpBasic)
+StreamableHttp.defplug(GenMcp.TestWeb.Router.McpStateful)
 
 defmodule GenMcp.TestWeb.Router do
   use Phoenix.Router

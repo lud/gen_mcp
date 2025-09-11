@@ -17,9 +17,8 @@ defmodule GenMcp.Plug.StreamableHttp do
     send_resp(conn, 404, "Not found")
   end
 
-  defmacro delegate(module) do
+  defmacro defplug(module) do
     module = Macro.expand_literals(module, __CALLER__)
-    IO.puts("-----------------------\n#{inspect(module)}\n-----------------------\n")
 
     {:module, mod, _, _} =
       defmodule module do
