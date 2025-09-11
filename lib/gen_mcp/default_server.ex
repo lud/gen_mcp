@@ -21,17 +21,23 @@ defmodule GenMcp.DefaultServer do
   end
 
   def client_init(req, state) do
-    {:reply, %{capabilities: capabilities(state), serverInfo: server_info(state)}, state}
+    {:reply, initialization_result(state), state}
+  end
+
+  def initialization_result(state) do
+    %{capabilities: capabilities(state), serverInfo: server_info(state)}
   end
 
   def capabilities(state) do
-    %ServerCapabilities{
-      tools:
-        case state.tools do
-          [] -> nil
-          _ -> %{}
-        end
-    }
+    capabilities = %{}
+
+    capabilities =
+      case state.tools do
+        [] -> capabilities
+        _ -> Map.put(capabilities, :tools, %{})
+      end
+
+    capabilities
   end
 
   def server_info(state) do

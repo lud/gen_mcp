@@ -1,9 +1,9 @@
+require GenMcp.Plug.StreamableHttp, as: StreamableHttp
 StreamableHttp.delegate(GenMcp.TestWeb.Router.McpBasic)
 StreamableHttp.delegate(GenMcp.TestWeb.Router.McpStateful)
 
 defmodule GenMcp.TestWeb.Router do
   use Phoenix.Router
-  require GenMcp.Plug.StreamableHttp, as: StreamableHttp
 
   @moduledoc false
   scope "/dummy", GenMcp.TestWeb do
@@ -18,6 +18,11 @@ defmodule GenMcp.TestWeb.Router do
         GenMcp.Test.Tools.Sleeper
       ]
 
-    forward "/stateful", GenMcp.TestWeb.Router.McpStateful
+    forward "/stateful", GenMcp.TestWeb.Router.McpStateful,
+      tools: [
+        GenMcp.Test.Tools.Calculator,
+        GenMcp.Test.Tools.AsyncCounter,
+        GenMcp.Test.Tools.Sleeper
+      ]
   end
 end

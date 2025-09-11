@@ -2028,70 +2028,74 @@ defmodule GenMcp.Entities.ServerCapabilities do
   use JSV.Schema
   JsonDerive.auto()
 
-  defschema %{
-    description:
-      "Capabilities that a server may support. Known capabilities are defined here, in this schema, but this is not a closed set: any server can define its own, additional capabilities.",
-    properties: %{
-      completions: %{
-        additionalProperties: true,
-        description: "Present if the server supports argument autocompletion suggestions.",
-        properties: %{},
-        type: "object"
-      },
-      experimental: %{
-        additionalProperties: %{
+  def json_schema do
+    %{
+      description:
+        "Capabilities that a server may support. Known capabilities are defined here, in this schema, but this is not a closed set: any server can define its own, additional capabilities.",
+      properties: %{
+        completions: %{
           additionalProperties: true,
+          description: "Present if the server supports argument autocompletion suggestions.",
           properties: %{},
           type: "object"
         },
-        description: "Experimental, non-standard capabilities that the server supports.",
-        type: "object"
-      },
-      logging: %{
-        additionalProperties: true,
-        description: "Present if the server supports sending log messages to the client.",
-        properties: %{},
-        type: "object"
-      },
-      prompts: %{
-        description: "Present if the server offers any prompt templates.",
-        properties: %{
-          listChanged:
-            boolean(
-              description:
-                "Whether this server supports notifications for changes to the prompt list."
-            )
+        experimental: %{
+          additionalProperties: %{
+            additionalProperties: true,
+            properties: %{},
+            type: "object"
+          },
+          description: "Experimental, non-standard capabilities that the server supports.",
+          type: "object"
         },
-        type: "object"
-      },
-      resources: %{
-        description: "Present if the server offers any resources to read.",
-        properties: %{
-          listChanged:
-            boolean(
-              description:
-                "Whether this server supports notifications for changes to the resource list."
-            ),
-          subscribe:
-            boolean(description: "Whether this server supports subscribing to resource updates.")
+        logging: %{
+          additionalProperties: true,
+          description: "Present if the server supports sending log messages to the client.",
+          properties: %{},
+          type: "object"
         },
-        type: "object"
-      },
-      tools: %{
-        description: "Present if the server offers any tools to call.",
-        properties: %{
-          listChanged:
-            boolean(
-              description:
-                "Whether this server supports notifications for changes to the tool list."
-            )
+        prompts: %{
+          description: "Present if the server offers any prompt templates.",
+          properties: %{
+            listChanged:
+              boolean(
+                description:
+                  "Whether this server supports notifications for changes to the prompt list."
+              )
+          },
+          type: "object"
         },
-        type: "object"
-      }
-    },
-    title: "ServerCapabilities",
-    type: "object"
-  }
+        resources: %{
+          description: "Present if the server offers any resources to read.",
+          properties: %{
+            listChanged:
+              boolean(
+                description:
+                  "Whether this server supports notifications for changes to the resource list."
+              ),
+            subscribe:
+              boolean(
+                description: "Whether this server supports subscribing to resource updates."
+              )
+          },
+          type: "object"
+        },
+        tools: %{
+          description: "Present if the server offers any tools to call.",
+          properties: %{
+            listChanged:
+              boolean(
+                description:
+                  "Whether this server supports notifications for changes to the tool list."
+              )
+          },
+          type: "object"
+        }
+      },
+      title: "ServerCapabilities",
+      type: "object"
+    }
+  end
 end
 
 defmodule GenMcp.Entities.ServerNotification do
