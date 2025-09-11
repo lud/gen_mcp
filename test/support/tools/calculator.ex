@@ -39,7 +39,9 @@ defmodule GenMcp.Test.Tools.Calculator do
     %{idempotentHint: true, openWorldHint: false, title: title()}
   end
 
-  def call(arguments, channel, _opts) do
+  def call(arguments, channel, _state) do
+    _state |> dbg(limit: :infinity)
+
     result =
       case arguments do
         %{"operator" => :+, "operands" => [a, b]} -> a + b

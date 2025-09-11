@@ -25,7 +25,7 @@ defmodule GenMcp.Test.Tools.Sleeper do
     }
   end
 
-  def call(arguments, _channel, _opts) do
+  def call(arguments, _channel, _state) do
     %{"seconds" => seconds} = arguments
 
     {:async,
@@ -35,7 +35,7 @@ defmodule GenMcp.Test.Tools.Sleeper do
      end), :some_state}
   end
 
-  def next({:slept, seconds}, :some_state, _channel, _opts) do
+  def next({:slept, seconds}, _channel, :some_state) do
     output = %{
       content: [
         %TextContent{type: "text", text: "I slept for #{seconds} seconds"}

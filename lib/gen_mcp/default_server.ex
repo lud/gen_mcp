@@ -6,18 +6,35 @@ defmodule GenMcp.DefaultServer do
   require Logger
 
   def init(opts) do
-    tools =
+    {tools, ordered_tools_names} =
       opts[:tools]
       |> case do
         list when is_list(list) -> list
         _ -> []
       end
-      |> Enum.map(fn
-        module when is_atom(module) -> {module.name(), {module, []}}
-        {module, arg} when is_atom(module) -> {module.name(), {module, arg}}
-      end)
+      |> Enum.map_reduce([], fn item, names ->
+        {name, _} =
+          pair =
+          case item do
+            module when is_atom(module) -> {module.name(), {module, :nostate, []}}
+            {module, arg} when is_atom(module) -> {module.name(), {module, :nostate, arg}}
+          end
 
-    {:ok, %{tools: tools, log?: true, server_info: opts[:server_info], refs: %{}}}
+        {pair, [name | names]}
+      end)
+      |> case do
+        {pairs, names} -> {Map.new(pairs), :lists.reverse(names)}
+      end
+      |> dbg()
+
+    {:ok,
+     %{
+       tools: tools,
+       ordered_tools_names: ordered_tools_names,
+       log?: true,
+       server_info: opts[:server_info],
+       refs: %{}
+     }}
   end
 
   def client_init(req, state) do
@@ -52,20 +69,42 @@ defmodule GenMcp.DefaultServer do
   end
 
   def handle_request(%ListToolsRequest{}, _channel, state) do
-    page = Enum.map(state.tools, fn {_name, tool} -> GenMcp.Tool.describe(tool) end)
+    page =
+      Enum.map(state.ordered_tools_names, fn name ->
+        {module, _, _} = Map.fetch!(state.tools, name)
+        GenMcp.Tool.describe(module)
+      end)
+
     {:reply, %{tools: page}, state}
   end
 
   # we should pass the request id to the tool for streamed responses
   def handle_request(%CallToolRequest{} = req, channel, state) do
-    case List.keyfind(state.tools, req.params.name, 0) do
-      {_, tool} ->
-        result = GenMcp.Tool.call(tool, req.params.arguments, channel)
+    tool_name = req.params.name
+
+    case Map.fetch(state.tools, tool_name) do
+      {:ok, {module, _, _} = tool} ->
+        {state, tool_state} = ensure_tool_initialized(state, tool_name, tool)
+        result = GenMcp.Tool.call(module, req.params.arguments, channel, tool_state)
         handle_tool_call_result(result, tool, channel, state)
 
-      nil ->
+      :error ->
         {:error, GenMcp.Error.unknown_tool(req.params.name), state}
     end
+  end
+
+  defp ensure_tool_initialized(state, tool_name, tool) do
+    binding() |> IO.inspect(limit: :infinity, label: "binding()")
+
+    {_state, _tool_state} =
+      case tool do
+        {module, :nostate, arg} ->
+          case GenMcp.Tool.init(module, arg) do
+            {:state, tool_state} ->
+              state = put_in(state.tools[tool_name], {module, :state, tool_state})
+              {state, tool_state}
+          end
+      end
   end
 
   def handle_notification(notif, state) do
@@ -116,8 +155,8 @@ defmodule GenMcp.DefaultServer do
   end
 
   # TODO allow to return a new async task
-  defp continue_tool(tool, data, tool_state, channel, state) do
-    result = GenMcp.Tool.next(tool, data, tool_state, channel)
+  defp continue_tool({module, _, _} = tool, data, tool_state, channel, state) do
+    result = GenMcp.Tool.next(module, data, channel, tool_state)
     handle_tool_call_result(result, tool, channel, state)
   end
 

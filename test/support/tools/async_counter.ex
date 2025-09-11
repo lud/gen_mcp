@@ -1,6 +1,5 @@
 defmodule GenMcp.Test.Tools.AsyncCounter do
   alias GenMcp.Entities.TextContent
-  alias JSV.Codec
   require Logger
   use JSV.Schema
 
@@ -27,7 +26,7 @@ defmodule GenMcp.Test.Tools.AsyncCounter do
     }
   end
 
-  def call(arguments, channel, _opts) do
+  def call(arguments, channel, _state) do
     %{"upto" => upto} = arguments
     sleep = Map.get(arguments, "sleep", 100)
     {:async, Task.async(fn -> count_upto(upto, 0, sleep, channel) end), :some_state}
@@ -46,7 +45,7 @@ defmodule GenMcp.Test.Tools.AsyncCounter do
     {:count_done, upto}
   end
 
-  def next({:count_done, upto}, :some_state, _channel, _opts) do
+  def next({:count_done, upto}, _channel, :some_state) do
     output = %{
       content: [
         %TextContent{type: "text", text: "I counted up to #{upto}"}

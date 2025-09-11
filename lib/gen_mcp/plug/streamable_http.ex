@@ -214,7 +214,7 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
       other
       when other != {:plug_conn, :sent} and not (is_tuple(other) and elem(other, 0) == :bandit) ->
         case server.handle_info(other, state) do
-          {:reply, result, state} ->
+          {:reply, result, _state} ->
             payload = %JSONRPCResponse{
               id: msgid,
               jsonrpc: "2.0",
@@ -230,7 +230,6 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
 
   defp send_json(conn, status, payload) do
     body = json_encode(payload, true)
-
     Logger.debug(["RESPONSE\n", body], ansi_color: :light_yellow)
 
     conn

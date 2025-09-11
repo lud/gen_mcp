@@ -6,7 +6,7 @@ defmodule GenMcp.Tool do
                    :outputSchema -> {:output_schema, :outputSchema}
                  end)
 
-  def describe({module, _}) do
+  def describe(module) do
     _ = Code.ensure_loaded(module)
     info = [name: module.name(), inputSchema: module.input_schema()]
 
@@ -51,9 +51,27 @@ defmodule GenMcp.Tool do
     end)
   end
 
-  def call({module, opts}, arguments, channel) do
+  IO.warn("create behaviour for tools. init is optional")
+
+  def init(module, arg) do
+    Code.ensure_loaded!(module)
+
+    if function_exported?(module, :init, 1) do
+      do_init(module, arg)
+    else
+      {:state, arg}
+    end
+  end
+
+  defp do_init(module, arg) do
+    case module.init(arg) do
+      :stateless -> {:state, arg}
+    end
+  end
+
+  def call(module, arguments, channel, state) do
     case validate_input(module, arguments) do
-      {:ok, arguments} -> do_call(module, arguments, channel, opts)
+      {:ok, arguments} -> do_call(module, arguments, channel, state)
     end
   end
 
@@ -61,8 +79,9 @@ defmodule GenMcp.Tool do
     module.call(arguments, channel, opts)
   end
 
-  def next({module, opts}, data, tool_state, channel) do
-    module.next(data, tool_state, channel, opts)
+  def next(module, data, channel, state) do
+    binding() |> IO.inspect(limit: :infinity, label: "binding()")
+    module.next(data, channel, state)
   end
 
   # TODO we should propose to define the input_schema as options to `use
