@@ -7,7 +7,7 @@ defmodule GenMcp.NodeSync do
   @glob :gen_mcp_global
   @group :node_sync
   @tag __MODULE__
-  @default_name __MODULE__
+  @name __MODULE__
   @node_id_bits 16
   @max_node_id 2 ** @node_id_bits - 1
 
@@ -20,35 +20,36 @@ defmodule GenMcp.NodeSync do
     }
   end
 
-  def node_id(server \\ @default_name) do
-    GenServer.call(server, :node_id)
+  def node_id do
+    case :persistent_term.get(__MODULE__, nil) do
+      nil -> raise "NodeSync is not initialized"
+      id -> id
+    end
   end
 
-  def gen_session_id(server \\ @default_name)
-
-  def gen_session_id(server) do
-    Base.encode16(<<node_id(server)::@node_id_bits>>) <>
+  def gen_session_id do
+    Base.encode16(<<node_id()::@node_id_bits>>) <>
       "-" <> Base.url_encode64(:crypto.strong_rand_bytes(18))
   end
 
-  def node_of(server \\ @default_name, session_id)
+  def node_of(session_id)
 
-  def node_of(server, session_id) when is_binary(session_id) do
+  def node_of(session_id) when is_binary(session_id) do
     with [node_b16 | _] <- String.split(session_id, "-", parts: 2),
          {:ok, <<node_id::@node_id_bits>>} <- Base.decode16(node_b16) do
-      GenServer.call(server, {:get_node, node_id})
+      GenServer.call(@name, {:get_node, node_id})
     else
       _ -> :error
     end
   end
 
-  def node_known?(server \\ @default_name, node) do
-    GenServer.call(server, {:node_known?, node})
+  def node_known?(name \\ @name, node) do
+    GenServer.call(name, {:node_known?, node})
   end
 
   def start_link(opts) do
     {gen_opts, opts} = Keyword.split(opts, @gen_opts)
-    gen_opts = Keyword.put_new(gen_opts, :name, @default_name)
+    gen_opts = Keyword.put_new(gen_opts, :name, @name)
     GenServer.start_link(__MODULE__, opts, gen_opts)
   end
 
@@ -66,6 +67,7 @@ defmodule GenMcp.NodeSync do
         {mref, group_members} = :pg.monitor(@scope, @group)
         :ok = :pg.join(@scope, @group, self())
         publish(group_members, node_id)
+        :persistent_term.put(__MODULE__, node_id)
 
         state =
           %{

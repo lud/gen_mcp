@@ -1,8 +1,7 @@
 defmodule GenMcp.DefaultServer do
-  alias GenMcp.Entities.CallToolRequest
-  alias GenMcp.Entities.ListToolsRequest
-  alias GenMcp.Entities.ServerCapabilities
-  alias GenMcp.Entities.Implementation
+  alias GenMcp.Mcp.Entities.CallToolRequest
+  alias GenMcp.Mcp.Entities.Implementation
+  alias GenMcp.Mcp.Entities.ListToolsRequest
   require Logger
 
   def init(opts) do
@@ -39,11 +38,11 @@ defmodule GenMcp.DefaultServer do
      }}
   end
 
-  def client_init(req, state) do
+  def client_init(_req, state) do
     {:reply, initialization_result(state), state}
   end
 
-  def initialization_result(state) do
+  defp initialization_result(state) do
     %{capabilities: capabilities(state), serverInfo: server_info(state)}
   end
 
@@ -92,7 +91,7 @@ defmodule GenMcp.DefaultServer do
         handle_tool_call_result(result, tool_name, channel, state)
 
       :error ->
-        {:error, GenMcp.Error.unknown_tool(req.params.name), state}
+        {:error, {:unknown_tool, req.params.name}, state}
     end
   end
 

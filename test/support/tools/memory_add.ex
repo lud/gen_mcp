@@ -1,9 +1,7 @@
 defmodule GenMcp.Test.Tools.MemoryAdd do
-  alias JSV.Codec
-  alias GenMcp.Entities.TextContent
   use JSV.Schema
 
-  def name() do
+  def name do
     "MemoryAdd"
   end
 

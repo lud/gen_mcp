@@ -44,9 +44,10 @@ defmodule GenMcp.NodeSyncTest do
     assert :pong = Node.ping(peer)
 
     # We can ask a session id on this node
-    session_id = NodeSync.gen_session_id({NodeSync, peer})
+    session_id = :rpc.call(peer, NodeSync, :gen_session_id, [])
+
     # When known
-    await_known_node(peer)
+    await_node_id_sync(peer)
     assert {:ok, peer} == NodeSync.node_of(session_id)
 
     # Not known anymore
@@ -54,7 +55,7 @@ defmodule GenMcp.NodeSyncTest do
     assert :error == NodeSync.node_of(session_id)
   end
 
-  defp await_known_node(peer) do
+  defp await_node_id_sync(peer) do
     case NodeSync.node_known?(peer) do
       true ->
         :ok
@@ -62,7 +63,7 @@ defmodule GenMcp.NodeSyncTest do
       false ->
         Logger.warning("nodes not in sync yet")
         Process.sleep(100)
-        await_known_node(peer)
+        await_node_id_sync(peer)
     end
   end
 end

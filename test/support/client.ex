@@ -1,33 +1,28 @@
 defmodule GenMcp.Test.Client do
   import ExUnit.Assertions
-  require(GenMcp.Entities.ModMap).require_all()
-
-  def url(path) do
-    GenMcp.TestWeb.Endpoint.url()
-    |> URI.parse()
-    |> URI.merge(path)
-  end
+  require(GenMcp.Mcp.Entities.ModMap).require_all()
 
   [
     # Requests
-    GenMcp.Entities.InitializeRequest,
-    GenMcp.Entities.PingRequest,
-    GenMcp.Entities.ListResourcesRequest,
-    GenMcp.Entities.ListResourceTemplatesRequest,
-    GenMcp.Entities.ReadResourceRequest,
-    GenMcp.Entities.SubscribeRequest,
-    GenMcp.Entities.UnsubscribeRequest,
-    GenMcp.Entities.ListPromptsRequest,
-    GenMcp.Entities.GetPromptRequest,
-    GenMcp.Entities.ListToolsRequest,
-    GenMcp.Entities.CallToolRequest,
-    GenMcp.Entities.SetLevelRequest,
-    GenMcp.Entities.CompleteRequest,
+    GenMcp.Mcp.Entities.InitializeRequest,
+    GenMcp.Mcp.Entities.PingRequest,
+    GenMcp.Mcp.Entities.ListResourcesRequest,
+    GenMcp.Mcp.Entities.ListResourceTemplatesRequest,
+    GenMcp.Mcp.Entities.ReadResourceRequest,
+    GenMcp.Mcp.Entities.SubscribeRequest,
+    GenMcp.Mcp.Entities.UnsubscribeRequest,
+    GenMcp.Mcp.Entities.ListPromptsRequest,
+    GenMcp.Mcp.Entities.GetPromptRequest,
+    GenMcp.Mcp.Entities.ListToolsRequest,
+    GenMcp.Mcp.Entities.CallToolRequest,
+    GenMcp.Mcp.Entities.SetLevelRequest,
+    GenMcp.Mcp.Entities.CompleteRequest,
+
     # Notifications
-    GenMcp.Entities.CancelledNotification,
-    GenMcp.Entities.InitializedNotification,
-    GenMcp.Entities.ProgressNotification,
-    GenMcp.Entities.RootsListChangedNotification
+    GenMcp.Mcp.Entities.CancelledNotification,
+    GenMcp.Mcp.Entities.InitializedNotification,
+    GenMcp.Mcp.Entities.ProgressNotification,
+    GenMcp.Mcp.Entities.RootsListChangedNotification
   ]
   |> Enum.map(fn mod ->
     method = mod.json_schema().properties.method.const
@@ -44,19 +39,43 @@ defmodule GenMcp.Test.Client do
     :ok
   end
 
-  def post_message(path, data, req_opts \\ []) do
+  def new(opts \\ []) do
+    opts = Keyword.put_new_lazy(opts, :base_url, &GenMcp.TestWeb.Endpoint.url/0)
+
+    Req.new(opts)
+  end
+
+  def post_message(client, data, req_opts \\ []) do
+    post(client, data, req_opts, _validate_req? = true)
+  end
+
+  def post_invalid_message(client, data, req_opts \\ []) do
+    post(client, data, req_opts, _validate_req? = false)
+  end
+
+  defp post(client, data, req_opts, validate_req?) do
     data = JSV.Normalizer.normalize(data)
-    :ok = validate_request(data)
-    resp = Req.post!(url(path), [json: data, receive_timeout: :timer.minutes(1)] ++ req_opts)
-    assert resp.status in [200, 202]
+
+    if validate_req? do
+      assert :ok = validate_request(data)
+    end
+
+    Req.post!(client, [json: data, receive_timeout: :timer.minutes(1)] ++ req_opts)
+  end
+
+  def expect_status(resp, status) when is_integer(status) do
+    assert status == resp.status
     resp
   end
 
-  def post_invalid_message(path, data) do
-    data = JSV.Normalizer.normalize(data)
-    resp = Req.post!(url(path), json: data)
-    assert resp.status in [400]
-    resp
+  def expect_session_header(resp) do
+    assert {:ok, [session_id]} = Map.fetch(resp.headers, "mcp-session-id")
+    assert is_binary(session_id)
+    session_id
+  end
+
+  def body(%{body: body}) do
+    body
   end
 
   def read_chunk(resp) do

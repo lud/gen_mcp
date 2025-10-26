@@ -11,16 +11,27 @@ defmodule GenMcp.Application do
     Process.get(:never_defined, unquote(Mix.env()))
   end
 
+  IO.warn("""
+  rename NodeSync to Cluster.
+
+  It should be a supervisor that requires a name. It starts the pg itself, deriving a name from the parent name.
+  It stats the node sync
+  It must start a supervisor for stateful MCP servers
+  """)
+
   @impl true
   def start(_type, _args) do
     children =
       [
         GenMcp.NodeSync.pg_child_spec(),
         GenMcp.NodeSync,
+        GenMcp.Mux.SessionSupervisor,
+        {Registry, name: GenMcp.Mux.registry(), keys: :unique},
         {Task, &connect/0}
       ] ++
         if env() == :dev do
-          [GenMcp.TestWeb.Endpoint]
+          # [GenMcp.TestWeb.Endpoint]
+          []
         else
           []
         end

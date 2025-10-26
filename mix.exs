@@ -37,17 +37,27 @@ defmodule GenMcp.MixProject do
 
   defp deps do
     [
+      # App
       {:phoenix, ">= 1.7.0"},
-      {:jsv, "~> 0.10.1"},
+      {:jsv, "~> 0.11"},
       {:abnf_parsec, "~> 2.0"},
 
+      # Resources
+      mcp_schemas(),
+
       # Test
-      {:req, "~> 0.5", only: :test},
+      {:req, "~> 0.5", only: [:dev, :test]},
       {:local_cluster, "~> 2.0", only: [:test]},
       {:bandit, "~> 1.0", only: [:dev, :test]},
       {:jason, "~> 1.0", only: [:dev, :test]},
-      {:libdev, "~> 0.1.2", only: [:dev, :test]},
-      mcp_schemas()
+      {:mox, "~> 1.2", only: [:dev, :test]},
+      {:credo, ">= 1.7.12", only: [:dev, :test], runtime: false},
+      {:dialyxir, ">= 1.4.5", only: [:dev, :test], runtime: false},
+      {:doctor, ">= 0.22.0", only: [:dev, :test], runtime: false},
+      {:ex_check, ">= 0.16.0", only: [:dev, :test], runtime: false},
+      {:ex_doc, ">= 0.38.2", only: [:dev, :test], runtime: false},
+      {:mix_audit, ">= 2.1.5", only: [:dev, :test], runtime: false},
+      {:sobelow, ">= 0.14.0", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -72,6 +82,7 @@ defmodule GenMcp.MixProject do
       mount: [
         {GenMcp.TestWeb, "test/support/test_web", flavor: :phoenix},
         {GenMcp.Test, "test/support"},
+        {GenMcp.Support, "test/support"},
         {GenMcp.ConnCase, "test/support/conn_case"},
         {GenMcp, "lib/gen_mcp"},
         {Mix.Tasks, "lib/mix/tasks", flavor: :mix_task},

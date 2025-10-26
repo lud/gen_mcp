@@ -6,5 +6,4 @@ Application.stop(:logger)
 # Start the test endpoint
 {:ok, _} = GenMcp.TestWeb.Endpoint.start_link()
 
-ExUnit.configure(exclude: [:skip, :slow])
 ExUnit.start()

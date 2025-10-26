@@ -1,10 +1,17 @@
 defmodule GenMcp.Tool do
-  @optional_funs (Map.keys(GenMcp.Entities.Tool.__struct__()) --
-                    [:__struct__, :name, :inputSchema])
-                 |> Enum.map(fn
-                   k when k in [:description, :title, :_meta, :annotations] -> {k, k}
-                   :outputSchema -> {:output_schema, :outputSchema}
-                 end)
+  optional_keys =
+    Map.keys(GenMcp.Mcp.Entities.Tool.__struct__()) -- [:__struct__, :name, :inputSchema]
+
+  @optional_funs Enum.map(
+                   optional_keys,
+                   fn
+                     k when k in [:description, :title, :_meta, :annotations] ->
+                       {k, k}
+
+                     :outputSchema ->
+                       {:output_schema, :outputSchema}
+                   end
+                 )
 
   def describe(module) do
     _ = Code.ensure_loaded(module)
@@ -39,7 +46,7 @@ defmodule GenMcp.Tool do
           info
       end
 
-    struct!(GenMcp.Entities.Tool, info)
+    struct!(GenMcp.Mcp.Entities.Tool, info)
   end
 
   defp normalize_schema(schema) do

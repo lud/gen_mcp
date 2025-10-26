@@ -1,29 +1,29 @@
 defmodule GenMcp.Validator do
   alias JSV.Ref
-  require GenMcp.Entities.ModMap, as: ModMap
+  require GenMcp.Mcp.Entities.ModMap, as: ModMap
   ModMap.require_all()
 
   validable = [
     request: [
-      GenMcp.Entities.InitializeRequest,
-      GenMcp.Entities.PingRequest,
-      GenMcp.Entities.ListResourcesRequest,
-      GenMcp.Entities.ListResourceTemplatesRequest,
-      GenMcp.Entities.ReadResourceRequest,
-      GenMcp.Entities.SubscribeRequest,
-      GenMcp.Entities.UnsubscribeRequest,
-      GenMcp.Entities.ListPromptsRequest,
-      GenMcp.Entities.GetPromptRequest,
-      GenMcp.Entities.ListToolsRequest,
-      GenMcp.Entities.CallToolRequest,
-      GenMcp.Entities.SetLevelRequest,
-      GenMcp.Entities.CompleteRequest
+      GenMcp.Mcp.Entities.InitializeRequest,
+      GenMcp.Mcp.Entities.PingRequest,
+      GenMcp.Mcp.Entities.ListResourcesRequest,
+      GenMcp.Mcp.Entities.ListResourceTemplatesRequest,
+      GenMcp.Mcp.Entities.ReadResourceRequest,
+      GenMcp.Mcp.Entities.SubscribeRequest,
+      GenMcp.Mcp.Entities.UnsubscribeRequest,
+      GenMcp.Mcp.Entities.ListPromptsRequest,
+      GenMcp.Mcp.Entities.GetPromptRequest,
+      GenMcp.Mcp.Entities.ListToolsRequest,
+      GenMcp.Mcp.Entities.CallToolRequest,
+      GenMcp.Mcp.Entities.SetLevelRequest,
+      GenMcp.Mcp.Entities.CompleteRequest
     ],
     notification: [
-      GenMcp.Entities.CancelledNotification,
-      GenMcp.Entities.InitializedNotification,
-      GenMcp.Entities.ProgressNotification,
-      GenMcp.Entities.RootsListChangedNotification
+      GenMcp.Mcp.Entities.CancelledNotification,
+      GenMcp.Mcp.Entities.InitializedNotification,
+      GenMcp.Mcp.Entities.ProgressNotification,
+      GenMcp.Mcp.Entities.RootsListChangedNotification
     ]
   ]
 

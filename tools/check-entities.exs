@@ -1,7 +1,7 @@
-root = JSV.build!(GenMcp.Entities.TextContent)
+root = JSV.build!(GenMcp.Mcp.Entities.TextContent)
 JSV.validate!(%{"text" => "hello", "type" => "text"}, root)
 
-root = JSV.build!(GenMcp.Entities.CreateMessageRequest)
+root = JSV.build!(GenMcp.Mcp.Entities.CreateMessageRequest)
 
 JSV.validate!(
   %{

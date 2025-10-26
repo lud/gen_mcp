@@ -1,9 +1,9 @@
 defmodule GenMcp.Test.Tools.Sleeper do
-  alias GenMcp.Entities.TextContent
+  alias GenMcp.Mcp.Entities.TextContent
   require Logger
   use JSV.Schema
 
-  def name() do
+  def name do
     "Sleeper"
   end
 

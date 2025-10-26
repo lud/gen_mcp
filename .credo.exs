@@ -164,8 +164,8 @@
           # Doc
 
           {Credo.Check.Readability.SinglePipe, []},
-          {Credo.Check.Readability.Specs, []},
-          {Credo.Check.Readability.ModuleDoc, []}
+          {Credo.Check.Readability.Specs, false},
+          {Credo.Check.Readability.ModuleDoc, false}
         ],
         disabled: [
           #

@@ -1,5 +1,12 @@
 Mix.install([:jason, :jsv], consolidate_protocols: false)
 
+# This module receives a fun and args, and implements inspect so we can render a
+# call
+#
+# For instance if fun is :string and args is [[description: "hello"]], we can render
+#
+#     string(description: "hello")
+#
 defmodule CodeWrapper do
   defstruct fun: nil, args: []
 
@@ -9,11 +16,76 @@ defmodule CodeWrapper do
 
   defimpl Inspect do
     def inspect(%{fun: fun, args: args}, _) do
+      # args =
+      #   update_in(args, [Access.at(-1)], fn kv ->
+      #     if Keyword.keyword?(kv) && Keyword.has_key?(kv, :description) do
+      #       # && String.contains?(Keyword.fetch!(kv, :description), "\n")
+
+      #       IO.puts("replaced description")
+      #       Keyword.update!(kv, :description, &DescriptionWrapper.of/1)
+      #     else
+      #       kv
+      #     end
+      #   end)
+
       "#{fun}(#{inspect_args(args)})"
     end
 
     defp inspect_args(args) do
       Enum.map_join(args, ", ", &inspect/1)
+    end
+  end
+end
+
+defmodule DescriptionWrapper do
+  defstruct [:description]
+
+  def of(description) do
+    %__MODULE__{description: description}
+  end
+
+  defimpl Inspect do
+    def inspect(%{description: description}, _) do
+      to_string("""
+      ~SD\"""
+      #{hardwrap(description)}
+      \"""\
+      """)
+    end
+
+    defp hardwrap(text) do
+      text
+      |> String.replace("\n\n", "--double-line-break--")
+      |> String.replace("\n", " ")
+      |> String.split("--double-line-break--")
+      |> Enum.map(fn line -> hardwrap_line(line, 70) end)
+      |> Enum.join("\n\n")
+    end
+
+    defp hardwrap_line(line, width) do
+      words =
+        line
+        |> String.split(" ", trim: true)
+        |> Enum.map(&{&1, String.length(&1)})
+
+      words
+      |> Enum.reduce({0, [], []}, fn {word, len}, {line_len, this_line, lines} ->
+        cond do
+          line_len == 0 -> {len, [word | this_line], lines}
+          line_len + 1 + len > width -> {len, [word], [:lists.reverse(this_line) | lines]}
+          :_ -> {line_len + 1 + len, [word, " " | this_line], lines}
+        end
+      end)
+      |> case do
+        {_, [], lines} -> lines
+        {_, current, lines} -> [:lists.reverse(current) | lines]
+      end
+      |> :lists.reverse()
+      |> Enum.join("\n")
+
+      # Fancy stuff. We need to reverse the lines but also map them so if one line
+      # starts with a backtick we insert a backspace before so the text aligns
+      # more naturally.
     end
   end
 end
@@ -40,9 +112,9 @@ defmodule Generator do
       |> Enum.join("\n\n")
       |> to_string()
 
-    code = Enum.intersperse([mod_map(defs, metaschema), prelude(), modules], "\n\n")
+    code = Enum.intersperse([prelude(), mod_map(defs, metaschema), modules], "\n\n")
 
-    File.write!("lib/gen_mcp/entities.ex", code)
+    File.write!("lib/gen_mcp/mcp/entities.ex", code)
 
     {_, 0} = System.cmd("mix", ~w(format --migrate))
 
@@ -81,7 +153,6 @@ defmodule Generator do
       schema =
         schema
         |> enforce_id(name)
-        |> dbg()
         |> enforce_request_meta(name)
 
       {name, schema}
@@ -100,34 +171,38 @@ defmodule Generator do
     defs
     |> swap_sub_schema([:InitializeRequest, :properties, :params], :InitializeRequestParams)
     |> swap_sub_schema([:CallToolRequest, :properties, :params], :CallToolRequestParams)
-    |> dbg()
   end
 
   def prelude do
     """
     require GenMcp.JsonDerive, as: JsonDerive
 
-    defmodule #{module_name("Meta")} do
+    # Support modkit renaming
+    defmodule #{inspect(base_module())} do
+      @moduledoc false
+    end
+
+    defmodule #{inspect(module_name("Meta"))} do
       use JSV.Schema
 
       def json_schema do
         %{
           additionalProperties: %{},
           description: "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
-          properties: %{progressToken: GenMcp.Entities.ProgressToken},
+          properties: %{progressToken: GenMcp.Mcp.Entities.ProgressToken},
           type: "object"
         }
       end
     end
 
-    defmodule #{module_name("RequestMeta")} do
+    defmodule #{inspect(module_name("RequestMeta"))} do
       use JSV.Schema
 
       def json_schema do
         %{
           additionalProperties: %{},
           description: "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
-          properties: %{progressToken: GenMcp.Entities.ProgressToken},
+          properties: %{progressToken: GenMcp.Mcp.Entities.ProgressToken},
           type: "object"
         }
       end
@@ -144,7 +219,7 @@ defmodule Generator do
     }
 
     """
-    defmodule #{module_name("ModMap")} do
+    defmodule #{inspect(module_name("ModMap"))} do
 
       defmacro require_all do
         Enum.map(json_schema().definitions, fn {_, mod} ->
@@ -176,6 +251,7 @@ defmodule Generator do
           use JSV.Schema
           JsonDerive.auto
           defschema #{inspect(schema, inspect_opts())}
+          @type t :: %__MODULE__{}
         end
         """
 
@@ -189,6 +265,8 @@ defmodule Generator do
         end
         """
     end
+
+    # |> tap(&IO.puts/1)
   end
 
   defp prepare_schema(schema, name) do
@@ -252,6 +330,17 @@ defmodule Generator do
         elem(other, 1)
     end)
     |> JSV.Helpers.Traverse.postwalk(fn
+      {:val, %{description: description} = map} when is_binary(description) ->
+        if String.contains?(description, "\n") || String.length(description) > 50 do
+          Map.update!(map, :description, &DescriptionWrapper.of/1)
+        else
+          map
+        end
+
+      other ->
+        elem(other, 1)
+    end)
+    |> JSV.Helpers.Traverse.postwalk(fn
       {:val, %{"$ref": "#/definitions/" <> name} = schema} ->
         case Map.drop(schema, [:description, :"$schema"]) do
           rest when map_size(rest) == 1 -> module_name(name)
@@ -290,7 +379,7 @@ defmodule Generator do
       {:val, %{type: "string", format: _} = schema} ->
         to_string_format(schema)
 
-      {:val, %{const: value, type: t} = schema} ->
+      {:val, %{const: value, type: t}} ->
         true =
           case t do
             "string" -> is_binary(value)
@@ -298,7 +387,7 @@ defmodule Generator do
 
         CodeWrapper.of(:const, [value])
 
-      {:val, %{enum: values, type: "string"} = schema} ->
+      {:val, %{enum: values, type: "string"}} ->
         true = Enum.all?(values, &is_binary/1)
         atoms = Enum.map(values, &String.to_atom/1)
 
@@ -341,7 +430,7 @@ defmodule Generator do
   end
 
   def base_module do
-    GenMcp.Entities
+    GenMcp.Mcp.Entities
   end
 
   defp module_name(name) do
