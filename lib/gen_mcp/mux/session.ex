@@ -3,7 +3,7 @@ defmodule GenMcp.Mux.Session do
   # implementation could be the gen server receiving requests directly.
   #
   # The most useful thing is that the server being a behaviour, we can mock it,
-  # and this Session module unwraps the $gen_mcp messages befor entering our
+  # and this Session module unwraps the $gen_mcp messages before entering our
   # mock.
   #
   # This also simplifies the API for user-defined servers.
@@ -26,8 +26,12 @@ defmodule GenMcp.Mux.Session do
   IO.warn("@todo test init failure")
   @impl true
   def init(opts) do
-    server = Keyword.fetch!(opts, :server)
-    {server_mod, server_arg} = normalize_server(server)
+    {server, opts} = Keyword.pop(opts, :server, GenMcp.Server.Basic)
+
+    # pass all other options to the server if the server is not a tuple
+    default_server_options = opts
+
+    {server_mod, server_arg} = normalize_server(server, default_server_options)
     Logger.debug("GenMcp session #{opts[:session_id]} initializing with #{inspect(server_mod)}")
 
     case server_mod.init(server_arg) do
@@ -35,25 +39,22 @@ defmodule GenMcp.Mux.Session do
     end
   end
 
-  defp normalize_server({module, arg}) when is_atom(module) do
+  defp normalize_server({module, arg}, _) when is_atom(module) do
     {module, arg}
   end
 
-  defp normalize_server(module) when is_atom(module) do
-    {module, []}
+  defp normalize_server(module, default_arg) when is_atom(module) do
+    {module, default_arg}
   end
 
   @impl true
   def handle_call({:"$gen_mcp", :request, req, chan_info}, _from, state) do
     case state.server_mod.handle_request(req, chan_info, state.server_state) do
-      {:result, result, server_state} ->
-        {:reply, {:result, result}, %{state | server_state: server_state}}
+      {:reply, reply, server_state} ->
+        {:reply, reply, %{state | server_state: server_state}}
 
-      {:stream, server_state} ->
-        {:reply, :stream, %{state | server_state: server_state}}
-
-      {:error, reason, server_state} ->
-        {:reply, {:error, reason}, %{state | server_state: server_state}}
+      {:stop, reason, reply, server_state} ->
+        {:stop, reason, reply, %{state | server_state: server_state}}
 
       other ->
         exit({:bad_return_value, other})

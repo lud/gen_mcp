@@ -2,8 +2,8 @@ defmodule GenMcp.McpJestTest do
   import GenMcp.Test.Client
   use ExUnit.Case, async: true
 
-  defp basic_path do
-    "/mcp/basic"
+  defp url do
+    URI.merge(GenMcp.TestWeb.Endpoint.url(), "/mcp/real")
   end
 
   @tag :skip
@@ -11,7 +11,7 @@ defmodule GenMcp.McpJestTest do
     assert {_, 0} =
              System.cmd(
                "npx",
-               ~w(mcp-jest --transport streamable-http --url #{new(url: basic_path())} --tools Calculator),
+               ~w(mcp-jest --transport streamable-http --url #{url() |> dbg()} --tools Calculator),
                into: IO.stream()
              )
   end

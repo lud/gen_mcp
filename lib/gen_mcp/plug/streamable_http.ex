@@ -1,20 +1,34 @@
 defmodule GenMcp.Plug.StreamableHttp do
-  alias GenMcp.Plug.StreamableHttp.Impl
+  alias GenMcp.Mcp.Entities.InitializeRequest
+  alias GenMcp.Mcp.Entities.InitializeResult
+  alias GenMcp.Mcp.Entities.JSONRPCResponse
+  alias GenMcp.Mux
+  alias GenMcp.RpcError
+  alias GenMcp.Validator
+  alias JSV.Codec
+  alias JSV.Helpers.MapExt
+  import Plug.Conn
+  require Logger
   use Plug.Router, copy_opts_to_assign: :gen_mcp_streamable_http_opts
+
+  # -- Plug API ---------------------------------------------------------------
+
   plug :match
   plug :dispatch
 
   get "/" do
-    Impl.http_get(conn, conn.assigns.gen_mcp_streamable_http_opts)
+    http_get(conn, conn.assigns.gen_mcp_streamable_http_opts)
   end
 
   post "/" do
-    Impl.http_post(conn, conn.assigns.gen_mcp_streamable_http_opts)
+    http_post(conn, conn.assigns.gen_mcp_streamable_http_opts)
   end
 
   match _ do
     send_resp(conn, 404, "Not found")
   end
+
+  # -- Plug Duplication -------------------------------------------------------
 
   defmacro defplug(module) do
     module = Macro.expand_literals(module, __CALLER__)
@@ -27,19 +41,8 @@ defmodule GenMcp.Plug.StreamableHttp do
 
     mod
   end
-end
 
-defmodule GenMcp.Plug.StreamableHttp.Impl do
-  alias GenMcp.Mcp.Entities.InitializeRequest
-  alias GenMcp.Mcp.Entities.InitializeResult
-  alias GenMcp.Mcp.Entities.JSONRPCResponse
-  alias GenMcp.Mux
-  alias GenMcp.RpcError
-  alias GenMcp.Validator
-  alias JSV.Codec
-  alias JSV.Helpers.MapExt
-  import Plug.Conn
-  require Logger
+  # -- Internal ---------------------------------------------------------------
 
   @stream_keepalive_timeout :timer.seconds(25)
 
@@ -50,7 +53,7 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
   def http_post(%{body_params: %{"jsonrpc" => "2.0"} = body_params} = conn, opts) do
     case Validator.validate_request(body_params) do
       {:error, jsv_err} ->
-        send_error(conn, {:jsv_err, jsv_err}, msg_id: msg_id_from_req(body_params))
+        send_error(conn, jsv_err, msg_id: msg_id_from_req(body_params))
 
       {:ok, :request, %{id: msg_id} = req} ->
         dispatch_req(conn, msg_id, req, opts)
@@ -64,11 +67,11 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
       reraise e, __STACKTRACE__
   end
 
-  def http_post(%{body_params: %{"jsonrpc" => _} = body_params} = conn, opts) do
+  def http_post(%{body_params: %{"jsonrpc" => _}} = conn, opts) do
     send_error(conn, :bad_rpc_version)
   end
 
-  def http_post(conn, opts) do
+  def http_post(conn, _opts) do
     send_error(conn, :bad_rpc)
   end
 
@@ -79,19 +82,18 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
     end
   end
 
-  # # TODO use for server-initiated requests
-  # # defp impersistent_msg_id do
-  # #   # TODO we should use our own counter that we can rewrap to zero, otherwise
-  # #   # we may put the whole system to use heap allocated integers if we have a
-  # #   # very long uptime.
-  # #   #
-  # #   # Or we can use system_time microseconds since it's very unlikely that a
-  # #   # single client will hit that speed during interactions, and we do not care
-  # #   # about duplicate IDs on different clients.
-  # #   #
-  # #   # This is only for non persistent
-  # #   "#{NodeSync.node_id()}-#{:erlang.unique_integer([:positive, :monotonic])}"
-  # # end
+  IO.warn("""
+  @todo we should pass the initialize request in the start_session arguments,
+  so if the protocol version is not supported or another incompatibility error,
+  we can just return an error from Session.init or even start_link and not
+  bother starting the server at all.
+
+  The supervisor will restart the session with the request. For now session is
+  :temporary so we do not care because DynamicSupervisor.mfa_for_restart (defp)
+  discards the start_link arguments when it registers the child.
+
+  # TODO add a test to validate that this is always true.
+  """)
 
   defp dispatch_req(conn, msg_id, %InitializeRequest{} = req, opts) do
     with {:ok, session_id} <- Mux.start_session(opts),
@@ -143,7 +145,7 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
   end
 
   defp channel_info(_conn, _req) do
-    {:channel, GenMcp.Plug.StreamableHttp, self()}
+    {:channel, __MODULE__, self()}
   end
 
   defp send_accepted(conn) do
@@ -174,7 +176,6 @@ defmodule GenMcp.Plug.StreamableHttp.Impl do
       {status, payload} ->
         payload = %GenMcp.Mcp.Entities.JSONRPCError{
           error: payload,
-          # no session, we do not know what client that is,
           id: opts[:msg_id],
           jsonrpc: "2.0"
         }

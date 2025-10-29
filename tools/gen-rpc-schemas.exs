@@ -123,20 +123,47 @@ defmodule Generator do
 
   defp module_config(name) do
     case name do
-      :CallToolRequest -> [msg_id: true, request_meta: true]
-      :CompleteRequest -> [msg_id: true, request_meta: true]
-      :GetPromptRequest -> [msg_id: true, request_meta: true]
-      :InitializeRequest -> [msg_id: true, request_meta: true]
-      :ListPromptsRequest -> [msg_id: true, request_meta: true]
-      :ListResourcesRequest -> [msg_id: true, request_meta: true]
-      :ListResourceTemplatesRequest -> [msg_id: true, request_meta: true]
-      :ListToolsRequest -> [msg_id: true, request_meta: true]
-      :PingRequest -> [msg_id: true, request_meta: true]
-      :ReadResourceRequest -> [msg_id: true, request_meta: true]
-      :SetLevelRequest -> [msg_id: true, request_meta: true]
-      :SubscribeRequest -> [msg_id: true, request_meta: true]
-      :UnsubscribeRequest -> [msg_id: true, request_meta: true]
-      _ -> []
+      :CallToolRequest ->
+        [msg_id: true, request_meta: true, set_default_method: true]
+
+      :CompleteRequest ->
+        [msg_id: true, request_meta: true, set_default_method: true]
+
+      :GetPromptRequest ->
+        [msg_id: true, request_meta: true, set_default_method: true]
+
+      :InitializeRequest ->
+        [msg_id: true, request_meta: true, set_default_method: true]
+
+      :ListPromptsRequest ->
+        [msg_id: true, request_meta: true, set_default_method: true]
+
+      :ListResourcesRequest ->
+        [msg_id: true, request_meta: true, set_default_method: true]
+
+      :ListResourceTemplatesRequest ->
+        [msg_id: true, request_meta: true, set_default_method: true]
+
+      :ListToolsRequest ->
+        [msg_id: true, request_meta: true, set_default_method: true]
+
+      :PingRequest ->
+        [msg_id: true, request_meta: true, set_default_method: true]
+
+      :ReadResourceRequest ->
+        [msg_id: true, request_meta: true, set_default_method: true]
+
+      :SetLevelRequest ->
+        [msg_id: true, request_meta: true, set_default_method: true]
+
+      :SubscribeRequest ->
+        [msg_id: true, request_meta: true, set_default_method: true]
+
+      :UnsubscribeRequest ->
+        [msg_id: true, request_meta: true, set_default_method: true]
+
+      _ ->
+        []
     end
   end
 
@@ -148,12 +175,17 @@ defmodule Generator do
     true == Keyword.get(module_config(name), :request_meta)
   end
 
+  defp set_default_method?(name) do
+    true == Keyword.get(module_config(name), :set_default_method)
+  end
+
   defp inherit_schemas(defs) do
     Map.new(defs, fn {name, schema} ->
       schema =
         schema
         |> enforce_id(name)
         |> enforce_request_meta(name)
+        |> enforce_method(name)
 
       {name, schema}
     end)
@@ -306,6 +338,27 @@ defmodule Generator do
     end
   end
 
+  defp enforce_method(schema, name) do
+    if set_default_method?(name) do
+      # This is done so we do not have to specify the method when creating a struct
+      schema =
+        update_in(schema.properties.method, fn %{const: method} = subschema ->
+          Map.put(subschema, :default, method)
+        end)
+
+      # As we set is as default we will not require it anymorel
+      schema =
+        update_in(schema.required, fn required ->
+          true = "method" in required
+          required -- ["method"]
+        end)
+
+      schema
+    else
+      schema
+    end
+  end
+
   defp use_schema_api(schema) do
     schema
     |> JSV.Helpers.Traverse.prewalk(fn
@@ -379,13 +432,24 @@ defmodule Generator do
       {:val, %{type: "string", format: _} = schema} ->
         to_string_format(schema)
 
-      {:val, %{const: value, type: t}} ->
-        true =
-          case t do
-            "string" -> is_binary(value)
+      {:val, %{const: value, type: t} = constschema} ->
+        "string" = t
+        true = is_binary(value)
+
+        # If the const is a method we may have defined it as a default
+        extra_args =
+          case constschema do
+            %{default: ^value} ->
+              [[default: value]]
+
+            %{default: other} ->
+              raise "bad default value, should be #{inspect(value)}, got: #{inspect(other)}"
+
+            _ ->
+              []
           end
 
-        CodeWrapper.of(:const, [value])
+        CodeWrapper.of(:const, [value | extra_args])
 
       {:val, %{enum: values, type: "string"}} ->
         true = Enum.all?(values, &is_binary/1)

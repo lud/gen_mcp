@@ -5,6 +5,7 @@ defmodule GenMcp.StreamableHttpTest do
   alias GenMcp.Mux.Channel
   alias GenMcp.Server
   alias GenMcp.Support.ServerMock
+  alias GenMcp.Support.ToolMock
   import ConnCase
   import GenMcp.Test.Client
   import Mox
@@ -30,7 +31,7 @@ defmodule GenMcp.StreamableHttpTest do
 
   test "we can run the initialization" do
     ServerMock
-    |> expect(:init, fn [] -> {:ok, :some_session_state} end)
+    |> expect(:init, fn _ -> {:ok, :some_session_state} end)
     |> expect(:handle_request, fn req, chan_info, :some_session_state ->
       assert %GenMcp.Mcp.Entities.InitializeRequest{
                id: 123,
@@ -63,7 +64,7 @@ defmodule GenMcp.StreamableHttpTest do
           server_info: Server.server_info(name: "Mock Server", version: "foo", title: "stuff")
         )
 
-      {:result, init_result, :some_session_state_1}
+      {:reply, {:result, init_result}, :some_session_state_1}
     end)
 
     resp =
@@ -105,7 +106,7 @@ defmodule GenMcp.StreamableHttpTest do
 
   defp init_session(init_state \\ :some_state) do
     ServerMock
-    |> expect(:init, fn [] -> {:ok, init_state} end)
+    |> expect(:init, fn _ -> {:ok, init_state} end)
     |> expect(:handle_request, fn req, chan_info, state ->
       init_result =
         Server.intialize_result(
@@ -113,7 +114,7 @@ defmodule GenMcp.StreamableHttpTest do
           server_info: Server.server_info(name: "Mock Server", version: "foo", title: "stuff")
         )
 
-      {:result, init_result, state}
+      {:reply, {:result, init_result}, state}
     end)
 
     resp =
@@ -215,30 +216,51 @@ defmodule GenMcp.StreamableHttpTest do
 
       resp =
         Server.list_tools_result([
-          GenMcp.Test.Tools.Calculator,
-          GenMcp.Test.Tools.AsyncCounter
+          {ToolMock, :tool1},
+          {ToolMock, :tool2}
         ])
 
-      {:result, resp, state}
+      {:reply, {:result, resp}, state}
+    end)
+
+    ToolMock
+    |> stub(:info, fn
+      :name, :tool1 -> "Tool1"
+      :title, :tool1 -> "Tool 1 title"
+      :description, :tool1 -> "Tool 1 descr"
+      :annotations, :tool1 -> %{title: "Tool 1 subtitle", destructiveHint: true}
+      :name, :tool2 -> "Tool2"
+      :title, :tool2 -> nil
+      :description, :tool2 -> nil
+      :annotations, :tool2 -> nil
+    end)
+    |> stub(:input_schema, fn _ -> %{type: :object} end)
+    |> stub(:output_schema, fn
+      :tool1 -> %{type: :object}
+      :tool2 -> nil
     end)
 
     # For now we have one tool, we should be able to get it in the list
     assert %{
              "id" => 123,
+             "jsonrpc" => "2.0",
              "result" => %{
                "tools" => [
                  %{
-                   "annotations" => %{"title" => "Basic Calculator"},
-                   "title" => "Basic Calculator",
-                   "description" => _,
-                   "inputSchema" => %{},
-                   "name" => "Calculator",
-                   "outputSchema" => %{}
+                   "name" => "Tool1",
+                   "annotations" => %{"title" => "Tool 1 subtitle", "destructiveHint" => true},
+                   "title" => "Tool 1 title",
+                   "description" => "Tool 1 descr",
+                   "inputSchema" => %{"type" => "object"},
+                   "outputSchema" => %{"type" => "object"}
+                 },
+                 %{
+                   "name" => "Tool2",
+                   "inputSchema" => %{"type" => "object"}
                  }
-                 | _
                ]
              }
-           } =
+           } ==
              post_message(client(session_id), %{
                jsonrpc: "2.0",
                id: 123,
@@ -261,9 +283,9 @@ defmodule GenMcp.StreamableHttpTest do
                }
              } = req
 
-      result = Server.call_tool_result(content: [%{"type" => "text", "text" => "hello"}])
+      result = Server.call_tool_result(text: "hello")
 
-      {:result, result, state}
+      {:reply, {:result, result}, state}
     end)
 
     assert %{
@@ -300,9 +322,9 @@ defmodule GenMcp.StreamableHttpTest do
                }
              } = req
 
-      reply = Server.call_tool_result(content: [%{"type" => "text", "text" => "hello"}])
+      result = Server.call_tool_result(text: "text")
 
-      {:error, {:unknown_tool, "swapped-tool-name"}, state}
+      {:reply, {:error, {:unknown_tool, "swapped-tool-name"}}, state}
     end)
 
     assert %{
@@ -351,11 +373,9 @@ defmodule GenMcp.StreamableHttpTest do
 
       chan_info
       |> Channel.from_client(req)
-      |> Channel.send_result(
-        Server.call_tool_result(content: [%{"type" => "text", "text" => "hello"}])
-      )
+      |> Channel.send_result(Server.call_tool_result(text: "hello"))
 
-      {:stream, :state_after_stream}
+      {:reply, :stream, :state_after_stream}
     end)
 
     resp =
@@ -375,9 +395,7 @@ defmodule GenMcp.StreamableHttpTest do
              "id" => 456,
              "jsonrpc" => "2.0",
              "result" => %{
-               "content" => [%{"text" => "hello", "type" => "text"}],
-               "isError" => false,
-               "structuredContent" => []
+               "content" => [%{"text" => "hello", "type" => "text"}]
              }
            } = JSV.Codec.decode!(json)
   end
@@ -387,34 +405,35 @@ defmodule GenMcp.StreamableHttpTest do
     token = "some-progress-token"
 
     ServerMock
-    |> expect(:handle_request, fn req, chan_info, state ->
+    |> expect(:handle_request, fn req, chan_info, _state ->
       assert %Channel{progress_token: ^token} =
                channel = Channel.from_client(chan_info, req)
 
+      channel_as_state = channel
       # We will also test that handle_info is passed to the server
       # implementation by the session
       send(self(), :some_info1)
 
-      {:stream, channel}
+      {:reply, :stream, channel_as_state}
     end)
-    |> expect(:handle_info, fn :some_info1, channel ->
-      channel = Channel.send_progress(channel, 0, 3, "zero")
+    |> expect(:handle_info, fn :some_info1, channel_as_state ->
+      channel_as_state = Channel.send_progress(channel_as_state, 0, 3, "zero")
       send(self(), :some_info2)
-      {:noreply, channel}
+      {:noreply, channel_as_state}
     end)
-    |> expect(:handle_info, fn :some_info2, channel ->
-      channel = Channel.send_progress(channel, 3, 3, "three")
+    |> expect(:handle_info, fn :some_info2, channel_as_state ->
+      channel_as_state = Channel.send_progress(channel_as_state, 3, 3, "three")
       send(self(), :some_info3)
-      {:noreply, channel}
+      {:noreply, channel_as_state}
     end)
-    |> expect(:handle_info, fn :some_info3, channel ->
-      channel =
+    |> expect(:handle_info, fn :some_info3, channel_as_state ->
+      channel_as_state =
         Channel.send_result(
-          channel,
-          Server.call_tool_result(content: [%{"type" => "text", "text" => "hello"}])
+          channel_as_state,
+          Server.call_tool_result(text: "hello")
         )
 
-      {:noreply, channel}
+      {:noreply, channel_as_state}
     end)
 
     resp =
@@ -462,11 +481,15 @@ defmodule GenMcp.StreamableHttpTest do
                "id" => 456,
                "jsonrpc" => "2.0",
                "result" => %{
-                 "content" => [%{"text" => "hello", "type" => "text"}],
-                 "isError" => false,
-                 "structuredContent" => []
+                 "content" => [%{"text" => "hello", "type" => "text"}]
                }
              }
            ] = chunks
   end
+
+  IO.warn("@todo add a test to verify that tool call isError result is properly encoded")
+
+  IO.warn(
+    "@todo add a test to verify that tool call structuredContent result is properly encoded"
+  )
 end

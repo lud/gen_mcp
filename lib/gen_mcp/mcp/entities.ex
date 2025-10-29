@@ -314,10 +314,10 @@ defmodule GenMcp.Mcp.Entities.CallToolRequest do
     """,
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
-      method: const("tools/call"),
+      method: const("tools/call", default: "tools/call"),
       params: GenMcp.Mcp.Entities.CallToolRequestParams
     },
-    required: [:method, :params],
+    required: [:params],
     title: "CallToolRequest",
     type: "object"
   }
@@ -560,7 +560,7 @@ defmodule GenMcp.Mcp.Entities.CompleteRequest do
     """,
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
-      method: const("completion/complete"),
+      method: const("completion/complete", default: "completion/complete"),
       params: %{
         properties: %{
           _meta: GenMcp.Mcp.Entities.RequestMeta,
@@ -602,7 +602,7 @@ defmodule GenMcp.Mcp.Entities.CompleteRequest do
         type: "object"
       }
     },
-    required: [:method, :params],
+    required: [:params],
     title: "CompleteRequest",
     type: "object"
   }
@@ -910,7 +910,7 @@ defmodule GenMcp.Mcp.Entities.GetPromptRequest do
     """,
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
-      method: const("prompts/get"),
+      method: const("prompts/get", default: "prompts/get"),
       params: %{
         properties: %{
           _meta: GenMcp.Mcp.Entities.RequestMeta,
@@ -925,7 +925,7 @@ defmodule GenMcp.Mcp.Entities.GetPromptRequest do
         type: "object"
       }
     },
-    required: [:method, :params],
+    required: [:params],
     title: "GetPromptRequest",
     type: "object"
   }
@@ -1031,10 +1031,10 @@ defmodule GenMcp.Mcp.Entities.InitializeRequest do
     """,
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
-      method: const("initialize"),
+      method: const("initialize", default: "initialize"),
       params: GenMcp.Mcp.Entities.InitializeRequestParams
     },
-    required: [:method, :params],
+    required: [:params],
     title: "InitializeRequest",
     type: "object"
   }
@@ -1280,7 +1280,7 @@ defmodule GenMcp.Mcp.Entities.ListPromptsRequest do
     """,
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
-      method: const("prompts/list"),
+      method: const("prompts/list", default: "prompts/list"),
       params: %{
         properties: %{
           _meta: GenMcp.Mcp.Entities.RequestMeta,
@@ -1295,7 +1295,7 @@ defmodule GenMcp.Mcp.Entities.ListPromptsRequest do
         type: "object"
       }
     },
-    required: [:method],
+    required: [],
     title: "ListPromptsRequest",
     type: "object"
   }
@@ -1341,7 +1341,7 @@ defmodule GenMcp.Mcp.Entities.ListResourceTemplatesRequest do
     """,
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
-      method: const("resources/templates/list"),
+      method: const("resources/templates/list", default: "resources/templates/list"),
       params: %{
         properties: %{
           _meta: GenMcp.Mcp.Entities.RequestMeta,
@@ -1356,7 +1356,7 @@ defmodule GenMcp.Mcp.Entities.ListResourceTemplatesRequest do
         type: "object"
       }
     },
-    required: [:method],
+    required: [],
     title: "ListResourceTemplatesRequest",
     type: "object"
   }
@@ -1402,7 +1402,7 @@ defmodule GenMcp.Mcp.Entities.ListResourcesRequest do
     """,
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
-      method: const("resources/list"),
+      method: const("resources/list", default: "resources/list"),
       params: %{
         properties: %{
           _meta: GenMcp.Mcp.Entities.RequestMeta,
@@ -1417,7 +1417,7 @@ defmodule GenMcp.Mcp.Entities.ListResourcesRequest do
         type: "object"
       }
     },
-    required: [:method],
+    required: [],
     title: "ListResourcesRequest",
     type: "object"
   }
@@ -1525,7 +1525,7 @@ defmodule GenMcp.Mcp.Entities.ListToolsRequest do
     """,
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
-      method: const("tools/list"),
+      method: const("tools/list", default: "tools/list"),
       params: %{
         properties: %{
           _meta: GenMcp.Mcp.Entities.RequestMeta,
@@ -1540,7 +1540,7 @@ defmodule GenMcp.Mcp.Entities.ListToolsRequest do
         type: "object"
       }
     },
-    required: [:method],
+    required: [],
     title: "ListToolsRequest",
     type: "object"
   }
@@ -1835,14 +1835,14 @@ defmodule GenMcp.Mcp.Entities.PingRequest do
     """,
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
-      method: const("ping"),
+      method: const("ping", default: "ping"),
       params: %{
         additionalProperties: %{},
         properties: %{_meta: GenMcp.Mcp.Entities.RequestMeta},
         type: "object"
       }
     },
-    required: [:method],
+    required: [],
     title: "PingRequest",
     type: "object"
   }
@@ -2113,7 +2113,7 @@ defmodule GenMcp.Mcp.Entities.ReadResourceRequest do
     """,
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
-      method: const("resources/read"),
+      method: const("resources/read", default: "resources/read"),
       params: %{
         properties: %{
           _meta: GenMcp.Mcp.Entities.RequestMeta,
@@ -2129,7 +2129,7 @@ defmodule GenMcp.Mcp.Entities.ReadResourceRequest do
         type: "object"
       }
     },
-    required: [:method, :params],
+    required: [:params],
     title: "ReadResourceRequest",
     type: "object"
   }
@@ -2764,7 +2764,7 @@ defmodule GenMcp.Mcp.Entities.SetLevelRequest do
     """,
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
-      method: const("logging/setLevel"),
+      method: const("logging/setLevel", default: "logging/setLevel"),
       params: %{
         properties: %{
           _meta: GenMcp.Mcp.Entities.RequestMeta,
@@ -2774,7 +2774,7 @@ defmodule GenMcp.Mcp.Entities.SetLevelRequest do
         type: "object"
       }
     },
-    required: [:method, :params],
+    required: [:params],
     title: "SetLevelRequest",
     type: "object"
   }
@@ -2814,7 +2814,7 @@ defmodule GenMcp.Mcp.Entities.SubscribeRequest do
     """,
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
-      method: const("resources/subscribe"),
+      method: const("resources/subscribe", default: "resources/subscribe"),
       params: %{
         properties: %{
           _meta: GenMcp.Mcp.Entities.RequestMeta,
@@ -2830,7 +2830,7 @@ defmodule GenMcp.Mcp.Entities.SubscribeRequest do
         type: "object"
       }
     },
-    required: [:method, :params],
+    required: [:params],
     title: "SubscribeRequest",
     type: "object"
   }
@@ -3072,7 +3072,7 @@ defmodule GenMcp.Mcp.Entities.UnsubscribeRequest do
     """,
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
-      method: const("resources/unsubscribe"),
+      method: const("resources/unsubscribe", default: "resources/unsubscribe"),
       params: %{
         properties: %{
           _meta: GenMcp.Mcp.Entities.RequestMeta,
@@ -3082,7 +3082,7 @@ defmodule GenMcp.Mcp.Entities.UnsubscribeRequest do
         type: "object"
       }
     },
-    required: [:method, :params],
+    required: [:params],
     title: "UnsubscribeRequest",
     type: "object"
   }

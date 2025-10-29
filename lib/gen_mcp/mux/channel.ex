@@ -4,9 +4,9 @@ defmodule GenMcp.Mux.Channel do
   defstruct [:client, :progress_token]
 
   @type t :: %__MODULE__{client: pid, progress_token: nil | binary | integer}
-  @type chan_info :: {:channel, GenMcp.Plug.StreamableHttp, pid}
+  @type chan_info :: {:channel, module, pid}
 
-  def from_client({:channel, GenMcp.Plug.StreamableHttp, pid}, req) do
+  def from_client({:channel, _module, pid}, req) do
     progress_token =
       case req do
         %{params: %{_meta: %{"progressToken" => pt}}} -> pt

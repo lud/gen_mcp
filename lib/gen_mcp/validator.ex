@@ -31,7 +31,7 @@ defmodule GenMcp.Validator do
   {:root, _, ctx} = JSV.build_add!(ctx, ModMap)
 
   {ctx, items} =
-    for {kind, mods} <- validable, mod <- mods, reduce: {ctx, items = []} do
+    for {kind, mods} <- validable, mod <- mods, reduce: {ctx, []} do
       {ctx, items} ->
         js = mod.json_schema()
         method = js.properties.method.const

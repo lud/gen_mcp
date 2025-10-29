@@ -16,6 +16,7 @@ defmodule GenMcp.Mux do
   alias GenMcp.Mux.Session
   alias GenMcp.Mux.SessionSupervisor
   alias GenMcp.NodeSync
+  require Logger
 
   # -- Session Initializing ---------------------------------------------------
 
@@ -29,7 +30,12 @@ defmodule GenMcp.Mux do
     opts = Keyword.merge(opts, name: name, session_id: session_id)
 
     case DynamicSupervisor.start_child(SessionSupervisor.name(), {Session, opts}) do
-      {:ok, _pid} -> {:ok, session_id}
+      {:ok, _pid} ->
+        {:ok, session_id}
+
+      {:error, reason} ->
+        Logger.error("Could not start MCP session: #{inspect(reason)}")
+        {:error, {:session_start_failed, reason}}
     end
   end
 
