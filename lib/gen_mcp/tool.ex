@@ -1,5 +1,4 @@
 defmodule GenMcp.Tool do
-  alias GenMcp.Mcp.Entities.CallToolRequestParams
   alias GenMcp.Mcp.Entities
   alias GenMcp.Mux.Channel
 
@@ -87,7 +86,7 @@ defmodule GenMcp.Tool do
   client request. The `arg` provides implementation-specific options. This
   callback returns the same result types as `call/3`.
   """
-  @callback continue({tag, client_response | task_result :: term}, Channel.t(), arg) ::
+  @callback continue({tag, client_response | (task_result :: term)}, Channel.t(), arg) ::
               call_result
 
   # * name - it's the name matching a call too request params. names given to an
@@ -151,7 +150,7 @@ defmodule GenMcp.Tool do
   """
   @spec call(tool_descriptor, Entities.CallToolRequest.t(), Channel.t()) :: call_result
   def call(tool, %Entities.CallToolRequest{} = req, channel) do
-    %{params: %Entities.CallToolRequestParams{name: name, arguments: input}} = req
+    %{params: %Entities.CallToolRequestParams{name: name}} = req
     %{mod: mod, arg: arg, name: ^name} = tool
 
     case mod.call(req, channel, arg) do

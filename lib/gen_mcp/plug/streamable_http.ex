@@ -67,7 +67,7 @@ defmodule GenMcp.Plug.StreamableHttp do
       reraise e, __STACKTRACE__
   end
 
-  def http_post(%{body_params: %{"jsonrpc" => _}} = conn, opts) do
+  def http_post(%{body_params: %{"jsonrpc" => _}} = conn, _opts) do
     send_error(conn, :bad_rpc_version)
   end
 
@@ -107,7 +107,7 @@ defmodule GenMcp.Plug.StreamableHttp do
     end
   end
 
-  defp dispatch_req(conn, msg_id, req, opts) do
+  defp dispatch_req(conn, msg_id, req, _opts) do
     case fetch_session_id(conn) do
       {:ok, session_id} -> do_dispatch_req(conn, session_id, msg_id, req)
       {:error, reason} -> send_error(conn, reason)

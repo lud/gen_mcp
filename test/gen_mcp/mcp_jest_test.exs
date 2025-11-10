@@ -11,7 +11,7 @@ defmodule GenMcp.McpJestTest do
     assert {_, 0} =
              System.cmd(
                "npx",
-               ~w(mcp-jest --transport streamable-http --url #{url() |> dbg()} --tools Calculator),
+               ~w(mcp-jest --transport streamable-http --url #{url()} --tools Calculator),
                into: IO.stream()
              )
   end

@@ -14,6 +14,7 @@ defmodule GenMcp.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       source_url: @source_url,
       deps: deps(),
+      dialyzer: dialyzer(),
       aliases: aliases(),
       modkit: modkit(),
       package: package()
@@ -41,6 +42,8 @@ defmodule GenMcp.MixProject do
       {:phoenix, ">= 1.7.0"},
       {:jsv, "~> 0.11"},
       {:abnf_parsec, "~> 2.0"},
+      # {:texture, ">= 0.3.0"},
+      {:texture, path: "../texture", override: true},
 
       # Resources
       mcp_schemas(),
@@ -98,6 +101,14 @@ defmodule GenMcp.MixProject do
         "Github" => @source_url,
         "Changelog" => "https://github.com/lud/gen_mcl/blob/main/CHANGELOG.md"
       }
+    ]
+  end
+
+  defp dialyzer do
+    [
+      flags: [:unmatched_returns, :error_handling, :unknown, :extra_return],
+      list_unused_filters: true,
+      plt_local_path: "_build/plts"
     ]
   end
 end

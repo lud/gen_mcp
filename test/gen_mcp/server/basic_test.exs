@@ -1,7 +1,11 @@
+# credo:disable-for-this-file Credo.Check.Readability.LargeNumbers
+
 defmodule GenMcp.Server.BasicTest do
   alias GenMcp.Mcp.Entities
-  alias GenMcp.Server.Basic
   alias GenMcp.Server
+  alias GenMcp.Server.Basic
+  alias GenMcp.Support.ResourceRepoMock
+  alias GenMcp.Support.ResourceRepoMockTpl
   alias GenMcp.Support.ToolMock
   import Mox
   use ExUnit.Case, async: true
@@ -294,6 +298,707 @@ defmodule GenMcp.Server.BasicTest do
                Basic.handle_request(tool_call_req, chan_info(), state)
 
       check_error(err)
+    end
+  end
+
+  describe "listing resources" do
+    test "lists resources from a direct resource repository" do
+      ResourceRepoMock
+      |> stub(:prefix, fn :repo1 -> "file:///" end)
+      |> expect(:list, fn nil, :repo1 ->
+        {[
+           %{uri: "file:///readme.txt", name: "README", description: "Project readme"},
+           %{uri: "file:///config.json", name: "Config"}
+         ], nil}
+      end)
+
+      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+
+      assert {:reply, {:result, result}, _} =
+               Basic.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+
+      assert %Entities.ListResourcesResult{resources: resources, nextCursor: _} = result
+      assert length(resources) == 2
+
+      assert [
+               %{
+                 uri: "file:///readme.txt",
+                 name: "README",
+                 description: "Project readme"
+               },
+               %{
+                 uri: "file:///config.json",
+                 name: "Config"
+               }
+             ] = resources
+    end
+
+    test "lists resources with pagination" do
+      ResourceRepoMock
+      |> stub(:prefix, fn :repo1 -> "file:///" end)
+      |> expect(:list, fn nil, :repo1 ->
+        {[%{uri: "file:///page1.txt", name: "Page 1"}], "next-token"}
+      end)
+      |> expect(:list, fn "next-token", :repo1 ->
+        {[%{uri: "file:///page2.txt", name: "Page 2"}], nil}
+      end)
+
+      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+
+      # First page
+      assert {:reply, {:result, result1}, _} =
+               Basic.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+
+      assert %Entities.ListResourcesResult{
+               resources: [%{name: "Page 1"}],
+               nextCursor: pagination
+             } = result1
+
+      # Second page
+      assert {:reply, {:result, result2}, _} =
+               Basic.handle_request(
+                 %Entities.ListResourcesRequest{
+                   params: %Entities.ListResourcesRequestParams{cursor: pagination}
+                 },
+                 chan_info(),
+                 state
+               )
+
+      assert %Entities.ListResourcesResult{
+               resources: [%{name: "Page 2"}],
+               nextCursor: nil
+             } = result2
+    end
+
+    test "returns empty list when no resources available" do
+      ResourceRepoMock
+      |> stub(:prefix, fn _ -> "file:///" end)
+      |> expect(:list, 3, fn nil, _ -> {[], nil} end)
+
+      state =
+        init_session(
+          resources: [
+            {ResourceRepoMock, :repo1},
+            {ResourceRepoMock, :repo2},
+            {ResourceRepoMock, :repo3}
+          ]
+        )
+
+      assert {:reply, {:result, result}, _} =
+               Basic.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+
+      assert %Entities.ListResourcesResult{resources: [], nextCursor: nil} = result
+    end
+
+    test "lists resources from multiple repositories" do
+      # Global pagination over multiple repos is done on a per-repo basis,
+      # so with two repos we need to make two requests to get all resources
+
+      ResourceRepoMock
+      |> stub(:prefix, fn
+        :repo1 -> "file:///"
+        :repo2 -> "http://localhost/"
+      end)
+      |> expect(:list, fn nil, :repo1 ->
+        {[
+           %{uri: "file:///readme.txt", name: "Local README"},
+           %{uri: "file:///license.txt", name: "Local license"}
+         ], nil}
+      end)
+      |> expect(:list, fn nil, :repo2 ->
+        {[%{uri: "http://localhost/api", name: "API"}], nil}
+      end)
+
+      state =
+        init_session(resources: [{ResourceRepoMock, :repo1}, {ResourceRepoMock, :repo2}])
+
+      # First request returns repo1's resources with a cursor to continue to repo2
+      assert {:reply, {:result, result1}, _} =
+               Basic.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+
+      assert %Entities.ListResourcesResult{resources: resources1, nextCursor: cursor} = result1
+      assert length(resources1) == 2
+      assert Enum.any?(resources1, &(&1.name == "Local README"))
+      assert Enum.any?(resources1, &(&1.name == "Local license"))
+      assert cursor != nil
+
+      # Second request with cursor returns repo2's resources
+      assert {:reply, {:result, result2}, _} =
+               Basic.handle_request(
+                 %Entities.ListResourcesRequest{
+                   params: %Entities.ListResourcesRequestParams{cursor: cursor}
+                 },
+                 chan_info(),
+                 state
+               )
+
+      assert %Entities.ListResourcesResult{resources: resources2, nextCursor: nil} = result2
+      assert length(resources2) == 1
+      assert Enum.any?(resources2, &(&1.name == "API"))
+    end
+
+    test "skips empty repositories and returns resources from first non-empty repo" do
+      ResourceRepoMock
+      |> stub(:prefix, fn
+        :repo1 -> "file:///"
+        :repo2 -> "http://localhost/"
+        :repo3 -> "s3://bucket/"
+      end)
+      |> expect(:list, fn nil, :repo1 -> {[], nil} end)
+      |> expect(:list, fn nil, :repo2 -> {[], nil} end)
+      |> expect(:list, fn nil, :repo3 ->
+        {[
+           %{uri: "s3://bucket/file1.txt", name: "File 1"},
+           %{uri: "s3://bucket/file2.txt", name: "File 2"}
+         ], nil}
+      end)
+
+      state =
+        init_session(
+          resources: [
+            {ResourceRepoMock, :repo1},
+            {ResourceRepoMock, :repo2},
+            {ResourceRepoMock, :repo3}
+          ]
+        )
+
+      # First call should skip the empty repos and return resources from repo3
+      assert {:reply, {:result, result}, _} =
+               Basic.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+
+      assert %Entities.ListResourcesResult{resources: resources, nextCursor: nil} = result
+      assert length(resources) == 2
+      assert Enum.any?(resources, &(&1.name == "File 1"))
+      assert Enum.any?(resources, &(&1.name == "File 2"))
+    end
+
+    test "skips empty paginated results and continues to next repository" do
+      # In this test the second repo returns a cursor, but returns empty results
+      # given that cursor. The server should immediately move on to the next
+      # repository on the second request.
+
+      ResourceRepoMock
+      |> stub(:prefix, fn
+        :repo1 -> "file:///"
+        :repo2 -> "http://localhost/"
+        :repo3 -> "s3://bucket/"
+      end)
+      |> expect(:list, fn nil, :repo1 -> {[], nil} end)
+      |> expect(:list, fn nil, :repo2 ->
+        {[%{uri: "http://localhost/api", name: "API"}], "repo2-cursor"}
+      end)
+      |> expect(:list, fn "repo2-cursor", :repo2 -> {[], nil} end)
+      |> expect(:list, fn nil, :repo3 ->
+        {[%{uri: "s3://bucket/data.txt", name: "Data"}], nil}
+      end)
+
+      state =
+        init_session(
+          resources: [
+            {ResourceRepoMock, :repo1},
+            {ResourceRepoMock, :repo2},
+            {ResourceRepoMock, :repo3}
+          ]
+        )
+
+      # First call should skip repo1 and return repo2's resource with cursor
+      assert {:reply, {:result, result1}, _} =
+               Basic.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+
+      assert %Entities.ListResourcesResult{
+               resources: [%{name: "API"}],
+               nextCursor: cursor
+             } = result1
+
+      assert cursor != nil
+
+      # Second call should use repo2's cursor, get empty result, skip to repo3
+      assert {:reply, {:result, result2}, _} =
+               Basic.handle_request(
+                 %Entities.ListResourcesRequest{
+                   params: %Entities.ListResourcesRequestParams{cursor: cursor}
+                 },
+                 chan_info(),
+                 state
+               )
+
+      assert %Entities.ListResourcesResult{
+               resources: [%{name: "Data"}],
+               nextCursor: nil
+             } = result2
+    end
+
+    test "returns error when client provides invalid pagination token" do
+      ResourceRepoMock
+      |> stub(:prefix, fn :repo1 -> "file:///" end)
+      |> expect(:list, fn nil, :repo1 ->
+        {[%{uri: "file:///page1.txt", name: "Page 1"}], "valid-token"}
+      end)
+
+      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+
+      # First request succeeds and returns a valid cursor
+      assert {:reply, {:result, result1}, _} =
+               Basic.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+
+      assert %Entities.ListResourcesResult{
+               resources: [%{name: "Page 1"}],
+               nextCursor: cursor
+             } = result1
+
+      assert cursor != nil
+
+      # Client sends an invalid/tampered pagination token
+      invalid_request = %Entities.ListResourcesRequest{
+        params: %Entities.ListResourcesRequestParams{cursor: "invalid-token-from-client"}
+      }
+
+      assert {:reply, {:error, error}, _} =
+               Basic.handle_request(invalid_request, chan_info(), state)
+
+      # Verify it returns a proper error that can be cast to RPC error
+      check_error(error)
+    end
+  end
+
+  describe "reading resources" do
+    test "reads a direct text resource" do
+      ResourceRepoMock
+      |> stub(:prefix, fn :repo1 -> "file:///" end)
+      |> expect(:read, fn "file:///readme.txt", :repo1 ->
+        {:ok,
+         Server.read_resource_result(
+           uri: "file:///readme.txt",
+           text: "# Welcome\n\nThis is the readme."
+         )}
+      end)
+
+      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+
+      request = %Entities.ReadResourceRequest{
+        params: %Entities.ReadResourceRequestParams{
+          uri: "file:///readme.txt"
+        }
+      }
+
+      assert {:reply, {:result, result}, _} =
+               Basic.handle_request(request, chan_info(), state)
+
+      assert %Entities.ReadResourceResult{contents: contents} = result
+      assert [%Entities.TextResourceContents{uri: "file:///readme.txt", text: text}] = contents
+      assert text == "# Welcome\n\nThis is the readme."
+    end
+
+    test "reads a text resource with custom MIME type" do
+      ResourceRepoMock
+      |> stub(:prefix, fn :repo1 -> "file:///" end)
+      |> expect(:read, fn "file:///index.html", :repo1 ->
+        {:ok,
+         Server.read_resource_result(
+           uri: "file:///index.html",
+           text: "<p>Hello</p>",
+           mime_type: "text/html"
+         )}
+      end)
+
+      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+
+      request = %Entities.ReadResourceRequest{
+        params: %Entities.ReadResourceRequestParams{uri: "file:///index.html"}
+      }
+
+      assert {:reply, {:result, result}, _} =
+               Basic.handle_request(request, chan_info(), state)
+
+      assert %Entities.ReadResourceResult{contents: [content]} = result
+      assert %Entities.TextResourceContents{mimeType: "text/html", text: "<p>Hello</p>"} = content
+    end
+
+    test "reads a blob resource" do
+      blob_data = Base.encode64(<<1, 2, 3, 4, 5>>)
+
+      ResourceRepoMock
+      |> stub(:prefix, fn :repo1 -> "file:///" end)
+      |> expect(:read, fn "file:///data.bin", :repo1 ->
+        {:ok,
+         Server.read_resource_result(
+           uri: "file:///data.bin",
+           blob: blob_data,
+           mime_type: "application/octet-stream"
+         )}
+      end)
+
+      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+
+      request = %Entities.ReadResourceRequest{
+        params: %Entities.ReadResourceRequestParams{uri: "file:///data.bin"}
+      }
+
+      assert {:reply, {:result, result}, _} =
+               Basic.handle_request(request, chan_info(), state)
+
+      assert %Entities.ReadResourceResult{contents: [content]} = result
+
+      assert %Entities.BlobResourceContents{
+               blob: ^blob_data,
+               mimeType: "application/octet-stream"
+             } = content
+    end
+
+    test "returns not found error for missing resource" do
+      ResourceRepoMock
+      |> stub(:prefix, fn :repo1 -> "file:///" end)
+      |> expect(:read, fn "file:///missing.txt", :repo1 ->
+        {:error, :not_found}
+      end)
+
+      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+
+      request = %Entities.ReadResourceRequest{
+        params: %Entities.ReadResourceRequestParams{uri: "file:///missing.txt"}
+      }
+
+      assert {:reply, {:error, {:resource_not_found, "file:///missing.txt"}} = err, _} =
+               Basic.handle_request(request, chan_info(), state)
+
+      # Check that it returns proper RPC error code -32002
+      assert {400, %{code: -32002}} = check_error(err)
+    end
+
+    test "returns custom error message from repository" do
+      ResourceRepoMock
+      |> stub(:prefix, fn :repo1 -> "file:///" end)
+      |> expect(:read, fn "file:///invalid.txt", :repo1 ->
+        {:error, "Invalid file format"}
+      end)
+
+      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+
+      request = %Entities.ReadResourceRequest{
+        params: %Entities.ReadResourceRequestParams{uri: "file:///invalid.txt"}
+      }
+
+      assert {:reply, {:error, "Invalid file format"} = err, _} =
+               Basic.handle_request(request, chan_info(), state)
+
+      assert {500, %{code: -32603, message: "Invalid file format"}} = check_error(err)
+    end
+
+    test "routes to correct repository based on URI prefix" do
+      ResourceRepoMock
+      |> stub(:prefix, fn
+        :repo1 -> "file:///"
+        :repo2 -> "http://example.com/"
+      end)
+      |> expect(:read, fn "http://example.com/resource", :repo2 ->
+        {:ok,
+         Server.read_resource_result(
+           uri: "http://example.com/resource",
+           text: "Remote resource"
+         )}
+      end)
+
+      state =
+        init_session(resources: [{ResourceRepoMock, :repo1}, {ResourceRepoMock, :repo2}])
+
+      request = %Entities.ReadResourceRequest{
+        params: %Entities.ReadResourceRequestParams{uri: "http://example.com/resource"}
+      }
+
+      assert {:reply, {:result, result}, _} =
+               Basic.handle_request(request, chan_info(), state)
+
+      assert %Entities.ReadResourceResult{contents: [content]} = result
+      assert %Entities.TextResourceContents{text: "Remote resource"} = content
+    end
+
+    test "returns error when no repository matches URI prefix" do
+      ResourceRepoMock
+      |> stub(:prefix, fn :repo1 -> "file:///" end)
+
+      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+
+      request = %Entities.ReadResourceRequest{
+        params: %Entities.ReadResourceRequestParams{uri: "ftp://example.com/file"}
+      }
+
+      assert {:reply, {:error, {:resource_not_found, "ftp://example.com/file"}} = err, _} =
+               Basic.handle_request(request, chan_info(), state)
+
+      # Check that it returns proper RPC error code -32002
+      assert {400, %{code: -32002}} = check_error(err)
+    end
+
+    test "reads resource with repository using module shorthand" do
+      ResourceRepoMock
+      |> stub(:prefix, fn [] -> "file:///" end)
+      |> expect(:read, fn "file:///readme.txt", [] ->
+        {:ok, Server.read_resource_result(uri: "file:///readme.txt", text: "Hello")}
+      end)
+
+      # Pass module directly (will be expanded to {Module, []})
+      state = init_session(resources: [ResourceRepoMock])
+
+      request = %Entities.ReadResourceRequest{
+        params: %Entities.ReadResourceRequestParams{uri: "file:///readme.txt"}
+      }
+
+      assert {:reply, {:result, result}, _} =
+               Basic.handle_request(request, chan_info(), state)
+
+      assert %Entities.ReadResourceResult{
+               contents: [%Entities.TextResourceContents{text: "Hello"}]
+             } =
+               result
+    end
+
+    test "matches repository prefixes in declaration order, not by longest match" do
+      # The repositories are declared in order: private, general, trash Routing
+      # should use the first matching prefix, not the longest one.
+      #
+      # * An URI starting with "file:///private/..." should be matched by the
+      #   repo with "file:///private/" prefix.
+      # * An URI starting with "file:///trash/..." should be matched by the repo
+      #   with "file:///" repo, not the trash repo.
+
+      ResourceRepoMock
+      |> stub(:prefix, fn
+        :private_repo -> "file:///private/"
+        :general_repo -> "file:///"
+        :trash_repo -> "file:///trash/"
+      end)
+      # Private path should route to first repo
+      |> expect(:read, fn "file:///private/secret.txt", :private_repo ->
+        {:ok, Server.read_resource_result(uri: "file:///private/secret.txt", text: "Secret")}
+      end)
+      # General path (without private) should route to second repo
+      |> expect(:read, fn "file:///readme.txt", :general_repo ->
+        {:ok, Server.read_resource_result(uri: "file:///readme.txt", text: "General")}
+      end)
+      # Trash path should ALSO route to second repo (not third) because it matches first
+      |> expect(:read, fn "file:///trash/deleted.txt", :general_repo ->
+        {:ok, Server.read_resource_result(uri: "file:///trash/deleted.txt", text: "Deleted")}
+      end)
+
+      state =
+        init_session(
+          resources: [
+            {ResourceRepoMock, :private_repo},
+            {ResourceRepoMock, :general_repo},
+            {ResourceRepoMock, :trash_repo}
+          ]
+        )
+
+      # Request 1: Private path routes to private repo
+      request1 = %Entities.ReadResourceRequest{
+        params: %Entities.ReadResourceRequestParams{uri: "file:///private/secret.txt"}
+      }
+
+      assert {:reply, {:result, result1}, _} =
+               Basic.handle_request(request1, chan_info(), state)
+
+      assert %Entities.ReadResourceResult{
+               contents: [%Entities.TextResourceContents{text: "Secret"}]
+             } = result1
+
+      # Request 2: General path routes to general repo
+      request2 = %Entities.ReadResourceRequest{
+        params: %Entities.ReadResourceRequestParams{uri: "file:///readme.txt"}
+      }
+
+      assert {:reply, {:result, result2}, _} =
+               Basic.handle_request(request2, chan_info(), state)
+
+      assert %Entities.ReadResourceResult{
+               contents: [%Entities.TextResourceContents{text: "General"}]
+             } = result2
+
+      # Request 3: Trash path ALSO routes to general repo (first match wins)
+      request3 = %Entities.ReadResourceRequest{
+        params: %Entities.ReadResourceRequestParams{uri: "file:///trash/deleted.txt"}
+      }
+
+      assert {:reply, {:result, result3}, _} =
+               Basic.handle_request(request3, chan_info(), state)
+
+      assert %Entities.ReadResourceResult{
+               contents: [%Entities.TextResourceContents{text: "Deleted"}]
+             } = result3
+    end
+  end
+
+  describe "reading template-based resources" do
+    test "reads template-based resource" do
+      # Using a mock that skips the parse_uri callback.
+      #
+      # Still expecting URI template parameters as arguments to read since the
+      # library must do it on its own
+      ResourceRepoMockTpl
+      |> stub(:prefix, fn :repo1 -> "file:///" end)
+      |> stub(:template, fn :repo1 ->
+        %{uriTemplate: "file://{/path*}", name: "FileTemplate"}
+      end)
+      |> expect(:read, fn %{"path" => ["config", "app.json"]}, :repo1 ->
+        {:ok,
+         Server.read_resource_result(
+           uri: "file:///config/app.json",
+           text: ~s({"port": 3000}),
+           mime_type: "application/json"
+         )}
+      end)
+
+      state = init_session(resources: [{ResourceRepoMockTpl, :repo1}])
+
+      request = %Entities.ReadResourceRequest{
+        params: %Entities.ReadResourceRequestParams{uri: "file:///config/app.json"}
+      }
+
+      assert {:reply, {:result, result}, _} =
+               Basic.handle_request(request, chan_info(), state)
+
+      assert %Entities.ReadResourceResult{contents: [content]} = result
+
+      assert %Entities.TextResourceContents{
+               text: ~s({"port": 3000}),
+               mimeType: "application/json"
+             } = content
+    end
+
+    test "returns error when URI does not match template pattern" do
+      # Repo is badly configured, it declares a short prefix but the template
+      # expects a longer prefix. The client sends an incompatible prefix.
+      #
+      # We do not get a resource not found error in that case.
+
+      ResourceRepoMockTpl
+      |> stub(:prefix, fn :repo1 -> "file:///" end)
+      |> stub(:template, fn :repo1 ->
+        %{uriTemplate: "file://someprefix{/path*}", name: "FileTemplate"}
+      end)
+
+      state = init_session(resources: [{ResourceRepoMockTpl, :repo1}])
+
+      request = %Entities.ReadResourceRequest{
+        params: %Entities.ReadResourceRequestParams{uri: "file:///otherprefix"}
+      }
+
+      assert {:reply, {:error, "expected uri matching" <> _} = err, _} =
+               Basic.handle_request(request, chan_info(), state)
+
+      assert {500, %{code: -32603}} = check_error(err)
+    end
+  end
+
+  describe "listing resource templates" do
+    test "lists templates from repositories with templates" do
+      ResourceRepoMockTpl
+      |> stub(:prefix, fn
+        :repo1 -> "file:///"
+        :repo2 -> "http://localhost/"
+      end)
+      |> stub(:template, fn
+        :repo1 ->
+          %{
+            uriTemplate: "file:///{path}",
+            name: "FileTemplate",
+            description: "A file resource",
+            mimeType: "text/plain"
+          }
+
+        :repo2 ->
+          %{
+            uriTemplate: "http://localhost/api/{endpoint}",
+            name: "APITemplate",
+            title: "API Endpoint"
+          }
+      end)
+
+      state =
+        init_session(resources: [{ResourceRepoMockTpl, :repo1}, {ResourceRepoMockTpl, :repo2}])
+
+      assert {:reply, {:result, result}, _} =
+               Basic.handle_request(
+                 %Entities.ListResourceTemplatesRequest{},
+                 chan_info(),
+                 state
+               )
+
+      assert %Entities.ListResourceTemplatesResult{resourceTemplates: templates} = result
+
+      assert [
+               %Entities.ResourceTemplate{
+                 uriTemplate: "file:///{path}",
+                 name: "FileTemplate",
+                 description: "A file resource",
+                 mimeType: "text/plain"
+               },
+               %Entities.ResourceTemplate{
+                 uriTemplate: "http://localhost/api/{endpoint}",
+                 name: "APITemplate",
+                 title: "API Endpoint"
+               }
+             ] = templates
+    end
+
+    test "skips repositories without templates" do
+      ResourceRepoMockTpl
+      |> stub(:prefix, fn :repo2 -> "http://localhost/" end)
+      |> stub(:template, fn :repo2 ->
+        %{uriTemplate: "http://localhost/{path}", name: "HTTPTemplate"}
+      end)
+
+      ResourceRepoMock
+      |> stub(:prefix, fn
+        :repo1 -> "file:///"
+        :repo3 -> "s3://bucket/"
+      end)
+
+      state =
+        init_session(
+          resources: [
+            {ResourceRepoMock, :repo1},
+            {ResourceRepoMockTpl, :repo2},
+            {ResourceRepoMock, :repo3}
+          ]
+        )
+
+      assert {:reply, {:result, result}, _} =
+               Basic.handle_request(
+                 %Entities.ListResourceTemplatesRequest{},
+                 chan_info(),
+                 state
+               )
+
+      assert %Entities.ListResourceTemplatesResult{resourceTemplates: templates} = result
+
+      assert [
+               %Entities.ResourceTemplate{
+                 uriTemplate: "http://localhost/{path}",
+                 name: "HTTPTemplate"
+               }
+             ] = templates
+    end
+
+    test "returns empty list when no templates available" do
+      ResourceRepoMock
+      |> stub(:prefix, fn _ -> "file:///" end)
+
+      state =
+        init_session(
+          resources: [
+            {ResourceRepoMock, :repo1},
+            {ResourceRepoMock, :repo2}
+          ]
+        )
+
+      assert {:reply, {:result, result}, _} =
+               Basic.handle_request(
+                 %Entities.ListResourceTemplatesRequest{},
+                 chan_info(),
+                 state
+               )
+
+      assert %Entities.ListResourceTemplatesResult{resourceTemplates: []} = result
     end
   end
 end

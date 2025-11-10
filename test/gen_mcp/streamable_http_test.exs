@@ -492,4 +492,333 @@ defmodule GenMcp.StreamableHttpTest do
   IO.warn(
     "@todo add a test to verify that tool call structuredContent result is properly encoded"
   )
+
+  IO.warn(
+    "@todo reading resource not found should 400 error code? or 404. RPC code should be -32002"
+  )
+
+  describe "resource operations" do
+    test "list resources with pagination" do
+      session_id = init_session()
+
+      expect(ServerMock, :handle_request, fn req, _chan_info, state ->
+        assert %GenMcp.Mcp.Entities.ListResourcesRequest{
+                 id: 200,
+                 method: "resources/list",
+                 params: %{}
+               } = req
+
+        result =
+          Server.list_resources_result(
+            [
+              %{uri: "file:///page1.txt", name: "Page 1", description: "First page"},
+              %{uri: "file:///page2.txt", name: "Page 2"}
+            ],
+            "next-page-token"
+          )
+
+        {:reply, {:result, result}, state}
+      end)
+
+      # First page
+      resp1 =
+        session_id
+        |> client()
+        |> post_message(%{
+          jsonrpc: "2.0",
+          id: 200,
+          method: "resources/list",
+          params: %{}
+        })
+
+      assert %{
+               "id" => 200,
+               "jsonrpc" => "2.0",
+               "result" => %{
+                 "resources" => [
+                   %{
+                     "uri" => "file:///page1.txt",
+                     "name" => "Page 1",
+                     "description" => "First page"
+                   },
+                   %{
+                     "uri" => "file:///page2.txt",
+                     "name" => "Page 2"
+                   }
+                 ],
+                 "nextCursor" => cursor
+               }
+             } = resp1.body
+
+      assert cursor == "next-page-token"
+
+      expect(ServerMock, :handle_request, fn req, _chan_info, state ->
+        assert %GenMcp.Mcp.Entities.ListResourcesRequest{
+                 id: 201,
+                 method: "resources/list",
+                 params: %GenMcp.Mcp.Entities.ListResourcesRequestParams{cursor: ^cursor}
+               } = req
+
+        result =
+          Server.list_resources_result(
+            [
+              %{uri: "file:///page3.txt", name: "Page 3"}
+            ],
+            nil
+          )
+
+        {:reply, {:result, result}, state}
+      end)
+
+      # Second page with cursor
+      resp2 =
+        session_id
+        |> client()
+        |> post_message(%{
+          jsonrpc: "2.0",
+          id: 201,
+          method: "resources/list",
+          params: %{cursor: cursor}
+        })
+
+      assert %{
+               "id" => 201,
+               "jsonrpc" => "2.0",
+               "result" => %{
+                 "resources" => [
+                   %{
+                     "uri" => "file:///page3.txt",
+                     "name" => "Page 3"
+                   }
+                 ]
+               }
+             } = resp2.body
+
+      # Verify that nextCursor is nil (may or may not be in the response)
+      assert nil == resp2.body["result"]["nextCursor"]
+    end
+
+    test "list resources error with invalid pagination cursor" do
+      # not actually testing cursor decoding here
+
+      session_id = init_session()
+
+      expect(ServerMock, :handle_request, fn req, _chan_info, state ->
+        assert %GenMcp.Mcp.Entities.ListResourcesRequest{
+                 id: 202,
+                 method: "resources/list",
+                 params: %GenMcp.Mcp.Entities.ListResourcesRequestParams{
+                   cursor: "some-cursor"
+                 }
+               } = req
+
+        # The server implementation should return an error for invalid cursors
+        {:reply, {:error, "Invalid pagination cursor"}, state}
+      end)
+
+      resp =
+        session_id
+        |> client()
+        |> post_message(%{
+          jsonrpc: "2.0",
+          id: 202,
+          method: "resources/list",
+          params: %{cursor: "some-cursor"}
+        })
+        |> expect_status(500)
+
+      assert %{
+               "error" => %{
+                 "code" => -32603,
+                 "message" => "Invalid pagination cursor"
+               },
+               "id" => 202,
+               "jsonrpc" => "2.0"
+             } = resp.body
+    end
+
+    test "read resource" do
+      session_id = init_session()
+
+      expect(ServerMock, :handle_request, fn req, _chan_info, state ->
+        assert %GenMcp.Mcp.Entities.ReadResourceRequest{
+                 id: 204,
+                 method: "resources/read",
+                 params: %GenMcp.Mcp.Entities.ReadResourceRequestParams{
+                   uri: "file:///readme.txt"
+                 }
+               } = req
+
+        result =
+          Server.read_resource_result(
+            uri: "file:///readme.txt",
+            text: "# Welcome\n\nThis is the readme.",
+            mime_type: "text/plain"
+          )
+
+        {:reply, {:result, result}, state}
+      end)
+
+      resp =
+        session_id
+        |> client()
+        |> post_message(%{
+          jsonrpc: "2.0",
+          id: 204,
+          method: "resources/read",
+          params: %{uri: "file:///readme.txt"}
+        })
+
+      assert %{
+               "id" => 204,
+               "jsonrpc" => "2.0",
+               "result" => %{
+                 "contents" => [
+                   %{
+                     "uri" => "file:///readme.txt",
+                     "mimeType" => "text/plain",
+                     "text" => "# Welcome\n\nThis is the readme."
+                   }
+                 ]
+               }
+             } = resp.body
+    end
+
+    test "read resource not found" do
+      session_id = init_session()
+
+      expect(ServerMock, :handle_request, fn req, _chan_info, state ->
+        assert %GenMcp.Mcp.Entities.ReadResourceRequest{
+                 id: 205,
+                 method: "resources/read",
+                 params: %GenMcp.Mcp.Entities.ReadResourceRequestParams{
+                   uri: "file:///missing.txt"
+                 }
+               } = req
+
+        {:reply, {:error, {:resource_not_found, "file:///missing.txt"}}, state}
+      end)
+
+      resp =
+        session_id
+        |> client()
+        |> post_message(%{
+          jsonrpc: "2.0",
+          id: 205,
+          method: "resources/read",
+          params: %{uri: "file:///missing.txt"}
+        })
+        |> expect_status(400)
+
+      assert %{
+               "error" => %{
+                 "code" => -32002,
+                 "message" => message,
+                 "data" => %{"uri" => "file:///missing.txt"}
+               },
+               "id" => 205,
+               "jsonrpc" => "2.0"
+             } = resp.body
+
+      assert message =~ "Resource not found"
+    end
+
+    test "read resource URI template error" do
+      session_id = init_session()
+
+      expect(ServerMock, :handle_request, fn req, _chan_info, state ->
+        assert %GenMcp.Mcp.Entities.ReadResourceRequest{
+                 id: 206,
+                 method: "resources/read",
+                 params: %GenMcp.Mcp.Entities.ReadResourceRequestParams{
+                   uri: "file:///wrongprefix/data.txt"
+                 }
+               } = req
+
+        {:reply,
+         {:error,
+          "expected uri matching template file://prefix/{path}, got file:///wrongprefix/data.txt"},
+         state}
+      end)
+
+      resp =
+        session_id
+        |> client()
+        |> post_message(%{
+          jsonrpc: "2.0",
+          id: 206,
+          method: "resources/read",
+          params: %{uri: "file:///wrongprefix/data.txt"}
+        })
+        |> expect_status(500)
+
+      assert %{
+               "error" => %{
+                 "code" => -32603,
+                 "message" => message
+               },
+               "id" => 206,
+               "jsonrpc" => "2.0"
+             } = resp.body
+
+      assert message =~ "expected uri matching template"
+    end
+
+    test "list resource templates" do
+      session_id = init_session()
+
+      expect(ServerMock, :handle_request, fn req, _chan_info, state ->
+        assert %GenMcp.Mcp.Entities.ListResourceTemplatesRequest{
+                 id: 207,
+                 method: "resources/templates/list",
+                 params: %{}
+               } = req
+
+        result =
+          Server.list_resource_templates_result([
+            %{
+              uriTemplate: "file:///documents/{path}",
+              name: "Documents",
+              description: "Access documents by path",
+              mimeType: "text/plain"
+            },
+            %{
+              uriTemplate: "file:///images/{id}.png",
+              name: "Images"
+            }
+          ])
+
+        {:reply, {:result, result}, state}
+      end)
+
+      resp =
+        session_id
+        |> client()
+        |> post_message(%{
+          jsonrpc: "2.0",
+          id: 207,
+          method: "resources/templates/list",
+          params: %{}
+        })
+
+      assert %{
+               "id" => 207,
+               "jsonrpc" => "2.0",
+               "result" => %{
+                 "resourceTemplates" => [
+                   %{
+                     "uriTemplate" => "file:///documents/{path}",
+                     "name" => "Documents",
+                     "description" => "Access documents by path",
+                     "mimeType" => "text/plain"
+                   },
+                   %{
+                     "uriTemplate" => "file:///images/{id}.png",
+                     "name" => "Images"
+                   }
+                 ]
+               }
+             } = resp.body
+    end
+  end
 end

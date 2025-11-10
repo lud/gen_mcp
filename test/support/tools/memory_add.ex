@@ -25,7 +25,7 @@ defmodule GenMcp.Test.Tools.MemoryAdd do
     %{idempotentHint: false, openWorldHint: false, title: title()}
   end
 
-  def call(arguments, channel, _state) do
+  def call(_arguments, _channel, _state) do
     raise "not implemented"
   end
 end

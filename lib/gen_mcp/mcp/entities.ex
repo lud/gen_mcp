@@ -88,6 +88,7 @@ defmodule GenMcp.Mcp.Entities.ModMap do
         "ListResourceTemplatesRequest" => GenMcp.Mcp.Entities.ListResourceTemplatesRequest,
         "ListResourceTemplatesResult" => GenMcp.Mcp.Entities.ListResourceTemplatesResult,
         "ListResourcesRequest" => GenMcp.Mcp.Entities.ListResourcesRequest,
+        "ListResourcesRequestParams" => GenMcp.Mcp.Entities.ListResourcesRequestParams,
         "ListResourcesResult" => GenMcp.Mcp.Entities.ListResourcesResult,
         "ListRootsRequest" => GenMcp.Mcp.Entities.ListRootsRequest,
         "ListRootsResult" => GenMcp.Mcp.Entities.ListRootsResult,
@@ -111,6 +112,7 @@ defmodule GenMcp.Mcp.Entities.ModMap do
         "PromptMessage" => GenMcp.Mcp.Entities.PromptMessage,
         "PromptReference" => GenMcp.Mcp.Entities.PromptReference,
         "ReadResourceRequest" => GenMcp.Mcp.Entities.ReadResourceRequest,
+        "ReadResourceRequestParams" => GenMcp.Mcp.Entities.ReadResourceRequestParams,
         "ReadResourceResult" => GenMcp.Mcp.Entities.ReadResourceResult,
         "Request" => GenMcp.Mcp.Entities.Request,
         "RequestId" => GenMcp.Mcp.Entities.RequestId,
@@ -1403,22 +1405,32 @@ defmodule GenMcp.Mcp.Entities.ListResourcesRequest do
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
       method: const("resources/list", default: "resources/list"),
-      params: %{
-        properties: %{
-          _meta: GenMcp.Mcp.Entities.RequestMeta,
-          cursor:
-            string(
-              description: ~SD"""
-              An opaque token representing the current pagination position. If
-              provided, the server should return results starting after this cursor.
-              """
-            )
-        },
-        type: "object"
-      }
+      params: GenMcp.Mcp.Entities.ListResourcesRequestParams
     },
     required: [],
     title: "ListResourcesRequest",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMcp.Mcp.Entities.ListResourcesRequestParams do
+  use JSV.Schema
+  JsonDerive.auto()
+
+  defschema %{
+    properties: %{
+      _meta: GenMcp.Mcp.Entities.RequestMeta,
+      cursor:
+        string(
+          description: ~SD"""
+          An opaque token representing the current pagination position. If
+          provided, the server should return results starting after this cursor.
+          """
+        )
+    },
+    title: "ListResourcesRequestParams",
     type: "object"
   }
 
@@ -2114,23 +2126,33 @@ defmodule GenMcp.Mcp.Entities.ReadResourceRequest do
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
       method: const("resources/read", default: "resources/read"),
-      params: %{
-        properties: %{
-          _meta: GenMcp.Mcp.Entities.RequestMeta,
-          uri:
-            uri(
-              description: ~SD"""
-              The URI of the resource to read. The URI can use any protocol; it is
-              up to the server how to interpret it.
-              """
-            )
-        },
-        required: ["uri"],
-        type: "object"
-      }
+      params: GenMcp.Mcp.Entities.ReadResourceRequestParams
     },
     required: [:params],
     title: "ReadResourceRequest",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMcp.Mcp.Entities.ReadResourceRequestParams do
+  use JSV.Schema
+  JsonDerive.auto()
+
+  defschema %{
+    properties: %{
+      _meta: GenMcp.Mcp.Entities.RequestMeta,
+      uri:
+        uri(
+          description: ~SD"""
+          The URI of the resource to read. The URI can use any protocol; it is
+          up to the server how to interpret it.
+          """
+        )
+    },
+    required: [:uri],
+    title: "ReadResourceRequestParams",
     type: "object"
   }
 

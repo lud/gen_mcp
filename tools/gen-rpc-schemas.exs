@@ -203,6 +203,8 @@ defmodule Generator do
     defs
     |> swap_sub_schema([:InitializeRequest, :properties, :params], :InitializeRequestParams)
     |> swap_sub_schema([:CallToolRequest, :properties, :params], :CallToolRequestParams)
+    |> swap_sub_schema([:ListResourcesRequest, :properties, :params], :ListResourcesRequestParams)
+    |> swap_sub_schema([:ReadResourceRequest, :properties, :params], :ReadResourceRequestParams)
   end
 
   def prelude do

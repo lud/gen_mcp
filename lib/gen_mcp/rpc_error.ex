@@ -26,6 +26,7 @@ defmodule GenMcp.RpcError do
   @rpc_invalid_request -32600
   @rpc_invalid_params -32602
   @rpc_internal_error -32603
+  @rpc_resource_not_found -32002
 
   import GenMcp.RpcError.Compiler
   require Logger
@@ -72,6 +73,31 @@ defmodule GenMcp.RpcError do
     %{
       data: %{tool: name},
       message: "Unknown tool #{name}"
+    }
+  end
+
+  defcasterror {:resource_not_found, uri} when is_binary(uri), @rpc_resource_not_found, 400 do
+    %{
+      data: %{uri: uri},
+      message: "Resource not found: #{uri}"
+    }
+  end
+
+  defcasterror :invalid_cursor, @rpc_invalid_params, 400 do
+    %{
+      message: "Invalid pagination cursor"
+    }
+  end
+
+  defcasterror :expired_cursor, @rpc_invalid_params, 400 do
+    %{
+      message: "Expired pagination cursor"
+    }
+  end
+
+  defcasterror message when is_binary(message), @rpc_internal_error, 500 do
+    %{
+      message: message
     }
   end
 

@@ -1,6 +1,4 @@
 defmodule GenMcp.Test.Tools.Calculator do
-  alias GenMcp.Mcp.Entities.TextContent
-  alias JSV.Codec
   use JSV.Schema
 
   def info(:name, _) do

@@ -84,4 +84,69 @@ defmodule GenMcp.Server do
   defp reduce_tool_result({:text, text}, {content, stc, error_or_nil?}) when is_binary(text) do
     {[%{type: :text, text: text} | content], stc, error_or_nil?}
   end
+
+  def list_resources_result(resources, next_cursor) do
+    %Entities.ListResourcesResult{
+      nextCursor: next_cursor,
+      resources: resources
+    }
+  end
+
+  def list_resource_templates_result(templates) do
+    %Entities.ListResourceTemplatesResult{
+      resourceTemplates: templates
+    }
+  end
+
+  @doc """
+  Helper function to create resource contents for testing and implementation.
+
+  ## Examples
+
+      # Text resource
+      read_resource_result(uri: "file:///readme.txt", text: "# Welcome")
+
+      # Text resource with MIME type
+      read_resource_result(uri: "file:///index.html", text: "<p>Hello</p>", mime_type: "text/html")
+
+      # Blob resource
+      read_resource_result(uri: "file:///image.png", blob: Base.encode64(binary_data))
+
+      # Blob resource with MIME type
+      read_resource_result(uri: "file:///doc.pdf", blob: encoded_data, mime_type: "application/pdf")
+  """
+  def read_resource_result(opts) do
+    uri = Keyword.fetch!(opts, :uri)
+    mime_type = Keyword.get(opts, :mime_type)
+
+    contents =
+      cond do
+        Keyword.has_key?(opts, :text) ->
+          text = Keyword.fetch!(opts, :text)
+
+          [
+            %Entities.TextResourceContents{
+              uri: uri,
+              text: text,
+              mimeType: mime_type
+            }
+          ]
+
+        Keyword.has_key?(opts, :blob) ->
+          blob = Keyword.fetch!(opts, :blob)
+
+          [
+            %Entities.BlobResourceContents{
+              uri: uri,
+              blob: blob,
+              mimeType: mime_type
+            }
+          ]
+
+        true ->
+          raise ArgumentError, "resource_contents/1 requires either :text or :blob option"
+      end
+
+    %Entities.ReadResourceResult{contents: contents}
+  end
 end
