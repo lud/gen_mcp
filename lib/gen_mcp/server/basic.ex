@@ -70,9 +70,10 @@ defmodule GenMcp.Server.Basic do
       :ok ->
         init_result =
           Server.intialize_result(
-            capabilities: Server.capabilities(tools: true),
+            capabilities: Server.capabilities(tools: true, resources: true),
             server_info: Server.server_info(name: "Mock Server", version: "foo", title: "stuff")
           )
+          |> dbg()
 
         {:reply, {:result, init_result}, %{state | status: :server_initialized}}
 
