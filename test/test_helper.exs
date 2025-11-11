@@ -6,4 +6,4 @@ Application.stop(:logger)
 # Start the test endpoint
 {:ok, _} = GenMcp.TestWeb.Endpoint.start_link()
 
-ExUnit.start()
+ExUnit.start(assert_receive_timeout: 100)

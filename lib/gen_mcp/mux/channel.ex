@@ -1,12 +1,13 @@
 defmodule GenMcp.Mux.Channel do
   alias GenMcp.Mcp.Entities.ProgressNotification
 
-  defstruct [:client, :progress_token]
+  @enforce_keys [:client, :progress_token]
+  defstruct @enforce_keys
 
   @type t :: %__MODULE__{client: pid, progress_token: nil | binary | integer}
   @type chan_info :: {:channel, module, pid}
 
-  def from_client({:channel, _module, pid}, req) do
+  def from_client({:channel, _module, pid}, req) when is_pid(pid) do
     progress_token =
       case req do
         %{params: %{_meta: %{"progressToken" => pt}}} -> pt
@@ -38,6 +39,11 @@ defmodule GenMcp.Mux.Channel do
 
   def send_result(channel, payload) do
     send(channel.client, {:"$gen_mcp", :result, payload})
+    channel
+  end
+
+  def send_error(channel, error) do
+    send(channel.client, {:"$gen_mcp", :error, error})
     channel
   end
 end

@@ -42,7 +42,7 @@ defmodule GenMcp.Server.BasicTest do
       }
     }
 
-    assert {:reply, {:result, result}, %{status: :server_initialized} = state} =
+    assert {:reply, {:result, _result}, %{status: :server_initialized} = state} =
              Basic.handle_request(init_req, chan_info(), state)
 
     client_init_notif = %Entities.InitializedNotification{
@@ -110,7 +110,7 @@ defmodule GenMcp.Server.BasicTest do
         }
       }
 
-      assert {:reply, {:result, result}, %{status: :server_initialized} = state} =
+      assert {:reply, {:result, _result}, %{status: :server_initialized} = state} =
                Basic.handle_request(init_req, chan_info(), state)
 
       tool_call_req = %Entities.CallToolRequest{
@@ -298,6 +298,32 @@ defmodule GenMcp.Server.BasicTest do
                Basic.handle_request(tool_call_req, chan_info(), state)
 
       check_error(err)
+    end
+
+    test "tool returns error string from call callback" do
+      ToolMock
+      |> stub(:info, fn :name, :error_tool -> "ErrorTool" end)
+      |> expect(:call, fn _req, chan, _arg ->
+        {:error, "Something went wrong in the tool", chan}
+      end)
+
+      state = init_session(tools: [{ToolMock, :error_tool}])
+
+      tool_call_req = %Entities.CallToolRequest{
+        id: 5,
+        method: "tools/call",
+        params: %Entities.CallToolRequestParams{
+          name: "ErrorTool",
+          arguments: %{}
+        }
+      }
+
+      assert {:reply, {:error, "Something went wrong in the tool"} = err, _} =
+               Basic.handle_request(tool_call_req, chan_info(), state)
+
+      # Should return HTTP 500 and RPC code -32603 (internal error)
+      assert {500, %{code: -32603, message: "Something went wrong in the tool"}} =
+               check_error(err)
     end
   end
 
@@ -713,8 +739,7 @@ defmodule GenMcp.Server.BasicTest do
     end
 
     test "returns error when no repository matches URI prefix" do
-      ResourceRepoMock
-      |> stub(:prefix, fn :repo1 -> "file:///" end)
+      stub(ResourceRepoMock, :prefix, fn :repo1 -> "file:///" end)
 
       state = init_session(resources: [{ResourceRepoMock, :repo1}])
 
@@ -947,8 +972,7 @@ defmodule GenMcp.Server.BasicTest do
         %{uriTemplate: "http://localhost/{path}", name: "HTTPTemplate"}
       end)
 
-      ResourceRepoMock
-      |> stub(:prefix, fn
+      stub(ResourceRepoMock, :prefix, fn
         :repo1 -> "file:///"
         :repo3 -> "s3://bucket/"
       end)
@@ -980,8 +1004,7 @@ defmodule GenMcp.Server.BasicTest do
     end
 
     test "returns empty list when no templates available" do
-      ResourceRepoMock
-      |> stub(:prefix, fn _ -> "file:///" end)
+      stub(ResourceRepoMock, :prefix, fn _ -> "file:///" end)
 
       state =
         init_session(

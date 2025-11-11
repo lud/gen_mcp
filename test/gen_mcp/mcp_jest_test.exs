@@ -1,5 +1,4 @@
 defmodule GenMcp.McpJestTest do
-  import GenMcp.Test.Client
   use ExUnit.Case, async: true
 
   defp url do

@@ -5,8 +5,11 @@ defmodule GenMcp.Server.Basic do
   alias GenMcp.Server
   alias GenMcp.Tool
   require Logger
+  require Record
 
   @behaviour GenMcp.Server
+
+  @supported_protocol_versions GenMcp.supported_protocol_versions()
 
   defmodule State do
     # We keep tools both as a list and as a map
@@ -18,10 +21,13 @@ defmodule GenMcp.Server.Basic do
       :resource_prefixes,
       :repos_map,
       :token_key,
-      :token_salt
+      :token_salt,
+      :trackers
     ]
     defstruct @enforce_keys
   end
+
+  Record.defrecordp(:tracker, id: nil, tool_name: nil, channel: nil, tag: nil)
 
   @impl true
   def init(opts) do
@@ -56,7 +62,8 @@ defmodule GenMcp.Server.Basic do
        resource_prefixes: resource_prefixes,
        repos_map: repos_map,
        token_key: random_string(64),
-       token_salt: random_string(8)
+       token_salt: random_string(8),
+       trackers: empty_trackers()
      }}
   end
 
@@ -73,7 +80,6 @@ defmodule GenMcp.Server.Basic do
             capabilities: Server.capabilities(tools: true, resources: true),
             server_info: Server.server_info(name: "Mock Server", version: "foo", title: "stuff")
           )
-          |> dbg()
 
         {:reply, {:result, init_result}, %{state | status: :server_initialized}}
 
@@ -112,8 +118,19 @@ defmodule GenMcp.Server.Basic do
         channel = build_channel(chan_info, req)
 
         case call_tool(req, tool, channel, state) do
-          {:result, result, _chan} -> {:reply, {:result, result}, state}
-          {:error, reason, _chan} -> {:reply, {:error, reason}, state}
+          {:result, result, _chan} ->
+            {:reply, {:result, result}, state}
+
+          {:error, reason, _chan} ->
+            {:reply, {:error, reason}, state}
+
+          {:async, {tag, req}, chan} ->
+            # TODO send progress when starting async with a task without any
+            # server request.
+
+            # the tracking process will set the ID of the request
+            {_req, state} = track_request(state, tool, tag, req, chan)
+            {:reply, :stream, state}
         end
 
       _ ->
@@ -151,7 +168,7 @@ defmodule GenMcp.Server.Basic do
   def handle_request(%Entities.ReadResourceRequest{} = req, _chan_info, state) do
     uri = req.params.uri
 
-    case find_repo_for_uri(uri, state) do
+    case find_repo_for_uri(state, uri) do
       {:ok, repo} ->
         case ResourceRepo.read_resource(repo, uri) do
           {:ok, result} -> {:reply, {:result, result}, state}
@@ -165,8 +182,7 @@ defmodule GenMcp.Server.Basic do
 
   def handle_request(%Entities.ListResourceTemplatesRequest{}, _chan_info, state) do
     templates =
-      state.resource_prefixes
-      |> Enum.flat_map(fn prefix ->
+      Enum.flat_map(state.resource_prefixes, fn prefix ->
         case Map.fetch!(state.repos_map, prefix).template do
           nil ->
             []
@@ -203,14 +219,95 @@ defmodule GenMcp.Server.Basic do
     {:noreply, %{state | status: :client_initialized}}
   end
 
+  @impl true
+  def handle_info({task_ref, _} = msg, state) when is_reference(task_ref) do
+    state =
+      with :error <- handle_task_info(msg, state) do
+        log_unhandled_info(msg)
+        state
+      else
+        {:ok, state} -> state
+      end
+
+    {:noreply, state}
+  end
+
+  def handle_info({:DOWN, _ref, :process, _pid, _reason} = msg, state) do
+    state =
+      with :error <- handle_task_info(msg, state) do
+        # No error log on stale down messages
+        # TODO monitor channels and look for channel disconnection
+
+        state
+      else
+        {:ok, state} -> state
+      end
+
+    {:noreply, state}
+  end
+
+  def handle_info(msg, state) do
+    log_unhandled_info(msg)
+    {:noreply, state}
+  end
+
+  defp log_unhandled_info(msg) do
+    Logger.error("unhandled info message in #{inspect(__MODULE__)}: #{inspect(msg)}")
+  end
+
+  defp handle_task_info(task_msg, state) do
+    {task_ref, task_result, demonitor?} =
+      case task_msg do
+        {ref, value} -> {ref, {:ok, value}, true}
+        {:DOWN, ref, :process, _pid, reason} -> {ref, {:error, reason}, false}
+      end
+
+    case List.keytake(state.trackers, task_ref, tracker(:id)) do
+      nil ->
+        :error
+
+      {tracker, trackers} ->
+        if demonitor? do
+          _ = Process.demonitor(task_ref, [:flush])
+        end
+
+        handle_task_continuation(tracker, trackers, task_result, state)
+    end
+  end
+
+  defp handle_task_continuation(tracker, new_trackers, task_result, state) do
+    tracker(tool_name: tool_name, channel: channel, tag: tag) = tracker
+    state = %{state | trackers: new_trackers}
+    tool = Map.fetch!(state.tools_map, tool_name)
+
+    case Tool.continue(tool, {tag, task_result}, channel) do
+      # using the previous channel so we are sure it's the right one
+      {:result, result, _chan} ->
+        ^channel = Channel.send_result(channel, result)
+
+        {:ok, state}
+
+      {:async, {tag, req}, chan} ->
+        # TODO send progress when continuing async with a task without any
+        # server request.
+
+        # the tracking process will set the ID of the request
+        {_req, state} = track_request(state, tool, tag, req, chan)
+        {:ok, state}
+
+      {:error, reason, _chan} ->
+        ^channel = Channel.send_error(channel, reason)
+
+        {:ok, state}
+    end
+  end
+
   defp build_server_info(init_opts) do
     name = Keyword.fetch!(init_opts, :server_name)
     version = Keyword.fetch!(init_opts, :server_version)
     title = Keyword.get(init_opts, :server_title, nil)
     Server.server_info(name: name, version: version, title: title)
   end
-
-  @supported_protocol_versions GenMcp.supported_protocol_versions()
 
   defp check_protocol_version(%Entities.InitializeRequest{} = req) do
     case req do
@@ -288,7 +385,7 @@ defmodule GenMcp.Server.Basic do
     end
   end
 
-  defp find_repo_for_uri(uri, state) do
+  defp find_repo_for_uri(state, uri) do
     # Match against prefixes in declaration order (first match wins)
     state.resource_prefixes
     |> Enum.find_value(fn prefix ->
@@ -302,8 +399,42 @@ defmodule GenMcp.Server.Basic do
     end
   end
 
-  @impl true
-  def handle_info(_msg, state) do
-    {:noreply, state}
+  # TODO we should also handle timeouts for trackers. The tools should be able
+  # to return a timeout in an :async tuple. On timeout we would deliver the
+  # {:error, :timeout} result. But we would need to handle late client replies
+  # to return a "too late" error. So when the timeout occurs we should replace
+  # the tracker with a :timeout data so we know what happened can can tell the
+  # client.
+
+  defp empty_trackers do
+    []
+  end
+
+  defp track_request(state, tool, tag, req, chan) do
+    {track_id, server_request} =
+      case req do
+        # TODO if an actual elicitation request we must create a new ID and bump
+        # it in the state (or use erlang.unique_integer)
+        task_ref when is_reference(task_ref) -> {task_ref, nil}
+      end
+
+    # storing the request in the trackers. If for some reason a tool returns the
+    # same reference twice, we do not support it
+
+    case List.keymember?(state.trackers, track_id, tracker(:id)) do
+      true ->
+        raise "duplicated track request #{inspect(track_id)} returned from tool #{inspect(tool.name)}"
+
+      false ->
+        :ok
+    end
+
+    state =
+      update_in(
+        state.trackers,
+        &[tracker(id: track_id, tool_name: tool.name, channel: chan, tag: tag) | &1]
+      )
+
+    {server_request, state}
   end
 end

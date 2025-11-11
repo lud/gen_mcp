@@ -81,8 +81,15 @@ defmodule GenMcp.Server do
     }
   end
 
-  defp reduce_tool_result({:text, text}, {content, stc, error_or_nil?}) when is_binary(text) do
-    {[%{type: :text, text: text} | content], stc, error_or_nil?}
+  defp reduce_tool_result({:text, text}, {content, structured_content, error_or_nil?})
+       when is_binary(text) do
+    {[%Entities.TextContent{type: :text, text: text} | content], structured_content,
+     error_or_nil?}
+  end
+
+  defp reduce_tool_result({:is_error, error?}, {content, structured_content, error_or_nil?})
+       when is_boolean(error?) do
+    {content, structured_content, error? || error_or_nil?}
   end
 
   def list_resources_result(resources, next_cursor) do

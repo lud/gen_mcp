@@ -164,7 +164,6 @@ defmodule GenMcp.Plug.StreamableHttp do
 
   defp send_json(conn, status, payload) do
     body = json_encode(payload, true)
-    Logger.debug(["RESPONSE\n", body], ansi_color: :light_yellow)
 
     conn
     |> put_resp_content_type("application/json")
@@ -215,6 +214,11 @@ defmodule GenMcp.Plug.StreamableHttp do
         {:ok, conn} = send_result_response_chunk(conn, msg_id, result)
         stream_end(conn)
 
+      # On error we will stop the stream
+      {:"$gen_mcp", :error, reason} ->
+        {:ok, conn} = send_error_response_chunk(conn, msg_id, reason)
+        stream_end(conn)
+
       {:"$gen_mcp", :notification, notification} ->
         {:ok, conn} = send_notification_chunk(conn, notification)
 
@@ -228,7 +232,6 @@ defmodule GenMcp.Plug.StreamableHttp do
   end
 
   defp stream_end(conn) do
-    #  TODO remove this function if nothing more to do
     conn
   end
 
@@ -237,6 +240,18 @@ defmodule GenMcp.Plug.StreamableHttp do
       id: msg_id,
       jsonrpc: "2.0",
       result: result
+    }
+
+    {:ok, _conn} = send_stream_data(conn, payload)
+  end
+
+  defp send_error_response_chunk(conn, msg_id, reason) do
+    {_status, error_payload} = RpcError.cast_error(reason)
+
+    payload = %GenMcp.Mcp.Entities.JSONRPCError{
+      error: error_payload,
+      id: msg_id,
+      jsonrpc: "2.0"
     }
 
     {:ok, _conn} = send_stream_data(conn, payload)

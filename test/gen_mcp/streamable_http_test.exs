@@ -107,7 +107,7 @@ defmodule GenMcp.StreamableHttpTest do
   defp init_session(init_state \\ :some_state) do
     ServerMock
     |> expect(:init, fn _ -> {:ok, init_state} end)
-    |> expect(:handle_request, fn req, chan_info, state ->
+    |> expect(:handle_request, fn _req, _chan_info, state ->
       init_result =
         Server.intialize_result(
           capabilities: Server.capabilities(tools: true),
@@ -133,7 +133,7 @@ defmodule GenMcp.StreamableHttpTest do
 
     session_id = expect_session_header(resp)
 
-    expect(ServerMock, :handle_notification, fn notif, state -> {:noreply, state} end)
+    expect(ServerMock, :handle_notification, fn _notif, state -> {:noreply, state} end)
 
     assert "" =
              session_id
@@ -322,8 +322,6 @@ defmodule GenMcp.StreamableHttpTest do
                }
              } = req
 
-      result = Server.call_tool_result(text: "text")
-
       {:reply, {:error, {:unknown_tool, "swapped-tool-name"}}, state}
     end)
 
@@ -357,7 +355,7 @@ defmodule GenMcp.StreamableHttpTest do
     # The session should reply to the http handler to start a chunked response.
     # But then how do the session/server know which chan_info send updates to?
 
-    expect(ServerMock, :handle_request, fn req, chan_info, state ->
+    expect(ServerMock, :handle_request, fn req, chan_info, _state ->
       assert %GenMcp.Mcp.Entities.CallToolRequest{
                id: 456,
                method: "tools/call",
@@ -487,14 +485,152 @@ defmodule GenMcp.StreamableHttpTest do
            ] = chunks
   end
 
+  test "calling async tool that returns error from continue callback" do
+    session_id = init_session()
+
+    ServerMock
+    |> expect(:handle_request, fn req, chan_info, _state ->
+      assert %GenMcp.Mcp.Entities.CallToolRequest{
+               id: 457,
+               method: "tools/call",
+               params: %GenMcp.Mcp.Entities.CallToolRequestParams{
+                 arguments: %{"arg" => 123},
+                 name: "AsyncToolWithError"
+               }
+             } = req
+
+      channel = Channel.from_client(chan_info, req)
+
+      # Simulate async operation that will fail
+      send(self(), :async_error)
+
+      {:reply, :stream, channel}
+    end)
+    |> expect(:handle_info, fn :async_error, channel ->
+      # Send an error through the channel
+      channel = Channel.send_error(channel, "Something went wrong in async operation")
+
+      {:noreply, channel}
+    end)
+
+    resp =
+      session_id
+      |> client()
+      |> post_message(
+        %{
+          jsonrpc: "2.0",
+          id: 457,
+          method: "tools/call",
+          params: %{
+            name: "AsyncToolWithError",
+            arguments: %{arg: 123}
+          }
+        },
+        into: :self
+      )
+
+    chunks =
+      resp
+      |> stream_chunks()
+      |> Enum.map(fn "data: " <> json -> JSV.Codec.decode!(json) end)
+
+    # Should receive an error response that terminates the stream
+    assert [
+             %{
+               "error" => %{
+                 "code" => -32603,
+                 "message" => "Something went wrong in async operation"
+               },
+               "id" => 457,
+               "jsonrpc" => "2.0"
+             }
+           ] = chunks
+  end
+
+  test "calling async tool with progress notifications then error" do
+    session_id = init_session()
+    token = "error-progress-token"
+
+    ServerMock
+    |> expect(:handle_request, fn req, chan_info, _state ->
+      assert %Channel{progress_token: ^token} = channel = Channel.from_client(chan_info, req)
+
+      send(self(), :progress_step_1)
+
+      {:reply, :stream, channel}
+    end)
+    |> expect(:handle_info, fn :progress_step_1, channel ->
+      channel = Channel.send_progress(channel, 1, 3, "step 1")
+      send(self(), :progress_step_2)
+      {:noreply, channel}
+    end)
+    |> expect(:handle_info, fn :progress_step_2, channel ->
+      channel = Channel.send_progress(channel, 2, 3, "step 2")
+      send(self(), :error_step)
+      {:noreply, channel}
+    end)
+    |> expect(:handle_info, fn :error_step, channel ->
+      channel = Channel.send_error(channel, "Failed at step 3")
+      {:noreply, channel}
+    end)
+
+    resp =
+      session_id
+      |> client()
+      |> post_message(
+        %{
+          jsonrpc: "2.0",
+          id: 458,
+          method: "tools/call",
+          params: %{
+            name: "ProgressThenError",
+            arguments: %{},
+            _meta: %{progressToken: token}
+          }
+        },
+        into: :self
+      )
+
+    chunks =
+      resp
+      |> stream_chunks()
+      |> Enum.map(fn "data: " <> json -> JSV.Codec.decode!(json) end)
+
+    # Should receive progress notifications followed by an error
+    assert [
+             %{
+               "method" => "notifications/progress",
+               "params" => %{
+                 "message" => "step 1",
+                 "progressToken" => ^token,
+                 "progress" => 1,
+                 "total" => 3
+               }
+             },
+             %{
+               "method" => "notifications/progress",
+               "params" => %{
+                 "message" => "step 2",
+                 "progressToken" => ^token,
+                 "progress" => 2,
+                 "total" => 3
+               }
+             },
+             %{
+               "error" => %{
+                 "code" => -32603,
+                 "message" => "Failed at step 3"
+               },
+               "id" => 458,
+               "jsonrpc" => "2.0"
+             }
+           ] = chunks
+  end
+
   IO.warn("@todo add a test to verify that tool call isError result is properly encoded")
 
   IO.warn(
     "@todo add a test to verify that tool call structuredContent result is properly encoded"
-  )
-
-  IO.warn(
-    "@todo reading resource not found should 400 error code? or 404. RPC code should be -32002"
   )
 
   describe "resource operations" do

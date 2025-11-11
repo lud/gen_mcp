@@ -25,6 +25,7 @@ defmodule GenMcp.Tool do
           {:result, result, Channel.t()}
           | {:request, {tag, term}, Channel.t()}
           | {:async, {tag, reference() | Task.t()}, Channel.t()}
+          | {:error, String.t(), Channel.t()}
 
   @type request :: term
   @type client_response ::
@@ -33,7 +34,7 @@ defmodule GenMcp.Tool do
           | Entities.ElicitResult.t()
 
   @doc """
-  Returns metadata information about the tool based on the requested key.
+  Returns metadata information a  bout the tool based on the requested key.
 
   The `key` parameter determines which metadata is retrieved (`:name`, `:title`,
   `:description`, or `:annotations`).
@@ -152,9 +153,19 @@ defmodule GenMcp.Tool do
   def call(tool, %Entities.CallToolRequest{} = req, channel) do
     %{params: %Entities.CallToolRequestParams{name: name}} = req
     %{mod: mod, arg: arg, name: ^name} = tool
+    handle_result(mod.call(req, channel, arg))
+  end
 
-    case mod.call(req, channel, arg) do
+  def continue(tool, {_tag, _result} = cont, channel) do
+    %{mod: mod, arg: arg} = tool
+    handle_result(mod.continue(cont, channel, arg))
+  end
+
+  defp handle_result(result) do
+    case result do
       {:result, _result, %Channel{}} = result -> result
+      {:async, {tag, %Task{ref: ref}}, %Channel{} = chan} -> {:async, {tag, ref}, chan}
+      {:async, {tag, ref}, %Channel{} = chan} when is_reference(ref) -> {:async, {tag, ref}, chan}
       {:error, _reason, %Channel{}} = err -> err
       other -> exit({:bad_return_value, other})
     end

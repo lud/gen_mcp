@@ -1,17 +1,3 @@
-IO.warn("remove spec")
-# Multiplexer handles incoming information
-
-# * Toujours démarrer un gen_server et créer une session. Qui peut le plus peut le
-#   moins. On pourra faire une version simplifiée plus tard quand tous les détails
-#   seront gérés.
-# * initialization: n'atteint pas le gen_server car c'est justement ce qui le
-#   démarre. Le server est spawn, initialsé, et on répond.
-# * les tools seront stateless. Afin de permettre aux users de définir un state
-#   (qui devra être externe, ETS par exemple) on passera le channel au tool.
-# * Le channel contient le pid du client HTTP qui arrive (à voir pour le transport
-#   stdio)
-# * dans le multiplexer, il faut stocker les channels
-
 defmodule GenMcp.Mux do
   alias GenMcp.Mux.Session
   alias GenMcp.Mux.SessionSupervisor
