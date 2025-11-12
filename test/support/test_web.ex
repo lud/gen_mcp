@@ -1,4 +1,4 @@
-defmodule GenMcp.TestWeb do
+defmodule GenMCP.TestWeb do
   @moduledoc false
 
   def controller do
@@ -16,8 +16,8 @@ defmodule GenMcp.TestWeb do
   def verified_routes do
     quote do
       use Phoenix.VerifiedRoutes,
-        endpoint: GenMcp.TestWeb.Endpoint,
-        router: GenMcp.TestWeb.Router
+        endpoint: GenMCP.TestWeb.Endpoint,
+        router: GenMCP.TestWeb.Router
     end
   end
 

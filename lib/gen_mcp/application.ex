@@ -1,4 +1,4 @@
-defmodule GenMcp.Application do
+defmodule GenMCP.Application do
   # See https://hexdocs.pm/elixir/Application.html
   # for more information on OTP Applications
   @moduledoc false
@@ -23,14 +23,14 @@ defmodule GenMcp.Application do
   def start(_type, _args) do
     children =
       [
-        GenMcp.NodeSync.pg_child_spec(),
-        GenMcp.NodeSync,
-        GenMcp.Mux.SessionSupervisor,
-        {Registry, name: GenMcp.Mux.registry(), keys: :unique},
+        GenMCP.NodeSync.pg_child_spec(),
+        GenMCP.NodeSync,
+        GenMCP.Mux.SessionSupervisor,
+        {Registry, name: GenMCP.Mux.registry(), keys: :unique},
         {Task, &connect/0}
       ] ++
         if env() == :dev do
-          # [GenMcp.TestWeb.Endpoint]
+          # [GenMCP.TestWeb.Endpoint]
           []
         else
           []
@@ -38,7 +38,7 @@ defmodule GenMcp.Application do
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: GenMcp.Supervisor]
+    opts = [strategy: :one_for_one, name: GenMCP.Supervisor]
     Supervisor.start_link(children, opts)
   end
 

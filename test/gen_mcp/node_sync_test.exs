@@ -1,5 +1,5 @@
-defmodule GenMcp.NodeSyncTest do
-  alias GenMcp.NodeSync
+defmodule GenMCP.NodeSyncTest do
+  alias GenMCP.NodeSync
   require Logger
   use ExUnit.Case, async: true
 
@@ -30,7 +30,7 @@ defmodule GenMcp.NodeSyncTest do
       LocalCluster.start_link(1,
         environment: [
           gen_mcp: [
-            {GenMcp.TestWeb.Endpoint, server: true, http: [port: 5003], url: [port: 5003]}
+            {GenMCP.TestWeb.Endpoint, server: true, http: [port: 5003], url: [port: 5003]}
           ],
           logger: [
             level: :warning,

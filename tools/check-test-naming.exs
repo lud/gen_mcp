@@ -3,8 +3,8 @@ Mix.install([:modkit])
 
 defmodule Tool do
   @mount Modkit.Mount.define!([
-           {GenMcp, "test/gen_mcp"},
-           {GenMcpTest, "test/gen_mcp_test"}
+           {GenMCP, "test/gen_mcp"},
+           {GenMCPTest, "test/gen_mcp_test"}
          ])
 
   def run do

@@ -1,5 +1,5 @@
-defmodule GenMcp.PromptRepo do
-  alias GenMcp.Mcp.Entities
+defmodule GenMCP.Suite.PromptRepo do
+  alias GenMCP.Entities
 
   @type prompt_repo :: module | {module, arg} | prompt_repo_descriptor
   @type prompt_repo_descriptor :: %{

@@ -1,4 +1,4 @@
-defmodule GenMcp.Test.Tools.Calculator do
+defmodule GenMCP.Test.Tools.Calculator do
   use JSV.Schema
 
   def info(:name, _) do

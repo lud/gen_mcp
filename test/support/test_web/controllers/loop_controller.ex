@@ -1,5 +1,5 @@
-defmodule GenMcp.TestWeb.LoopController do
-  use GenMcp.TestWeb, :controller
+defmodule GenMCP.TestWeb.LoopController do
+  use GenMCP.TestWeb, :controller
 
   @moduledoc false
 

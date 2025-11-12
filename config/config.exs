@@ -1,6 +1,6 @@
 import Config
 
-config :gen_mcp, GenMcp.TestWeb.Endpoint,
+config :gen_mcp, GenMCP.TestWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 5002],
   url: [host: "localhost", port: 5002, scheme: "http"],
   server: true,

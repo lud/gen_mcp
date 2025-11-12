@@ -1,16 +1,16 @@
-defmodule GenMcp.Server.Basic do
-  alias GenMcp.Mcp.Entities
-  alias GenMcp.Mux.Channel
-  alias GenMcp.PromptRepo
-  alias GenMcp.ResourceRepo
-  alias GenMcp.Server
-  alias GenMcp.Tool
+defmodule GenMCP.Suite do
+  alias GenMCP.Entities
+  alias GenMCP.Mux.Channel
+  alias GenMCP.Server
+  alias GenMCP.Suite.PromptRepo
+  alias GenMCP.Suite.ResourceRepo
+  alias GenMCP.Suite.Tool
   require Logger
   require Record
 
-  @behaviour GenMcp.Server
+  @behaviour GenMCP.Server
 
-  @supported_protocol_versions GenMcp.supported_protocol_versions()
+  @supported_protocol_versions GenMCP.supported_protocol_versions()
 
   defmodule State do
     # We keep tools both as a list and as a map

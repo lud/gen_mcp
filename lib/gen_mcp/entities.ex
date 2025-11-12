@@ -1,11 +1,11 @@
-require GenMcp.JsonDerive, as: JsonDerive
+require GenMCP.JsonDerive, as: JsonDerive
 
 # Support modkit renaming
-defmodule GenMcp.Mcp.Entities do
+defmodule GenMCP.Entities do
   @moduledoc false
 end
 
-defmodule GenMcp.Mcp.Entities.Meta do
+defmodule GenMCP.Entities.Meta do
   use JSV.Schema
 
   def json_schema do
@@ -13,13 +13,13 @@ defmodule GenMcp.Mcp.Entities.Meta do
       additionalProperties: %{},
       description:
         "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
-      properties: %{progressToken: GenMcp.Mcp.Entities.ProgressToken},
+      properties: %{progressToken: GenMCP.Entities.ProgressToken},
       type: "object"
     }
   end
 end
 
-defmodule GenMcp.Mcp.Entities.RequestMeta do
+defmodule GenMCP.Entities.RequestMeta do
   use JSV.Schema
 
   def json_schema do
@@ -27,13 +27,13 @@ defmodule GenMcp.Mcp.Entities.RequestMeta do
       additionalProperties: %{},
       description:
         "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
-      properties: %{progressToken: GenMcp.Mcp.Entities.ProgressToken},
+      properties: %{progressToken: GenMCP.Entities.ProgressToken},
       type: "object"
     }
   end
 end
 
-defmodule GenMcp.Mcp.Entities.ModMap do
+defmodule GenMCP.Entities.ModMap do
   defmacro require_all do
     Enum.map(json_schema().definitions, fn {_, mod} ->
       quote do
@@ -46,109 +46,109 @@ defmodule GenMcp.Mcp.Entities.ModMap do
     %{
       "$schema": "http://json-schema.org/draft-07/schema#",
       definitions: %{
-        "Annotations" => GenMcp.Mcp.Entities.Annotations,
-        "AudioContent" => GenMcp.Mcp.Entities.AudioContent,
-        "BaseMetadata" => GenMcp.Mcp.Entities.BaseMetadata,
-        "BlobResourceContents" => GenMcp.Mcp.Entities.BlobResourceContents,
-        "BooleanSchema" => GenMcp.Mcp.Entities.BooleanSchema,
-        "CallToolRequest" => GenMcp.Mcp.Entities.CallToolRequest,
-        "CallToolRequestParams" => GenMcp.Mcp.Entities.CallToolRequestParams,
-        "CallToolResult" => GenMcp.Mcp.Entities.CallToolResult,
-        "CancelledNotification" => GenMcp.Mcp.Entities.CancelledNotification,
-        "ClientCapabilities" => GenMcp.Mcp.Entities.ClientCapabilities,
-        "ClientNotification" => GenMcp.Mcp.Entities.ClientNotification,
-        "ClientRequest" => GenMcp.Mcp.Entities.ClientRequest,
-        "ClientResult" => GenMcp.Mcp.Entities.ClientResult,
-        "CompleteRequest" => GenMcp.Mcp.Entities.CompleteRequest,
-        "CompleteResult" => GenMcp.Mcp.Entities.CompleteResult,
-        "ContentBlock" => GenMcp.Mcp.Entities.ContentBlock,
-        "CreateMessageRequest" => GenMcp.Mcp.Entities.CreateMessageRequest,
-        "CreateMessageResult" => GenMcp.Mcp.Entities.CreateMessageResult,
-        "Cursor" => GenMcp.Mcp.Entities.Cursor,
-        "ElicitRequest" => GenMcp.Mcp.Entities.ElicitRequest,
-        "ElicitResult" => GenMcp.Mcp.Entities.ElicitResult,
-        "EmbeddedResource" => GenMcp.Mcp.Entities.EmbeddedResource,
-        "EmptyResult" => GenMcp.Mcp.Entities.EmptyResult,
-        "EnumSchema" => GenMcp.Mcp.Entities.EnumSchema,
-        "GetPromptRequest" => GenMcp.Mcp.Entities.GetPromptRequest,
-        "GetPromptRequestParams" => GenMcp.Mcp.Entities.GetPromptRequestParams,
-        "GetPromptResult" => GenMcp.Mcp.Entities.GetPromptResult,
-        "ImageContent" => GenMcp.Mcp.Entities.ImageContent,
-        "Implementation" => GenMcp.Mcp.Entities.Implementation,
-        "InitializeRequest" => GenMcp.Mcp.Entities.InitializeRequest,
-        "InitializeRequestParams" => GenMcp.Mcp.Entities.InitializeRequestParams,
-        "InitializeResult" => GenMcp.Mcp.Entities.InitializeResult,
-        "InitializedNotification" => GenMcp.Mcp.Entities.InitializedNotification,
-        "JSONRPCError" => GenMcp.Mcp.Entities.JSONRPCError,
-        "JSONRPCMessage" => GenMcp.Mcp.Entities.JSONRPCMessage,
-        "JSONRPCNotification" => GenMcp.Mcp.Entities.JSONRPCNotification,
-        "JSONRPCRequest" => GenMcp.Mcp.Entities.JSONRPCRequest,
-        "JSONRPCResponse" => GenMcp.Mcp.Entities.JSONRPCResponse,
-        "ListPromptsRequest" => GenMcp.Mcp.Entities.ListPromptsRequest,
-        "ListPromptsRequestParams" => GenMcp.Mcp.Entities.ListPromptsRequestParams,
-        "ListPromptsResult" => GenMcp.Mcp.Entities.ListPromptsResult,
-        "ListResourceTemplatesRequest" => GenMcp.Mcp.Entities.ListResourceTemplatesRequest,
-        "ListResourceTemplatesResult" => GenMcp.Mcp.Entities.ListResourceTemplatesResult,
-        "ListResourcesRequest" => GenMcp.Mcp.Entities.ListResourcesRequest,
-        "ListResourcesRequestParams" => GenMcp.Mcp.Entities.ListResourcesRequestParams,
-        "ListResourcesResult" => GenMcp.Mcp.Entities.ListResourcesResult,
-        "ListRootsRequest" => GenMcp.Mcp.Entities.ListRootsRequest,
-        "ListRootsResult" => GenMcp.Mcp.Entities.ListRootsResult,
-        "ListToolsRequest" => GenMcp.Mcp.Entities.ListToolsRequest,
-        "ListToolsResult" => GenMcp.Mcp.Entities.ListToolsResult,
-        "LoggingLevel" => GenMcp.Mcp.Entities.LoggingLevel,
-        "LoggingMessageNotification" => GenMcp.Mcp.Entities.LoggingMessageNotification,
-        "ModelHint" => GenMcp.Mcp.Entities.ModelHint,
-        "ModelPreferences" => GenMcp.Mcp.Entities.ModelPreferences,
-        "Notification" => GenMcp.Mcp.Entities.Notification,
-        "NumberSchema" => GenMcp.Mcp.Entities.NumberSchema,
-        "PaginatedRequest" => GenMcp.Mcp.Entities.PaginatedRequest,
-        "PaginatedResult" => GenMcp.Mcp.Entities.PaginatedResult,
-        "PingRequest" => GenMcp.Mcp.Entities.PingRequest,
-        "PrimitiveSchemaDefinition" => GenMcp.Mcp.Entities.PrimitiveSchemaDefinition,
-        "ProgressNotification" => GenMcp.Mcp.Entities.ProgressNotification,
-        "ProgressToken" => GenMcp.Mcp.Entities.ProgressToken,
-        "Prompt" => GenMcp.Mcp.Entities.Prompt,
-        "PromptArgument" => GenMcp.Mcp.Entities.PromptArgument,
-        "PromptListChangedNotification" => GenMcp.Mcp.Entities.PromptListChangedNotification,
-        "PromptMessage" => GenMcp.Mcp.Entities.PromptMessage,
-        "PromptReference" => GenMcp.Mcp.Entities.PromptReference,
-        "ReadResourceRequest" => GenMcp.Mcp.Entities.ReadResourceRequest,
-        "ReadResourceRequestParams" => GenMcp.Mcp.Entities.ReadResourceRequestParams,
-        "ReadResourceResult" => GenMcp.Mcp.Entities.ReadResourceResult,
-        "Request" => GenMcp.Mcp.Entities.Request,
-        "RequestId" => GenMcp.Mcp.Entities.RequestId,
-        "Resource" => GenMcp.Mcp.Entities.Resource,
-        "ResourceContents" => GenMcp.Mcp.Entities.ResourceContents,
-        "ResourceLink" => GenMcp.Mcp.Entities.ResourceLink,
-        "ResourceListChangedNotification" => GenMcp.Mcp.Entities.ResourceListChangedNotification,
-        "ResourceTemplate" => GenMcp.Mcp.Entities.ResourceTemplate,
-        "ResourceTemplateReference" => GenMcp.Mcp.Entities.ResourceTemplateReference,
-        "ResourceUpdatedNotification" => GenMcp.Mcp.Entities.ResourceUpdatedNotification,
-        "Result" => GenMcp.Mcp.Entities.Result,
-        "Role" => GenMcp.Mcp.Entities.Role,
-        "Root" => GenMcp.Mcp.Entities.Root,
-        "RootsListChangedNotification" => GenMcp.Mcp.Entities.RootsListChangedNotification,
-        "SamplingMessage" => GenMcp.Mcp.Entities.SamplingMessage,
-        "ServerCapabilities" => GenMcp.Mcp.Entities.ServerCapabilities,
-        "ServerNotification" => GenMcp.Mcp.Entities.ServerNotification,
-        "ServerRequest" => GenMcp.Mcp.Entities.ServerRequest,
-        "ServerResult" => GenMcp.Mcp.Entities.ServerResult,
-        "SetLevelRequest" => GenMcp.Mcp.Entities.SetLevelRequest,
-        "StringSchema" => GenMcp.Mcp.Entities.StringSchema,
-        "SubscribeRequest" => GenMcp.Mcp.Entities.SubscribeRequest,
-        "TextContent" => GenMcp.Mcp.Entities.TextContent,
-        "TextResourceContents" => GenMcp.Mcp.Entities.TextResourceContents,
-        "Tool" => GenMcp.Mcp.Entities.Tool,
-        "ToolAnnotations" => GenMcp.Mcp.Entities.ToolAnnotations,
-        "ToolListChangedNotification" => GenMcp.Mcp.Entities.ToolListChangedNotification,
-        "UnsubscribeRequest" => GenMcp.Mcp.Entities.UnsubscribeRequest
+        "Annotations" => GenMCP.Entities.Annotations,
+        "AudioContent" => GenMCP.Entities.AudioContent,
+        "BaseMetadata" => GenMCP.Entities.BaseMetadata,
+        "BlobResourceContents" => GenMCP.Entities.BlobResourceContents,
+        "BooleanSchema" => GenMCP.Entities.BooleanSchema,
+        "CallToolRequest" => GenMCP.Entities.CallToolRequest,
+        "CallToolRequestParams" => GenMCP.Entities.CallToolRequestParams,
+        "CallToolResult" => GenMCP.Entities.CallToolResult,
+        "CancelledNotification" => GenMCP.Entities.CancelledNotification,
+        "ClientCapabilities" => GenMCP.Entities.ClientCapabilities,
+        "ClientNotification" => GenMCP.Entities.ClientNotification,
+        "ClientRequest" => GenMCP.Entities.ClientRequest,
+        "ClientResult" => GenMCP.Entities.ClientResult,
+        "CompleteRequest" => GenMCP.Entities.CompleteRequest,
+        "CompleteResult" => GenMCP.Entities.CompleteResult,
+        "ContentBlock" => GenMCP.Entities.ContentBlock,
+        "CreateMessageRequest" => GenMCP.Entities.CreateMessageRequest,
+        "CreateMessageResult" => GenMCP.Entities.CreateMessageResult,
+        "Cursor" => GenMCP.Entities.Cursor,
+        "ElicitRequest" => GenMCP.Entities.ElicitRequest,
+        "ElicitResult" => GenMCP.Entities.ElicitResult,
+        "EmbeddedResource" => GenMCP.Entities.EmbeddedResource,
+        "EmptyResult" => GenMCP.Entities.EmptyResult,
+        "EnumSchema" => GenMCP.Entities.EnumSchema,
+        "GetPromptRequest" => GenMCP.Entities.GetPromptRequest,
+        "GetPromptRequestParams" => GenMCP.Entities.GetPromptRequestParams,
+        "GetPromptResult" => GenMCP.Entities.GetPromptResult,
+        "ImageContent" => GenMCP.Entities.ImageContent,
+        "Implementation" => GenMCP.Entities.Implementation,
+        "InitializeRequest" => GenMCP.Entities.InitializeRequest,
+        "InitializeRequestParams" => GenMCP.Entities.InitializeRequestParams,
+        "InitializeResult" => GenMCP.Entities.InitializeResult,
+        "InitializedNotification" => GenMCP.Entities.InitializedNotification,
+        "JSONRPCError" => GenMCP.Entities.JSONRPCError,
+        "JSONRPCMessage" => GenMCP.Entities.JSONRPCMessage,
+        "JSONRPCNotification" => GenMCP.Entities.JSONRPCNotification,
+        "JSONRPCRequest" => GenMCP.Entities.JSONRPCRequest,
+        "JSONRPCResponse" => GenMCP.Entities.JSONRPCResponse,
+        "ListPromptsRequest" => GenMCP.Entities.ListPromptsRequest,
+        "ListPromptsRequestParams" => GenMCP.Entities.ListPromptsRequestParams,
+        "ListPromptsResult" => GenMCP.Entities.ListPromptsResult,
+        "ListResourceTemplatesRequest" => GenMCP.Entities.ListResourceTemplatesRequest,
+        "ListResourceTemplatesResult" => GenMCP.Entities.ListResourceTemplatesResult,
+        "ListResourcesRequest" => GenMCP.Entities.ListResourcesRequest,
+        "ListResourcesRequestParams" => GenMCP.Entities.ListResourcesRequestParams,
+        "ListResourcesResult" => GenMCP.Entities.ListResourcesResult,
+        "ListRootsRequest" => GenMCP.Entities.ListRootsRequest,
+        "ListRootsResult" => GenMCP.Entities.ListRootsResult,
+        "ListToolsRequest" => GenMCP.Entities.ListToolsRequest,
+        "ListToolsResult" => GenMCP.Entities.ListToolsResult,
+        "LoggingLevel" => GenMCP.Entities.LoggingLevel,
+        "LoggingMessageNotification" => GenMCP.Entities.LoggingMessageNotification,
+        "ModelHint" => GenMCP.Entities.ModelHint,
+        "ModelPreferences" => GenMCP.Entities.ModelPreferences,
+        "Notification" => GenMCP.Entities.Notification,
+        "NumberSchema" => GenMCP.Entities.NumberSchema,
+        "PaginatedRequest" => GenMCP.Entities.PaginatedRequest,
+        "PaginatedResult" => GenMCP.Entities.PaginatedResult,
+        "PingRequest" => GenMCP.Entities.PingRequest,
+        "PrimitiveSchemaDefinition" => GenMCP.Entities.PrimitiveSchemaDefinition,
+        "ProgressNotification" => GenMCP.Entities.ProgressNotification,
+        "ProgressToken" => GenMCP.Entities.ProgressToken,
+        "Prompt" => GenMCP.Entities.Prompt,
+        "PromptArgument" => GenMCP.Entities.PromptArgument,
+        "PromptListChangedNotification" => GenMCP.Entities.PromptListChangedNotification,
+        "PromptMessage" => GenMCP.Entities.PromptMessage,
+        "PromptReference" => GenMCP.Entities.PromptReference,
+        "ReadResourceRequest" => GenMCP.Entities.ReadResourceRequest,
+        "ReadResourceRequestParams" => GenMCP.Entities.ReadResourceRequestParams,
+        "ReadResourceResult" => GenMCP.Entities.ReadResourceResult,
+        "Request" => GenMCP.Entities.Request,
+        "RequestId" => GenMCP.Entities.RequestId,
+        "Resource" => GenMCP.Entities.Resource,
+        "ResourceContents" => GenMCP.Entities.ResourceContents,
+        "ResourceLink" => GenMCP.Entities.ResourceLink,
+        "ResourceListChangedNotification" => GenMCP.Entities.ResourceListChangedNotification,
+        "ResourceTemplate" => GenMCP.Entities.ResourceTemplate,
+        "ResourceTemplateReference" => GenMCP.Entities.ResourceTemplateReference,
+        "ResourceUpdatedNotification" => GenMCP.Entities.ResourceUpdatedNotification,
+        "Result" => GenMCP.Entities.Result,
+        "Role" => GenMCP.Entities.Role,
+        "Root" => GenMCP.Entities.Root,
+        "RootsListChangedNotification" => GenMCP.Entities.RootsListChangedNotification,
+        "SamplingMessage" => GenMCP.Entities.SamplingMessage,
+        "ServerCapabilities" => GenMCP.Entities.ServerCapabilities,
+        "ServerNotification" => GenMCP.Entities.ServerNotification,
+        "ServerRequest" => GenMCP.Entities.ServerRequest,
+        "ServerResult" => GenMCP.Entities.ServerResult,
+        "SetLevelRequest" => GenMCP.Entities.SetLevelRequest,
+        "StringSchema" => GenMCP.Entities.StringSchema,
+        "SubscribeRequest" => GenMCP.Entities.SubscribeRequest,
+        "TextContent" => GenMCP.Entities.TextContent,
+        "TextResourceContents" => GenMCP.Entities.TextResourceContents,
+        "Tool" => GenMCP.Entities.Tool,
+        "ToolAnnotations" => GenMCP.Entities.ToolAnnotations,
+        "ToolListChangedNotification" => GenMCP.Entities.ToolListChangedNotification,
+        "UnsubscribeRequest" => GenMCP.Entities.UnsubscribeRequest
       }
     }
   end
 end
 
-defmodule GenMcp.Mcp.Entities.Annotations do
+defmodule GenMCP.Entities.Annotations do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -165,7 +165,7 @@ defmodule GenMcp.Mcp.Entities.Annotations do
         It can include multiple entries to indicate content useful for
         multiple audiences (e.g., `["user", "assistant"]`).
         """,
-        items: GenMcp.Mcp.Entities.Role,
+        items: GenMCP.Entities.Role,
         type: "array"
       },
       lastModified:
@@ -200,15 +200,15 @@ defmodule GenMcp.Mcp.Entities.Annotations do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.AudioContent do
+defmodule GenMCP.Entities.AudioContent do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     description: "Audio provided to or from an LLM.",
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
-      annotations: GenMcp.Mcp.Entities.Annotations,
+      _meta: GenMCP.Entities.Meta,
+      annotations: GenMCP.Entities.Annotations,
       data: string_of("byte", description: "The base64-encoded audio data."),
       mimeType:
         string(
@@ -227,7 +227,7 @@ defmodule GenMcp.Mcp.Entities.AudioContent do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.BaseMetadata do
+defmodule GenMCP.Entities.BaseMetadata do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -265,13 +265,13 @@ defmodule GenMcp.Mcp.Entities.BaseMetadata do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.BlobResourceContents do
+defmodule GenMCP.Entities.BlobResourceContents do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
+      _meta: GenMCP.Entities.Meta,
       blob:
         string_of("byte",
           description: ~SD"""
@@ -289,7 +289,7 @@ defmodule GenMcp.Mcp.Entities.BlobResourceContents do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.BooleanSchema do
+defmodule GenMCP.Entities.BooleanSchema do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -308,7 +308,7 @@ defmodule GenMcp.Mcp.Entities.BooleanSchema do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.CallToolRequest do
+defmodule GenMCP.Entities.CallToolRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -317,9 +317,9 @@ defmodule GenMcp.Mcp.Entities.CallToolRequest do
     Used by the client to invoke a tool provided by the server.
     """,
     properties: %{
-      id: GenMcp.Mcp.Entities.RequestId,
+      id: GenMCP.Entities.RequestId,
       method: const("tools/call", default: "tools/call"),
-      params: GenMcp.Mcp.Entities.CallToolRequestParams
+      params: GenMCP.Entities.CallToolRequestParams
     },
     required: [:params],
     title: "CallToolRequest",
@@ -329,13 +329,13 @@ defmodule GenMcp.Mcp.Entities.CallToolRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.CallToolRequestParams do
+defmodule GenMCP.Entities.CallToolRequestParams do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     properties: %{
-      _meta: GenMcp.Mcp.Entities.RequestMeta,
+      _meta: GenMCP.Entities.RequestMeta,
       arguments: %{additionalProperties: %{}, type: "object"},
       name: string()
     },
@@ -347,20 +347,20 @@ defmodule GenMcp.Mcp.Entities.CallToolRequestParams do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.CallToolResult do
+defmodule GenMCP.Entities.CallToolResult do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     description: "The server's response to a tool call.",
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
+      _meta: GenMCP.Entities.Meta,
       content: %{
         description: ~SD"""
         A list of content objects that represent the unstructured result of
         the tool call.
         """,
-        items: GenMcp.Mcp.Entities.ContentBlock,
+        items: GenMCP.Entities.ContentBlock,
         type: "array"
       },
       isError:
@@ -397,7 +397,7 @@ defmodule GenMcp.Mcp.Entities.CallToolResult do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.CancelledNotification do
+defmodule GenMCP.Entities.CancelledNotification do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -426,7 +426,7 @@ defmodule GenMcp.Mcp.Entities.CancelledNotification do
               MAY be logged or presented to the user.
               """
             ),
-          requestId: GenMcp.Mcp.Entities.RequestId
+          requestId: GenMCP.Entities.RequestId
         },
         required: ["requestId"],
         type: "object"
@@ -440,7 +440,7 @@ defmodule GenMcp.Mcp.Entities.CancelledNotification do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ClientCapabilities do
+defmodule GenMCP.Entities.ClientCapabilities do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -499,61 +499,61 @@ defmodule GenMcp.Mcp.Entities.ClientCapabilities do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ClientNotification do
+defmodule GenMCP.Entities.ClientNotification do
   use JSV.Schema
 
   def json_schema do
     %{
       anyOf: [
-        GenMcp.Mcp.Entities.CancelledNotification,
-        GenMcp.Mcp.Entities.InitializedNotification,
-        GenMcp.Mcp.Entities.ProgressNotification,
-        GenMcp.Mcp.Entities.RootsListChangedNotification
+        GenMCP.Entities.CancelledNotification,
+        GenMCP.Entities.InitializedNotification,
+        GenMCP.Entities.ProgressNotification,
+        GenMCP.Entities.RootsListChangedNotification
       ]
     }
   end
 end
 
-defmodule GenMcp.Mcp.Entities.ClientRequest do
+defmodule GenMCP.Entities.ClientRequest do
   use JSV.Schema
 
   def json_schema do
     %{
       anyOf: [
-        GenMcp.Mcp.Entities.InitializeRequest,
-        GenMcp.Mcp.Entities.PingRequest,
-        GenMcp.Mcp.Entities.ListResourcesRequest,
-        GenMcp.Mcp.Entities.ListResourceTemplatesRequest,
-        GenMcp.Mcp.Entities.ReadResourceRequest,
-        GenMcp.Mcp.Entities.SubscribeRequest,
-        GenMcp.Mcp.Entities.UnsubscribeRequest,
-        GenMcp.Mcp.Entities.ListPromptsRequest,
-        GenMcp.Mcp.Entities.GetPromptRequest,
-        GenMcp.Mcp.Entities.ListToolsRequest,
-        GenMcp.Mcp.Entities.CallToolRequest,
-        GenMcp.Mcp.Entities.SetLevelRequest,
-        GenMcp.Mcp.Entities.CompleteRequest
+        GenMCP.Entities.InitializeRequest,
+        GenMCP.Entities.PingRequest,
+        GenMCP.Entities.ListResourcesRequest,
+        GenMCP.Entities.ListResourceTemplatesRequest,
+        GenMCP.Entities.ReadResourceRequest,
+        GenMCP.Entities.SubscribeRequest,
+        GenMCP.Entities.UnsubscribeRequest,
+        GenMCP.Entities.ListPromptsRequest,
+        GenMCP.Entities.GetPromptRequest,
+        GenMCP.Entities.ListToolsRequest,
+        GenMCP.Entities.CallToolRequest,
+        GenMCP.Entities.SetLevelRequest,
+        GenMCP.Entities.CompleteRequest
       ]
     }
   end
 end
 
-defmodule GenMcp.Mcp.Entities.ClientResult do
+defmodule GenMCP.Entities.ClientResult do
   use JSV.Schema
 
   def json_schema do
     %{
       anyOf: [
-        GenMcp.Mcp.Entities.Result,
-        GenMcp.Mcp.Entities.CreateMessageResult,
-        GenMcp.Mcp.Entities.ListRootsResult,
-        GenMcp.Mcp.Entities.ElicitResult
+        GenMCP.Entities.Result,
+        GenMCP.Entities.CreateMessageResult,
+        GenMCP.Entities.ListRootsResult,
+        GenMCP.Entities.ElicitResult
       ]
     }
   end
 end
 
-defmodule GenMcp.Mcp.Entities.CompleteRequest do
+defmodule GenMCP.Entities.CompleteRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -563,11 +563,11 @@ defmodule GenMcp.Mcp.Entities.CompleteRequest do
     options.
     """,
     properties: %{
-      id: GenMcp.Mcp.Entities.RequestId,
+      id: GenMCP.Entities.RequestId,
       method: const("completion/complete", default: "completion/complete"),
       params: %{
         properties: %{
-          _meta: GenMcp.Mcp.Entities.RequestMeta,
+          _meta: GenMCP.Entities.RequestMeta,
           argument: %{
             description: "The argument's information",
             properties: %{
@@ -596,10 +596,7 @@ defmodule GenMcp.Mcp.Entities.CompleteRequest do
             type: "object"
           },
           ref: %{
-            anyOf: [
-              GenMcp.Mcp.Entities.PromptReference,
-              GenMcp.Mcp.Entities.ResourceTemplateReference
-            ]
+            anyOf: [GenMCP.Entities.PromptReference, GenMCP.Entities.ResourceTemplateReference]
           }
         },
         required: ["argument", "ref"],
@@ -614,7 +611,7 @@ defmodule GenMcp.Mcp.Entities.CompleteRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.CompleteResult do
+defmodule GenMCP.Entities.CompleteResult do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -623,7 +620,7 @@ defmodule GenMcp.Mcp.Entities.CompleteResult do
     The server's response to a completion/complete request
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
+      _meta: GenMCP.Entities.Meta,
       completion: %{
         properties: %{
           hasMore:
@@ -660,23 +657,23 @@ defmodule GenMcp.Mcp.Entities.CompleteResult do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ContentBlock do
+defmodule GenMCP.Entities.ContentBlock do
   use JSV.Schema
 
   def json_schema do
     %{
       anyOf: [
-        GenMcp.Mcp.Entities.TextContent,
-        GenMcp.Mcp.Entities.ImageContent,
-        GenMcp.Mcp.Entities.AudioContent,
-        GenMcp.Mcp.Entities.ResourceLink,
-        GenMcp.Mcp.Entities.EmbeddedResource
+        GenMCP.Entities.TextContent,
+        GenMCP.Entities.ImageContent,
+        GenMCP.Entities.AudioContent,
+        GenMCP.Entities.ResourceLink,
+        GenMCP.Entities.EmbeddedResource
       ]
     }
   end
 end
 
-defmodule GenMcp.Mcp.Entities.CreateMessageRequest do
+defmodule GenMCP.Entities.CreateMessageRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -699,7 +696,7 @@ defmodule GenMcp.Mcp.Entities.CreateMessageRequest do
               The client MAY choose to sample fewer tokens than requested.
               """
             ),
-          messages: array_of(GenMcp.Mcp.Entities.SamplingMessage),
+          messages: array_of(GenMCP.Entities.SamplingMessage),
           metadata: %{
             additionalProperties: true,
             description: ~SD"""
@@ -709,7 +706,7 @@ defmodule GenMcp.Mcp.Entities.CreateMessageRequest do
             properties: %{},
             type: "object"
           },
-          modelPreferences: GenMcp.Mcp.Entities.ModelPreferences,
+          modelPreferences: GenMCP.Entities.ModelPreferences,
           stopSequences: array_of(string()),
           systemPrompt:
             string(
@@ -732,7 +729,7 @@ defmodule GenMcp.Mcp.Entities.CreateMessageRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.CreateMessageResult do
+defmodule GenMCP.Entities.CreateMessageResult do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -744,16 +741,16 @@ defmodule GenMcp.Mcp.Entities.CreateMessageResult do
     decide whether to allow the server to see it.
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
+      _meta: GenMCP.Entities.Meta,
       content: %{
         anyOf: [
-          GenMcp.Mcp.Entities.TextContent,
-          GenMcp.Mcp.Entities.ImageContent,
-          GenMcp.Mcp.Entities.AudioContent
+          GenMCP.Entities.TextContent,
+          GenMCP.Entities.ImageContent,
+          GenMCP.Entities.AudioContent
         ]
       },
       model: string(description: "The name of the model that generated the message."),
-      role: GenMcp.Mcp.Entities.Role,
+      role: GenMCP.Entities.Role,
       stopReason: string(description: "The reason why sampling stopped, if known.")
     },
     required: [:content, :model, :role],
@@ -764,7 +761,7 @@ defmodule GenMcp.Mcp.Entities.CreateMessageResult do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.Cursor do
+defmodule GenMCP.Entities.Cursor do
   use JSV.Schema
 
   def json_schema do
@@ -776,7 +773,7 @@ defmodule GenMcp.Mcp.Entities.Cursor do
   end
 end
 
-defmodule GenMcp.Mcp.Entities.ElicitRequest do
+defmodule GenMCP.Entities.ElicitRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -797,7 +794,7 @@ defmodule GenMcp.Mcp.Entities.ElicitRequest do
             """,
             properties: %{
               properties: %{
-                additionalProperties: GenMcp.Mcp.Entities.PrimitiveSchemaDefinition,
+                additionalProperties: GenMCP.Entities.PrimitiveSchemaDefinition,
                 type: "object"
               },
               required: array_of(string()),
@@ -819,14 +816,14 @@ defmodule GenMcp.Mcp.Entities.ElicitRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ElicitResult do
+defmodule GenMCP.Entities.ElicitResult do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     description: "The client's response to an elicitation request.",
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
+      _meta: GenMCP.Entities.Meta,
       action: string_enum_to_atom([:accept, :cancel, :decline]),
       content: %{
         additionalProperties: %{type: ["string", "integer", "boolean"]},
@@ -845,7 +842,7 @@ defmodule GenMcp.Mcp.Entities.ElicitResult do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.EmbeddedResource do
+defmodule GenMCP.Entities.EmbeddedResource do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -858,13 +855,10 @@ defmodule GenMcp.Mcp.Entities.EmbeddedResource do
     benefit of the LLM and/or the user.
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
-      annotations: GenMcp.Mcp.Entities.Annotations,
+      _meta: GenMCP.Entities.Meta,
+      annotations: GenMCP.Entities.Annotations,
       resource: %{
-        anyOf: [
-          GenMcp.Mcp.Entities.TextResourceContents,
-          GenMcp.Mcp.Entities.BlobResourceContents
-        ]
+        anyOf: [GenMCP.Entities.TextResourceContents, GenMCP.Entities.BlobResourceContents]
       },
       type: const("resource")
     },
@@ -876,15 +870,15 @@ defmodule GenMcp.Mcp.Entities.EmbeddedResource do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.EmptyResult do
+defmodule GenMCP.Entities.EmptyResult do
   use JSV.Schema
 
   def json_schema do
-    GenMcp.Mcp.Entities.Result
+    GenMCP.Entities.Result
   end
 end
 
-defmodule GenMcp.Mcp.Entities.EnumSchema do
+defmodule GenMCP.Entities.EnumSchema do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -904,7 +898,7 @@ defmodule GenMcp.Mcp.Entities.EnumSchema do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.GetPromptRequest do
+defmodule GenMCP.Entities.GetPromptRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -913,9 +907,9 @@ defmodule GenMcp.Mcp.Entities.GetPromptRequest do
     Used by the client to get a prompt provided by the server.
     """,
     properties: %{
-      id: GenMcp.Mcp.Entities.RequestId,
+      id: GenMCP.Entities.RequestId,
       method: const("prompts/get", default: "prompts/get"),
-      params: GenMcp.Mcp.Entities.GetPromptRequestParams
+      params: GenMCP.Entities.GetPromptRequestParams
     },
     required: [:params],
     title: "GetPromptRequest",
@@ -925,13 +919,13 @@ defmodule GenMcp.Mcp.Entities.GetPromptRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.GetPromptRequestParams do
+defmodule GenMCP.Entities.GetPromptRequestParams do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     properties: %{
-      _meta: GenMcp.Mcp.Entities.RequestMeta,
+      _meta: GenMCP.Entities.RequestMeta,
       arguments: %{
         additionalProperties: string(),
         description: "Arguments to use for templating the prompt.",
@@ -947,7 +941,7 @@ defmodule GenMcp.Mcp.Entities.GetPromptRequestParams do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.GetPromptResult do
+defmodule GenMCP.Entities.GetPromptResult do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -956,9 +950,9 @@ defmodule GenMcp.Mcp.Entities.GetPromptResult do
     The server's response to a prompts/get request from the client.
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
+      _meta: GenMCP.Entities.Meta,
       description: string(description: "An optional description for the prompt."),
-      messages: array_of(GenMcp.Mcp.Entities.PromptMessage)
+      messages: array_of(GenMCP.Entities.PromptMessage)
     },
     required: [:messages],
     title: "GetPromptResult",
@@ -968,15 +962,15 @@ defmodule GenMcp.Mcp.Entities.GetPromptResult do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ImageContent do
+defmodule GenMCP.Entities.ImageContent do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     description: "An image provided to or from an LLM.",
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
-      annotations: GenMcp.Mcp.Entities.Annotations,
+      _meta: GenMCP.Entities.Meta,
+      annotations: GenMCP.Entities.Annotations,
       data: string_of("byte", description: "The base64-encoded image data."),
       mimeType:
         string(
@@ -995,7 +989,7 @@ defmodule GenMcp.Mcp.Entities.ImageContent do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.Implementation do
+defmodule GenMCP.Entities.Implementation do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1034,7 +1028,7 @@ defmodule GenMcp.Mcp.Entities.Implementation do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.InitializeRequest do
+defmodule GenMCP.Entities.InitializeRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1044,9 +1038,9 @@ defmodule GenMcp.Mcp.Entities.InitializeRequest do
     connects, asking it to begin initialization.
     """,
     properties: %{
-      id: GenMcp.Mcp.Entities.RequestId,
+      id: GenMCP.Entities.RequestId,
       method: const("initialize", default: "initialize"),
-      params: GenMcp.Mcp.Entities.InitializeRequestParams
+      params: GenMCP.Entities.InitializeRequestParams
     },
     required: [:params],
     title: "InitializeRequest",
@@ -1056,15 +1050,15 @@ defmodule GenMcp.Mcp.Entities.InitializeRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.InitializeRequestParams do
+defmodule GenMCP.Entities.InitializeRequestParams do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     properties: %{
-      _meta: GenMcp.Mcp.Entities.RequestMeta,
-      capabilities: GenMcp.Mcp.Entities.ClientCapabilities,
-      clientInfo: GenMcp.Mcp.Entities.Implementation,
+      _meta: GenMCP.Entities.RequestMeta,
+      capabilities: GenMCP.Entities.ClientCapabilities,
+      clientInfo: GenMCP.Entities.Implementation,
       protocolVersion:
         string(
           description: ~SD"""
@@ -1081,7 +1075,7 @@ defmodule GenMcp.Mcp.Entities.InitializeRequestParams do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.InitializeResult do
+defmodule GenMCP.Entities.InitializeResult do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1091,8 +1085,8 @@ defmodule GenMcp.Mcp.Entities.InitializeResult do
     sends this response.
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
-      capabilities: GenMcp.Mcp.Entities.ServerCapabilities,
+      _meta: GenMCP.Entities.Meta,
+      capabilities: GenMCP.Entities.ServerCapabilities,
       instructions:
         string(
           description: ~SD"""
@@ -1112,7 +1106,7 @@ defmodule GenMcp.Mcp.Entities.InitializeResult do
           client cannot support this version, it MUST disconnect.
           """
         ),
-      serverInfo: GenMcp.Mcp.Entities.Implementation
+      serverInfo: GenMCP.Entities.Implementation
     },
     required: [:capabilities, :protocolVersion, :serverInfo],
     title: "InitializeResult",
@@ -1122,7 +1116,7 @@ defmodule GenMcp.Mcp.Entities.InitializeResult do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.InitializedNotification do
+defmodule GenMCP.Entities.InitializedNotification do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1135,7 +1129,7 @@ defmodule GenMcp.Mcp.Entities.InitializedNotification do
       method: const("notifications/initialized"),
       params: %{
         additionalProperties: %{},
-        properties: %{_meta: GenMcp.Mcp.Entities.Meta},
+        properties: %{_meta: GenMCP.Entities.Meta},
         type: "object"
       }
     },
@@ -1147,7 +1141,7 @@ defmodule GenMcp.Mcp.Entities.InitializedNotification do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.JSONRPCError do
+defmodule GenMCP.Entities.JSONRPCError do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1177,7 +1171,7 @@ defmodule GenMcp.Mcp.Entities.JSONRPCError do
         required: ["code", "message"],
         type: "object"
       },
-      id: GenMcp.Mcp.Entities.RequestId,
+      id: GenMCP.Entities.RequestId,
       jsonrpc: const("2.0")
     },
     required: [:error, :id, :jsonrpc],
@@ -1188,16 +1182,16 @@ defmodule GenMcp.Mcp.Entities.JSONRPCError do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.JSONRPCMessage do
+defmodule GenMCP.Entities.JSONRPCMessage do
   use JSV.Schema
 
   def json_schema do
     %{
       anyOf: [
-        GenMcp.Mcp.Entities.JSONRPCRequest,
-        GenMcp.Mcp.Entities.JSONRPCNotification,
-        GenMcp.Mcp.Entities.JSONRPCResponse,
-        GenMcp.Mcp.Entities.JSONRPCError
+        GenMCP.Entities.JSONRPCRequest,
+        GenMCP.Entities.JSONRPCNotification,
+        GenMCP.Entities.JSONRPCResponse,
+        GenMCP.Entities.JSONRPCError
       ],
       description: ~SD"""
       Refers to any valid JSON-RPC object that can be decoded off the wire,
@@ -1207,7 +1201,7 @@ defmodule GenMcp.Mcp.Entities.JSONRPCMessage do
   end
 end
 
-defmodule GenMcp.Mcp.Entities.JSONRPCNotification do
+defmodule GenMCP.Entities.JSONRPCNotification do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1218,7 +1212,7 @@ defmodule GenMcp.Mcp.Entities.JSONRPCNotification do
       method: string(),
       params: %{
         additionalProperties: %{},
-        properties: %{_meta: GenMcp.Mcp.Entities.Meta},
+        properties: %{_meta: GenMCP.Entities.Meta},
         type: "object"
       }
     },
@@ -1230,14 +1224,14 @@ defmodule GenMcp.Mcp.Entities.JSONRPCNotification do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.JSONRPCRequest do
+defmodule GenMCP.Entities.JSONRPCRequest do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     description: "A request that expects a response.",
     properties: %{
-      id: GenMcp.Mcp.Entities.RequestId,
+      id: GenMCP.Entities.RequestId,
       jsonrpc: const("2.0"),
       method: string(),
       params: %{
@@ -1249,7 +1243,7 @@ defmodule GenMcp.Mcp.Entities.JSONRPCRequest do
             See [specification/2025-06-18/basic/index#general-fields] for notes on
             _meta usage.
             """,
-            properties: %{progressToken: GenMcp.Mcp.Entities.ProgressToken},
+            properties: %{progressToken: GenMCP.Entities.ProgressToken},
             type: "object"
           }
         },
@@ -1264,16 +1258,16 @@ defmodule GenMcp.Mcp.Entities.JSONRPCRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.JSONRPCResponse do
+defmodule GenMCP.Entities.JSONRPCResponse do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     description: "A successful (non-error) response to a request.",
     properties: %{
-      id: GenMcp.Mcp.Entities.RequestId,
+      id: GenMCP.Entities.RequestId,
       jsonrpc: const("2.0"),
-      result: GenMcp.Mcp.Entities.Result
+      result: GenMCP.Entities.Result
     },
     required: [:id, :jsonrpc, :result],
     title: "JSONRPCResponse",
@@ -1283,7 +1277,7 @@ defmodule GenMcp.Mcp.Entities.JSONRPCResponse do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ListPromptsRequest do
+defmodule GenMCP.Entities.ListPromptsRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1293,9 +1287,9 @@ defmodule GenMcp.Mcp.Entities.ListPromptsRequest do
     the server has.
     """,
     properties: %{
-      id: GenMcp.Mcp.Entities.RequestId,
+      id: GenMCP.Entities.RequestId,
       method: const("prompts/list", default: "prompts/list"),
-      params: GenMcp.Mcp.Entities.ListPromptsRequestParams
+      params: GenMCP.Entities.ListPromptsRequestParams
     },
     required: [],
     title: "ListPromptsRequest",
@@ -1305,13 +1299,13 @@ defmodule GenMcp.Mcp.Entities.ListPromptsRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ListPromptsRequestParams do
+defmodule GenMCP.Entities.ListPromptsRequestParams do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     properties: %{
-      _meta: GenMcp.Mcp.Entities.RequestMeta,
+      _meta: GenMCP.Entities.RequestMeta,
       cursor:
         string(
           description: ~SD"""
@@ -1327,7 +1321,7 @@ defmodule GenMcp.Mcp.Entities.ListPromptsRequestParams do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ListPromptsResult do
+defmodule GenMCP.Entities.ListPromptsResult do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1336,7 +1330,7 @@ defmodule GenMcp.Mcp.Entities.ListPromptsResult do
     The server's response to a prompts/list request from the client.
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
+      _meta: GenMCP.Entities.Meta,
       nextCursor:
         string(
           description: ~SD"""
@@ -1344,7 +1338,7 @@ defmodule GenMcp.Mcp.Entities.ListPromptsResult do
           returned result. If present, there may be more results available.
           """
         ),
-      prompts: array_of(GenMcp.Mcp.Entities.Prompt)
+      prompts: array_of(GenMCP.Entities.Prompt)
     },
     required: [:prompts],
     title: "ListPromptsResult",
@@ -1354,7 +1348,7 @@ defmodule GenMcp.Mcp.Entities.ListPromptsResult do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ListResourceTemplatesRequest do
+defmodule GenMCP.Entities.ListResourceTemplatesRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1364,11 +1358,11 @@ defmodule GenMcp.Mcp.Entities.ListResourceTemplatesRequest do
     server has.
     """,
     properties: %{
-      id: GenMcp.Mcp.Entities.RequestId,
+      id: GenMCP.Entities.RequestId,
       method: const("resources/templates/list", default: "resources/templates/list"),
       params: %{
         properties: %{
-          _meta: GenMcp.Mcp.Entities.RequestMeta,
+          _meta: GenMCP.Entities.RequestMeta,
           cursor:
             string(
               description: ~SD"""
@@ -1388,7 +1382,7 @@ defmodule GenMcp.Mcp.Entities.ListResourceTemplatesRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ListResourceTemplatesResult do
+defmodule GenMCP.Entities.ListResourceTemplatesResult do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1398,7 +1392,7 @@ defmodule GenMcp.Mcp.Entities.ListResourceTemplatesResult do
     client.
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
+      _meta: GenMCP.Entities.Meta,
       nextCursor:
         string(
           description: ~SD"""
@@ -1406,7 +1400,7 @@ defmodule GenMcp.Mcp.Entities.ListResourceTemplatesResult do
           returned result. If present, there may be more results available.
           """
         ),
-      resourceTemplates: array_of(GenMcp.Mcp.Entities.ResourceTemplate)
+      resourceTemplates: array_of(GenMCP.Entities.ResourceTemplate)
     },
     required: [:resourceTemplates],
     title: "ListResourceTemplatesResult",
@@ -1416,7 +1410,7 @@ defmodule GenMcp.Mcp.Entities.ListResourceTemplatesResult do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ListResourcesRequest do
+defmodule GenMCP.Entities.ListResourcesRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1425,9 +1419,9 @@ defmodule GenMcp.Mcp.Entities.ListResourcesRequest do
     Sent from the client to request a list of resources the server has.
     """,
     properties: %{
-      id: GenMcp.Mcp.Entities.RequestId,
+      id: GenMCP.Entities.RequestId,
       method: const("resources/list", default: "resources/list"),
-      params: GenMcp.Mcp.Entities.ListResourcesRequestParams
+      params: GenMCP.Entities.ListResourcesRequestParams
     },
     required: [],
     title: "ListResourcesRequest",
@@ -1437,13 +1431,13 @@ defmodule GenMcp.Mcp.Entities.ListResourcesRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ListResourcesRequestParams do
+defmodule GenMCP.Entities.ListResourcesRequestParams do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     properties: %{
-      _meta: GenMcp.Mcp.Entities.RequestMeta,
+      _meta: GenMCP.Entities.RequestMeta,
       cursor:
         string(
           description: ~SD"""
@@ -1459,7 +1453,7 @@ defmodule GenMcp.Mcp.Entities.ListResourcesRequestParams do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ListResourcesResult do
+defmodule GenMCP.Entities.ListResourcesResult do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1468,7 +1462,7 @@ defmodule GenMcp.Mcp.Entities.ListResourcesResult do
     The server's response to a resources/list request from the client.
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
+      _meta: GenMCP.Entities.Meta,
       nextCursor:
         string(
           description: ~SD"""
@@ -1476,7 +1470,7 @@ defmodule GenMcp.Mcp.Entities.ListResourcesResult do
           returned result. If present, there may be more results available.
           """
         ),
-      resources: array_of(GenMcp.Mcp.Entities.Resource)
+      resources: array_of(GenMCP.Entities.Resource)
     },
     required: [:resources],
     title: "ListResourcesResult",
@@ -1486,7 +1480,7 @@ defmodule GenMcp.Mcp.Entities.ListResourcesResult do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ListRootsRequest do
+defmodule GenMCP.Entities.ListRootsRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1512,7 +1506,7 @@ defmodule GenMcp.Mcp.Entities.ListRootsRequest do
             See [specification/2025-06-18/basic/index#general-fields] for notes on
             _meta usage.
             """,
-            properties: %{progressToken: GenMcp.Mcp.Entities.ProgressToken},
+            properties: %{progressToken: GenMCP.Entities.ProgressToken},
             type: "object"
           }
         },
@@ -1527,7 +1521,7 @@ defmodule GenMcp.Mcp.Entities.ListRootsRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ListRootsResult do
+defmodule GenMCP.Entities.ListRootsResult do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1538,8 +1532,8 @@ defmodule GenMcp.Mcp.Entities.ListRootsResult do
     directory or file that the server can operate on.
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
-      roots: array_of(GenMcp.Mcp.Entities.Root)
+      _meta: GenMCP.Entities.Meta,
+      roots: array_of(GenMCP.Entities.Root)
     },
     required: [:roots],
     title: "ListRootsResult",
@@ -1549,7 +1543,7 @@ defmodule GenMcp.Mcp.Entities.ListRootsResult do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ListToolsRequest do
+defmodule GenMCP.Entities.ListToolsRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1558,11 +1552,11 @@ defmodule GenMcp.Mcp.Entities.ListToolsRequest do
     Sent from the client to request a list of tools the server has.
     """,
     properties: %{
-      id: GenMcp.Mcp.Entities.RequestId,
+      id: GenMCP.Entities.RequestId,
       method: const("tools/list", default: "tools/list"),
       params: %{
         properties: %{
-          _meta: GenMcp.Mcp.Entities.RequestMeta,
+          _meta: GenMCP.Entities.RequestMeta,
           cursor:
             string(
               description: ~SD"""
@@ -1582,7 +1576,7 @@ defmodule GenMcp.Mcp.Entities.ListToolsRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ListToolsResult do
+defmodule GenMCP.Entities.ListToolsResult do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1591,7 +1585,7 @@ defmodule GenMcp.Mcp.Entities.ListToolsResult do
     The server's response to a tools/list request from the client.
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
+      _meta: GenMCP.Entities.Meta,
       nextCursor:
         string(
           description: ~SD"""
@@ -1599,7 +1593,7 @@ defmodule GenMcp.Mcp.Entities.ListToolsResult do
           returned result. If present, there may be more results available.
           """
         ),
-      tools: array_of(GenMcp.Mcp.Entities.Tool)
+      tools: array_of(GenMCP.Entities.Tool)
     },
     required: [:tools],
     title: "ListToolsResult",
@@ -1609,7 +1603,7 @@ defmodule GenMcp.Mcp.Entities.ListToolsResult do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.LoggingLevel do
+defmodule GenMCP.Entities.LoggingLevel do
   use JSV.Schema
 
   def json_schema do
@@ -1617,7 +1611,7 @@ defmodule GenMcp.Mcp.Entities.LoggingLevel do
   end
 end
 
-defmodule GenMcp.Mcp.Entities.LoggingMessageNotification do
+defmodule GenMCP.Entities.LoggingMessageNotification do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1637,7 +1631,7 @@ defmodule GenMcp.Mcp.Entities.LoggingMessageNotification do
             serializable type is allowed here.
             """
           },
-          level: GenMcp.Mcp.Entities.LoggingLevel,
+          level: GenMCP.Entities.LoggingLevel,
           logger:
             string(
               description: ~SD"""
@@ -1657,7 +1651,7 @@ defmodule GenMcp.Mcp.Entities.LoggingMessageNotification do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ModelHint do
+defmodule GenMCP.Entities.ModelHint do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1694,7 +1688,7 @@ defmodule GenMcp.Mcp.Entities.ModelHint do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ModelPreferences do
+defmodule GenMCP.Entities.ModelPreferences do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1735,7 +1729,7 @@ defmodule GenMcp.Mcp.Entities.ModelPreferences do
         The client SHOULD prioritize these hints over the numeric priorities,
         but MAY still use the priorities to select from ambiguous matches.
         """,
-        items: GenMcp.Mcp.Entities.ModelHint,
+        items: GenMCP.Entities.ModelHint,
         type: "array"
       },
       intelligencePriority: %{
@@ -1766,7 +1760,7 @@ defmodule GenMcp.Mcp.Entities.ModelPreferences do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.Notification do
+defmodule GenMCP.Entities.Notification do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1775,7 +1769,7 @@ defmodule GenMcp.Mcp.Entities.Notification do
       method: string(),
       params: %{
         additionalProperties: %{},
-        properties: %{_meta: GenMcp.Mcp.Entities.Meta},
+        properties: %{_meta: GenMCP.Entities.Meta},
         type: "object"
       }
     },
@@ -1787,7 +1781,7 @@ defmodule GenMcp.Mcp.Entities.Notification do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.NumberSchema do
+defmodule GenMCP.Entities.NumberSchema do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1807,7 +1801,7 @@ defmodule GenMcp.Mcp.Entities.NumberSchema do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.PaginatedRequest do
+defmodule GenMCP.Entities.PaginatedRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1835,13 +1829,13 @@ defmodule GenMcp.Mcp.Entities.PaginatedRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.PaginatedResult do
+defmodule GenMCP.Entities.PaginatedResult do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
+      _meta: GenMCP.Entities.Meta,
       nextCursor:
         string(
           description: ~SD"""
@@ -1857,7 +1851,7 @@ defmodule GenMcp.Mcp.Entities.PaginatedResult do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.PingRequest do
+defmodule GenMCP.Entities.PingRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1868,11 +1862,11 @@ defmodule GenMcp.Mcp.Entities.PingRequest do
     else may be disconnected.
     """,
     properties: %{
-      id: GenMcp.Mcp.Entities.RequestId,
+      id: GenMCP.Entities.RequestId,
       method: const("ping", default: "ping"),
       params: %{
         additionalProperties: %{},
-        properties: %{_meta: GenMcp.Mcp.Entities.RequestMeta},
+        properties: %{_meta: GenMCP.Entities.RequestMeta},
         type: "object"
       }
     },
@@ -1884,16 +1878,16 @@ defmodule GenMcp.Mcp.Entities.PingRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.PrimitiveSchemaDefinition do
+defmodule GenMCP.Entities.PrimitiveSchemaDefinition do
   use JSV.Schema
 
   def json_schema do
     %{
       anyOf: [
-        GenMcp.Mcp.Entities.StringSchema,
-        GenMcp.Mcp.Entities.NumberSchema,
-        GenMcp.Mcp.Entities.BooleanSchema,
-        GenMcp.Mcp.Entities.EnumSchema
+        GenMCP.Entities.StringSchema,
+        GenMCP.Entities.NumberSchema,
+        GenMCP.Entities.BooleanSchema,
+        GenMCP.Entities.EnumSchema
       ],
       description: ~SD"""
       Restricted schema definitions that only allow primitive types without
@@ -1903,7 +1897,7 @@ defmodule GenMcp.Mcp.Entities.PrimitiveSchemaDefinition do
   end
 end
 
-defmodule GenMcp.Mcp.Entities.ProgressNotification do
+defmodule GenMCP.Entities.ProgressNotification do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1929,7 +1923,7 @@ defmodule GenMcp.Mcp.Entities.ProgressNotification do
               made, even if the total is unknown.
               """
             ),
-          progressToken: GenMcp.Mcp.Entities.ProgressToken,
+          progressToken: GenMCP.Entities.ProgressToken,
           total:
             number(
               description: ~SD"""
@@ -1950,7 +1944,7 @@ defmodule GenMcp.Mcp.Entities.ProgressNotification do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ProgressToken do
+defmodule GenMCP.Entities.ProgressToken do
   use JSV.Schema
 
   def json_schema do
@@ -1964,7 +1958,7 @@ defmodule GenMcp.Mcp.Entities.ProgressToken do
   end
 end
 
-defmodule GenMcp.Mcp.Entities.Prompt do
+defmodule GenMCP.Entities.Prompt do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -1973,12 +1967,12 @@ defmodule GenMcp.Mcp.Entities.Prompt do
     A prompt or prompt template that the server offers.
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
+      _meta: GenMCP.Entities.Meta,
       arguments: %{
         description: ~SD"""
         A list of arguments to use for templating the prompt.
         """,
-        items: GenMcp.Mcp.Entities.PromptArgument,
+        items: GenMCP.Entities.PromptArgument,
         type: "array"
       },
       description:
@@ -2015,7 +2009,7 @@ defmodule GenMcp.Mcp.Entities.Prompt do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.PromptArgument do
+defmodule GenMCP.Entities.PromptArgument do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2052,7 +2046,7 @@ defmodule GenMcp.Mcp.Entities.PromptArgument do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.PromptListChangedNotification do
+defmodule GenMCP.Entities.PromptListChangedNotification do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2066,7 +2060,7 @@ defmodule GenMcp.Mcp.Entities.PromptListChangedNotification do
       method: const("notifications/prompts/list_changed"),
       params: %{
         additionalProperties: %{},
-        properties: %{_meta: GenMcp.Mcp.Entities.Meta},
+        properties: %{_meta: GenMCP.Entities.Meta},
         type: "object"
       }
     },
@@ -2078,7 +2072,7 @@ defmodule GenMcp.Mcp.Entities.PromptListChangedNotification do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.PromptMessage do
+defmodule GenMCP.Entities.PromptMessage do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2090,8 +2084,8 @@ defmodule GenMcp.Mcp.Entities.PromptMessage do
     of resources from the MCP server.
     """,
     properties: %{
-      content: GenMcp.Mcp.Entities.ContentBlock,
-      role: GenMcp.Mcp.Entities.Role
+      content: GenMCP.Entities.ContentBlock,
+      role: GenMCP.Entities.Role
     },
     required: [:content, :role],
     title: "PromptMessage",
@@ -2101,7 +2095,7 @@ defmodule GenMcp.Mcp.Entities.PromptMessage do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.PromptReference do
+defmodule GenMCP.Entities.PromptReference do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2137,7 +2131,7 @@ defmodule GenMcp.Mcp.Entities.PromptReference do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ReadResourceRequest do
+defmodule GenMCP.Entities.ReadResourceRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2146,9 +2140,9 @@ defmodule GenMcp.Mcp.Entities.ReadResourceRequest do
     Sent from the client to the server, to read a specific resource URI.
     """,
     properties: %{
-      id: GenMcp.Mcp.Entities.RequestId,
+      id: GenMCP.Entities.RequestId,
       method: const("resources/read", default: "resources/read"),
-      params: GenMcp.Mcp.Entities.ReadResourceRequestParams
+      params: GenMCP.Entities.ReadResourceRequestParams
     },
     required: [:params],
     title: "ReadResourceRequest",
@@ -2158,13 +2152,13 @@ defmodule GenMcp.Mcp.Entities.ReadResourceRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ReadResourceRequestParams do
+defmodule GenMCP.Entities.ReadResourceRequestParams do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     properties: %{
-      _meta: GenMcp.Mcp.Entities.RequestMeta,
+      _meta: GenMCP.Entities.RequestMeta,
       uri:
         uri(
           description: ~SD"""
@@ -2181,7 +2175,7 @@ defmodule GenMcp.Mcp.Entities.ReadResourceRequestParams do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ReadResourceResult do
+defmodule GenMCP.Entities.ReadResourceResult do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2190,13 +2184,10 @@ defmodule GenMcp.Mcp.Entities.ReadResourceResult do
     The server's response to a resources/read request from the client.
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
+      _meta: GenMCP.Entities.Meta,
       contents:
         array_of(%{
-          anyOf: [
-            GenMcp.Mcp.Entities.TextResourceContents,
-            GenMcp.Mcp.Entities.BlobResourceContents
-          ]
+          anyOf: [GenMCP.Entities.TextResourceContents, GenMCP.Entities.BlobResourceContents]
         })
     },
     required: [:contents],
@@ -2207,7 +2198,7 @@ defmodule GenMcp.Mcp.Entities.ReadResourceResult do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.Request do
+defmodule GenMCP.Entities.Request do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2223,7 +2214,7 @@ defmodule GenMcp.Mcp.Entities.Request do
             See [specification/2025-06-18/basic/index#general-fields] for notes on
             _meta usage.
             """,
-            properties: %{progressToken: GenMcp.Mcp.Entities.ProgressToken},
+            properties: %{progressToken: GenMCP.Entities.ProgressToken},
             type: "object"
           }
         },
@@ -2238,7 +2229,7 @@ defmodule GenMcp.Mcp.Entities.Request do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.RequestId do
+defmodule GenMCP.Entities.RequestId do
   use JSV.Schema
 
   def json_schema do
@@ -2251,7 +2242,7 @@ defmodule GenMcp.Mcp.Entities.RequestId do
   end
 end
 
-defmodule GenMcp.Mcp.Entities.Resource do
+defmodule GenMCP.Entities.Resource do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2260,8 +2251,8 @@ defmodule GenMcp.Mcp.Entities.Resource do
     A known resource that the server is capable of reading.
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
-      annotations: GenMcp.Mcp.Entities.Annotations,
+      _meta: GenMCP.Entities.Meta,
+      annotations: GenMCP.Entities.Annotations,
       description:
         string(
           description: ~SD"""
@@ -2311,7 +2302,7 @@ defmodule GenMcp.Mcp.Entities.Resource do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ResourceContents do
+defmodule GenMCP.Entities.ResourceContents do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2320,7 +2311,7 @@ defmodule GenMcp.Mcp.Entities.ResourceContents do
     The contents of a specific resource or sub-resource.
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
+      _meta: GenMCP.Entities.Meta,
       mimeType: string(description: "The MIME type of this resource, if known."),
       uri: uri(description: "The URI of this resource.")
     },
@@ -2332,7 +2323,7 @@ defmodule GenMcp.Mcp.Entities.ResourceContents do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ResourceLink do
+defmodule GenMCP.Entities.ResourceLink do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2345,8 +2336,8 @@ defmodule GenMcp.Mcp.Entities.ResourceLink do
     the results of `resources/list` requests.
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
-      annotations: GenMcp.Mcp.Entities.Annotations,
+      _meta: GenMCP.Entities.Meta,
+      annotations: GenMCP.Entities.Annotations,
       description:
         string(
           description: ~SD"""
@@ -2397,7 +2388,7 @@ defmodule GenMcp.Mcp.Entities.ResourceLink do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ResourceListChangedNotification do
+defmodule GenMCP.Entities.ResourceListChangedNotification do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2411,7 +2402,7 @@ defmodule GenMcp.Mcp.Entities.ResourceListChangedNotification do
       method: const("notifications/resources/list_changed"),
       params: %{
         additionalProperties: %{},
-        properties: %{_meta: GenMcp.Mcp.Entities.Meta},
+        properties: %{_meta: GenMCP.Entities.Meta},
         type: "object"
       }
     },
@@ -2423,7 +2414,7 @@ defmodule GenMcp.Mcp.Entities.ResourceListChangedNotification do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ResourceTemplate do
+defmodule GenMCP.Entities.ResourceTemplate do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2432,8 +2423,8 @@ defmodule GenMcp.Mcp.Entities.ResourceTemplate do
     A template description for resources available on the server.
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
-      annotations: GenMcp.Mcp.Entities.Annotations,
+      _meta: GenMCP.Entities.Meta,
+      annotations: GenMCP.Entities.Annotations,
       description:
         string(
           description: ~SD"""
@@ -2486,7 +2477,7 @@ defmodule GenMcp.Mcp.Entities.ResourceTemplate do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ResourceTemplateReference do
+defmodule GenMCP.Entities.ResourceTemplateReference do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2506,7 +2497,7 @@ defmodule GenMcp.Mcp.Entities.ResourceTemplateReference do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ResourceUpdatedNotification do
+defmodule GenMCP.Entities.ResourceUpdatedNotification do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2540,13 +2531,13 @@ defmodule GenMcp.Mcp.Entities.ResourceUpdatedNotification do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.Result do
+defmodule GenMCP.Entities.Result do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     additionalProperties: %{},
-    properties: %{_meta: GenMcp.Mcp.Entities.Meta},
+    properties: %{_meta: GenMCP.Entities.Meta},
     title: "Result",
     type: "object"
   }
@@ -2554,7 +2545,7 @@ defmodule GenMcp.Mcp.Entities.Result do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.Role do
+defmodule GenMCP.Entities.Role do
   use JSV.Schema
 
   def json_schema do
@@ -2562,7 +2553,7 @@ defmodule GenMcp.Mcp.Entities.Role do
   end
 end
 
-defmodule GenMcp.Mcp.Entities.Root do
+defmodule GenMCP.Entities.Root do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2571,7 +2562,7 @@ defmodule GenMcp.Mcp.Entities.Root do
     Represents a root directory or file that the server can operate on.
     """,
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
+      _meta: GenMCP.Entities.Meta,
       name:
         string(
           description: ~SD"""
@@ -2598,7 +2589,7 @@ defmodule GenMcp.Mcp.Entities.Root do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.RootsListChangedNotification do
+defmodule GenMCP.Entities.RootsListChangedNotification do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2613,7 +2604,7 @@ defmodule GenMcp.Mcp.Entities.RootsListChangedNotification do
       method: const("notifications/roots/list_changed"),
       params: %{
         additionalProperties: %{},
-        properties: %{_meta: GenMcp.Mcp.Entities.Meta},
+        properties: %{_meta: GenMCP.Entities.Meta},
         type: "object"
       }
     },
@@ -2625,7 +2616,7 @@ defmodule GenMcp.Mcp.Entities.RootsListChangedNotification do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.SamplingMessage do
+defmodule GenMCP.Entities.SamplingMessage do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2636,12 +2627,12 @@ defmodule GenMcp.Mcp.Entities.SamplingMessage do
     properties: %{
       content: %{
         anyOf: [
-          GenMcp.Mcp.Entities.TextContent,
-          GenMcp.Mcp.Entities.ImageContent,
-          GenMcp.Mcp.Entities.AudioContent
+          GenMCP.Entities.TextContent,
+          GenMCP.Entities.ImageContent,
+          GenMCP.Entities.AudioContent
         ]
       },
-      role: GenMcp.Mcp.Entities.Role
+      role: GenMCP.Entities.Role
     },
     required: [:content, :role],
     title: "SamplingMessage",
@@ -2651,7 +2642,7 @@ defmodule GenMcp.Mcp.Entities.SamplingMessage do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ServerCapabilities do
+defmodule GenMCP.Entities.ServerCapabilities do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2744,61 +2735,61 @@ defmodule GenMcp.Mcp.Entities.ServerCapabilities do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ServerNotification do
+defmodule GenMCP.Entities.ServerNotification do
   use JSV.Schema
 
   def json_schema do
     %{
       anyOf: [
-        GenMcp.Mcp.Entities.CancelledNotification,
-        GenMcp.Mcp.Entities.ProgressNotification,
-        GenMcp.Mcp.Entities.ResourceListChangedNotification,
-        GenMcp.Mcp.Entities.ResourceUpdatedNotification,
-        GenMcp.Mcp.Entities.PromptListChangedNotification,
-        GenMcp.Mcp.Entities.ToolListChangedNotification,
-        GenMcp.Mcp.Entities.LoggingMessageNotification
+        GenMCP.Entities.CancelledNotification,
+        GenMCP.Entities.ProgressNotification,
+        GenMCP.Entities.ResourceListChangedNotification,
+        GenMCP.Entities.ResourceUpdatedNotification,
+        GenMCP.Entities.PromptListChangedNotification,
+        GenMCP.Entities.ToolListChangedNotification,
+        GenMCP.Entities.LoggingMessageNotification
       ]
     }
   end
 end
 
-defmodule GenMcp.Mcp.Entities.ServerRequest do
+defmodule GenMCP.Entities.ServerRequest do
   use JSV.Schema
 
   def json_schema do
     %{
       anyOf: [
-        GenMcp.Mcp.Entities.PingRequest,
-        GenMcp.Mcp.Entities.CreateMessageRequest,
-        GenMcp.Mcp.Entities.ListRootsRequest,
-        GenMcp.Mcp.Entities.ElicitRequest
+        GenMCP.Entities.PingRequest,
+        GenMCP.Entities.CreateMessageRequest,
+        GenMCP.Entities.ListRootsRequest,
+        GenMCP.Entities.ElicitRequest
       ]
     }
   end
 end
 
-defmodule GenMcp.Mcp.Entities.ServerResult do
+defmodule GenMCP.Entities.ServerResult do
   use JSV.Schema
 
   def json_schema do
     %{
       anyOf: [
-        GenMcp.Mcp.Entities.Result,
-        GenMcp.Mcp.Entities.InitializeResult,
-        GenMcp.Mcp.Entities.ListResourcesResult,
-        GenMcp.Mcp.Entities.ListResourceTemplatesResult,
-        GenMcp.Mcp.Entities.ReadResourceResult,
-        GenMcp.Mcp.Entities.ListPromptsResult,
-        GenMcp.Mcp.Entities.GetPromptResult,
-        GenMcp.Mcp.Entities.ListToolsResult,
-        GenMcp.Mcp.Entities.CallToolResult,
-        GenMcp.Mcp.Entities.CompleteResult
+        GenMCP.Entities.Result,
+        GenMCP.Entities.InitializeResult,
+        GenMCP.Entities.ListResourcesResult,
+        GenMCP.Entities.ListResourceTemplatesResult,
+        GenMCP.Entities.ReadResourceResult,
+        GenMCP.Entities.ListPromptsResult,
+        GenMCP.Entities.GetPromptResult,
+        GenMCP.Entities.ListToolsResult,
+        GenMCP.Entities.CallToolResult,
+        GenMCP.Entities.CompleteResult
       ]
     }
   end
 end
 
-defmodule GenMcp.Mcp.Entities.SetLevelRequest do
+defmodule GenMCP.Entities.SetLevelRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2807,12 +2798,12 @@ defmodule GenMcp.Mcp.Entities.SetLevelRequest do
     A request from the client to the server, to enable or adjust logging.
     """,
     properties: %{
-      id: GenMcp.Mcp.Entities.RequestId,
+      id: GenMCP.Entities.RequestId,
       method: const("logging/setLevel", default: "logging/setLevel"),
       params: %{
         properties: %{
-          _meta: GenMcp.Mcp.Entities.RequestMeta,
-          level: GenMcp.Mcp.Entities.LoggingLevel
+          _meta: GenMCP.Entities.RequestMeta,
+          level: GenMCP.Entities.LoggingLevel
         },
         required: ["level"],
         type: "object"
@@ -2826,7 +2817,7 @@ defmodule GenMcp.Mcp.Entities.SetLevelRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.StringSchema do
+defmodule GenMCP.Entities.StringSchema do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2847,7 +2838,7 @@ defmodule GenMcp.Mcp.Entities.StringSchema do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.SubscribeRequest do
+defmodule GenMCP.Entities.SubscribeRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -2857,11 +2848,11 @@ defmodule GenMcp.Mcp.Entities.SubscribeRequest do
     the server whenever a particular resource changes.
     """,
     properties: %{
-      id: GenMcp.Mcp.Entities.RequestId,
+      id: GenMCP.Entities.RequestId,
       method: const("resources/subscribe", default: "resources/subscribe"),
       params: %{
         properties: %{
-          _meta: GenMcp.Mcp.Entities.RequestMeta,
+          _meta: GenMCP.Entities.RequestMeta,
           uri:
             uri(
               description: ~SD"""
@@ -2882,15 +2873,15 @@ defmodule GenMcp.Mcp.Entities.SubscribeRequest do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.TextContent do
+defmodule GenMCP.Entities.TextContent do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     description: "Text provided to or from an LLM.",
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
-      annotations: GenMcp.Mcp.Entities.Annotations,
+      _meta: GenMCP.Entities.Meta,
+      annotations: GenMCP.Entities.Annotations,
       text: string(description: "The text content of the message."),
       type: const("text")
     },
@@ -2902,13 +2893,13 @@ defmodule GenMcp.Mcp.Entities.TextContent do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.TextResourceContents do
+defmodule GenMCP.Entities.TextResourceContents do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
+      _meta: GenMCP.Entities.Meta,
       mimeType: string(description: "The MIME type of this resource, if known."),
       text:
         string(
@@ -2927,15 +2918,15 @@ defmodule GenMcp.Mcp.Entities.TextResourceContents do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.Tool do
+defmodule GenMCP.Entities.Tool do
   use JSV.Schema
   JsonDerive.auto()
 
   defschema %{
     description: "Definition for a tool the client can call.",
     properties: %{
-      _meta: GenMcp.Mcp.Entities.Meta,
-      annotations: GenMcp.Mcp.Entities.ToolAnnotations,
+      _meta: GenMCP.Entities.Meta,
+      annotations: GenMCP.Entities.ToolAnnotations,
       description:
         string(
           description: ~SD"""
@@ -3012,7 +3003,7 @@ defmodule GenMcp.Mcp.Entities.Tool do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ToolAnnotations do
+defmodule GenMCP.Entities.ToolAnnotations do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -3078,7 +3069,7 @@ defmodule GenMcp.Mcp.Entities.ToolAnnotations do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.ToolListChangedNotification do
+defmodule GenMCP.Entities.ToolListChangedNotification do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -3092,7 +3083,7 @@ defmodule GenMcp.Mcp.Entities.ToolListChangedNotification do
       method: const("notifications/tools/list_changed"),
       params: %{
         additionalProperties: %{},
-        properties: %{_meta: GenMcp.Mcp.Entities.Meta},
+        properties: %{_meta: GenMCP.Entities.Meta},
         type: "object"
       }
     },
@@ -3104,7 +3095,7 @@ defmodule GenMcp.Mcp.Entities.ToolListChangedNotification do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMcp.Mcp.Entities.UnsubscribeRequest do
+defmodule GenMCP.Entities.UnsubscribeRequest do
   use JSV.Schema
   JsonDerive.auto()
 
@@ -3115,11 +3106,11 @@ defmodule GenMcp.Mcp.Entities.UnsubscribeRequest do
     resources/subscribe request.
     """,
     properties: %{
-      id: GenMcp.Mcp.Entities.RequestId,
+      id: GenMCP.Entities.RequestId,
       method: const("resources/unsubscribe", default: "resources/unsubscribe"),
       params: %{
         properties: %{
-          _meta: GenMcp.Mcp.Entities.RequestMeta,
+          _meta: GenMCP.Entities.RequestMeta,
           uri: uri(description: "The URI of the resource to unsubscribe from.")
         },
         required: ["uri"],

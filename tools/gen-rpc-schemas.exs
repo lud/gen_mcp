@@ -114,7 +114,7 @@ defmodule Generator do
 
     code = Enum.intersperse([prelude(), mod_map(defs, metaschema), modules], "\n\n")
 
-    File.write!("lib/gen_mcp/mcp/entities.ex", code)
+    File.write!("lib/gen_mcp/entities.ex", code)
 
     {_, 0} = System.cmd("mix", ~w(format --migrate))
 
@@ -224,7 +224,7 @@ defmodule Generator do
 
   def prelude do
     """
-    require GenMcp.JsonDerive, as: JsonDerive
+    require GenMCP.JsonDerive, as: JsonDerive
 
     # Support modkit renaming
     defmodule #{inspect(base_module())} do
@@ -238,7 +238,7 @@ defmodule Generator do
         %{
           additionalProperties: %{},
           description: "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
-          properties: %{progressToken: GenMcp.Mcp.Entities.ProgressToken},
+          properties: %{progressToken: GenMCP.Entities.ProgressToken},
           type: "object"
         }
       end
@@ -251,7 +251,7 @@ defmodule Generator do
         %{
           additionalProperties: %{},
           description: "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
-          properties: %{progressToken: GenMcp.Mcp.Entities.ProgressToken},
+          properties: %{progressToken: GenMCP.Entities.ProgressToken},
           type: "object"
         }
       end
@@ -511,7 +511,7 @@ defmodule Generator do
   end
 
   def base_module do
-    GenMcp.Mcp.Entities
+    GenMCP.Entities
   end
 
   defp module_name(name) do

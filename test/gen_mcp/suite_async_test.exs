@@ -1,10 +1,10 @@
 # credo:disable-for-this-file Credo.Check.Readability.LargeNumbers
 
-defmodule GenMcp.Server.BasicAsyncTest do
-  alias GenMcp.Mcp.Entities
-  alias GenMcp.Server
-  alias GenMcp.Server.Basic
-  alias GenMcp.Support.ToolMock
+defmodule GenMCP.SuiteAsyncTest do
+  alias GenMCP.Entities
+  alias GenMCP.Server
+  alias GenMCP.Suite
+  alias GenMCP.Support.ToolMock
   import Mox
   use ExUnit.Case, async: true
 
@@ -30,11 +30,11 @@ defmodule GenMcp.Server.BasicAsyncTest do
   end
 
   defp check_error(reason) do
-    GenMcp.RpcError.cast_error(reason)
+    GenMCP.RpcError.cast_error(reason)
   end
 
   defp init_session(server_opts) do
-    assert {:ok, state} = Basic.init(Keyword.merge(@server_info, server_opts))
+    assert {:ok, state} = Suite.init(Keyword.merge(@server_info, server_opts))
 
     init_req = %Entities.InitializeRequest{
       id: "setup-init-1",
@@ -47,7 +47,7 @@ defmodule GenMcp.Server.BasicAsyncTest do
     }
 
     assert {:reply, {:result, _result}, %{status: :server_initialized} = state} =
-             Basic.handle_request(init_req, chan_info(), state)
+             Suite.handle_request(init_req, chan_info(), state)
 
     client_init_notif = %Entities.InitializedNotification{
       method: "notifications/initialized",
@@ -55,7 +55,7 @@ defmodule GenMcp.Server.BasicAsyncTest do
     }
 
     assert {:noreply, %{status: :client_initialized} = state} =
-             Basic.handle_notification(client_init_notif, state)
+             Suite.handle_notification(client_init_notif, state)
 
     state
   end
@@ -90,10 +90,10 @@ defmodule GenMcp.Server.BasicAsyncTest do
 
       # Call the tool - should return :stream since tool is async
       assert {:reply, :stream, state} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
 
       # Deliver some response with the ref
-      assert {:noreply, _state} = Basic.handle_info({ref, {:success, 42}}, state)
+      assert {:noreply, _state} = Suite.handle_info({ref, {:success, 42}}, state)
 
       # The continue callback should have been called with wrapped result
       # and the result should be delivered to the client process
@@ -136,14 +136,14 @@ defmodule GenMcp.Server.BasicAsyncTest do
 
       # Call the tool - should return :stream since tool is async
       assert {:reply, :stream, state} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
 
       # Wait for task to start and complete
       assert_receive :task_started
       assert_receive {ref, {:computed, 100}} when is_reference(ref)
 
       # Deliver message to server
-      assert {:noreply, _state} = Basic.handle_info({ref, {:computed, 100}}, state)
+      assert {:noreply, _state} = Suite.handle_info({ref, {:computed, 100}}, state)
 
       # Assert result is delivered to client
       assert_receive {:"$gen_mcp", :result, result}
@@ -192,12 +192,12 @@ defmodule GenMcp.Server.BasicAsyncTest do
       }
 
       assert {:reply, :stream, state} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
 
       assert_receive :supervised_task_started
       assert_receive {ref, {:supervised_result, 200}} when is_reference(ref)
 
-      assert {:noreply, _state} = Basic.handle_info({ref, {:supervised_result, 200}}, state)
+      assert {:noreply, _state} = Suite.handle_info({ref, {:supervised_result, 200}}, state)
 
       # Assert result is delivered to client
       assert_receive {:"$gen_mcp", :result, result}
@@ -241,13 +241,13 @@ defmodule GenMcp.Server.BasicAsyncTest do
       }
 
       assert {:reply, :stream, state} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
 
       assert_receive :task_running
       assert_receive {ref, :completed} when is_reference(ref)
 
       # Process the successful result first
-      assert {:noreply, state} = Basic.handle_info({ref, :completed}, state)
+      assert {:noreply, state} = Suite.handle_info({ref, :completed}, state)
 
       # The server demonitored the task
       assert false == Process.demonitor(ref, [:info])
@@ -255,7 +255,7 @@ defmodule GenMcp.Server.BasicAsyncTest do
       # Server should ignore this DOWN message since task already completed
       # This should NOT call continue/3 again
       assert {:noreply, _state} =
-               Basic.handle_info({:DOWN, ref, :process, self(), :normal}, state)
+               Suite.handle_info({:DOWN, ref, :process, self(), :normal}, state)
 
       # Assert result is delivered to client
       assert_receive {:"$gen_mcp", :result, result}
@@ -302,13 +302,13 @@ defmodule GenMcp.Server.BasicAsyncTest do
       }
 
       assert {:reply, :stream, state} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
 
       assert_receive :about_to_fail
       downmsg = assert_receive {:DOWN, _ref, :process, _pid, :intentional_failure}
 
       # Server should call continue with error tuple
-      assert {:noreply, _state} = Basic.handle_info(downmsg, state)
+      assert {:noreply, _state} = Suite.handle_info(downmsg, state)
 
       # Assert result is delivered to client
       assert_receive {:"$gen_mcp", :result, result}
@@ -350,7 +350,7 @@ defmodule GenMcp.Server.BasicAsyncTest do
             }
           }
 
-          Basic.handle_request(tool_call_req, chan_info(), state)
+          Suite.handle_request(tool_call_req, chan_info(), state)
           Process.sleep(:infinity)
         end)
 
@@ -384,10 +384,10 @@ defmodule GenMcp.Server.BasicAsyncTest do
 
       # Initial call succeeds
       assert {:reply, :stream, state} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
 
       # Delivering a reply: should return an error
-      assert {:noreply, _state} = Basic.handle_info({ref, :some_result}, state)
+      assert {:noreply, _state} = Suite.handle_info({ref, :some_result}, state)
 
       # The error should be delivered to the client
       assert_receive {:"$gen_mcp", :error, error}
@@ -425,9 +425,9 @@ defmodule GenMcp.Server.BasicAsyncTest do
       }
 
       assert {:reply, :stream, state} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
 
-      assert {:noreply, state} = Basic.handle_info({ref, :first_result}, state)
+      assert {:noreply, state} = Suite.handle_info({ref, :first_result}, state)
 
       # Assert result is delivered to client
       assert_receive {:"$gen_mcp", :result, result}
@@ -441,7 +441,7 @@ defmodule GenMcp.Server.BasicAsyncTest do
       #
       # This can happen if users send {ref, data} from other process instead of
       # using Tasks.
-      assert {:noreply, _state} = Basic.handle_info({ref, :stale_result}, state)
+      assert {:noreply, _state} = Suite.handle_info({ref, :stale_result}, state)
 
       # This should log an error but we do not care in this test
     end
@@ -480,13 +480,13 @@ defmodule GenMcp.Server.BasicAsyncTest do
 
       # Initial call
       assert {:reply, :stream, state} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
 
       # Some first result
-      assert {:noreply, state} = Basic.handle_info({ref1, :step1_complete}, state)
+      assert {:noreply, state} = Suite.handle_info({ref1, :step1_complete}, state)
 
       # Some some second result
-      assert {:noreply, _state} = Basic.handle_info({ref2, :step2_complete}, state)
+      assert {:noreply, _state} = Suite.handle_info({ref2, :step2_complete}, state)
 
       # Assert final result is delivered to client
       assert_receive {:"$gen_mcp", :result, result}
@@ -539,17 +539,17 @@ defmodule GenMcp.Server.BasicAsyncTest do
 
       # Initial call
       assert {:reply, :stream, state} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
 
       # Process first async result (success)
-      assert {:noreply, state} = Basic.handle_info({ref1, :step1_ok}, state)
+      assert {:noreply, state} = Suite.handle_info({ref1, :step1_ok}, state)
 
       # Second step fails
       assert_receive :step2_about_to_fail
       downmsg = assert_receive {:DOWN, _ref2, :process, _pid, :step2_failure}
 
       # Process error
-      assert {:noreply, _state} = Basic.handle_info(downmsg, state)
+      assert {:noreply, _state} = Suite.handle_info(downmsg, state)
 
       # Assert result is delivered to client (tool recovered from error)
       assert_receive {:"$gen_mcp", :result, result}
@@ -594,11 +594,11 @@ defmodule GenMcp.Server.BasicAsyncTest do
 
       # The message might already be in the mailbox before handle_request returns
       assert {:reply, :stream, state} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
 
       # Message should be available (might have been sent before handle_request returned)
       msg = assert_receive {^ref, :instant_result}, 500
-      assert {:noreply, _state} = Basic.handle_info(msg, state)
+      assert {:noreply, _state} = Suite.handle_info(msg, state)
 
       # Assert result is delivered to client
       assert_receive {:"$gen_mcp", :result, result}
@@ -664,7 +664,7 @@ defmodule GenMcp.Server.BasicAsyncTest do
         }
       }
 
-      assert {:reply, :stream, state} = Basic.handle_request(req_a, chan_info_a, state)
+      assert {:reply, :stream, state} = Suite.handle_request(req_a, chan_info_a, state)
 
       req_b = %Entities.CallToolRequest{
         id: 1002,
@@ -675,12 +675,12 @@ defmodule GenMcp.Server.BasicAsyncTest do
         }
       }
 
-      assert {:reply, :stream, state} = Basic.handle_request(req_b, chan_info_b, state)
+      assert {:reply, :stream, state} = Suite.handle_request(req_b, chan_info_b, state)
 
       # We should be able to handle the results in any order, so let's do B
       # before A.
-      assert {:noreply, state} = Basic.handle_info({ref_b, :result_b}, state)
-      assert {:noreply, _state} = Basic.handle_info({ref_a, :result_a}, state)
+      assert {:noreply, state} = Suite.handle_info({ref_b, :result_b}, state)
+      assert {:noreply, _state} = Suite.handle_info({ref_a, :result_a}, state)
 
       # Our fake clients should relay the results and have been received the right ones
 
@@ -717,7 +717,7 @@ defmodule GenMcp.Server.BasicAsyncTest do
       }
 
       assert {:reply, :stream, state} =
-               Basic.handle_request(req_a, chan_info(), state)
+               Suite.handle_request(req_a, chan_info(), state)
 
       # Call tool B
       req_b = %Entities.CallToolRequest{
@@ -729,16 +729,16 @@ defmodule GenMcp.Server.BasicAsyncTest do
         }
       }
 
-      assert {:reply, :stream, state} = Basic.handle_request(req_b, chan_info(), state)
+      assert {:reply, :stream, state} = Suite.handle_request(req_b, chan_info(), state)
 
       # We should be able to handle the results in any order, so let's do B
       # before A.
 
       msg_b = assert_receive {_, {:callname, "B"}}
-      assert {:noreply, state} = Basic.handle_info(msg_b, state)
+      assert {:noreply, state} = Suite.handle_info(msg_b, state)
 
       msg_a = assert_receive {_, {:callname, "A"}}
-      assert {:noreply, _state} = Basic.handle_info(msg_a, state)
+      assert {:noreply, _state} = Suite.handle_info(msg_a, state)
 
       # Assert both results are delivered to client
       assert_receive {:"$gen_mcp", :result, result_b}
@@ -797,7 +797,7 @@ defmodule GenMcp.Server.BasicAsyncTest do
       }
 
       assert {:reply, :stream, state} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
 
       # Simulate client disconnect (implementation-specific)
       # For now, just ensure the server doesn't crash if result arrives
@@ -806,7 +806,7 @@ defmodule GenMcp.Server.BasicAsyncTest do
       flunk("todo implement monitor")
 
       # This should not crash even if client is disconnected
-      assert {:noreply, _state} = Basic.handle_info({ref, :some_message}, state)
+      assert {:noreply, _state} = Suite.handle_info({ref, :some_message}, state)
 
       # Note: If continue is called, result would be sent to the (possibly disconnected) client
       # The test verifies no crash occurs regardless
@@ -838,7 +838,7 @@ defmodule GenMcp.Server.BasicAsyncTest do
       }
 
       assert {:reply, :stream, state} =
-               Basic.handle_request(req_one, chan_info(), state)
+               Suite.handle_request(req_one, chan_info(), state)
 
       # Call tool two - should raise error about duplicate reference
       req_two = %Entities.CallToolRequest{
@@ -852,7 +852,7 @@ defmodule GenMcp.Server.BasicAsyncTest do
 
       # The second tool call should raise an error about duplicate reference
       assert_raise RuntimeError, ~r/duplicate/i, fn ->
-        Basic.handle_request(req_two, chan_info(), state)
+        Suite.handle_request(req_two, chan_info(), state)
       end
     end
   end
@@ -882,7 +882,7 @@ defmodule GenMcp.Server.BasicAsyncTest do
       }
 
       # The tool call should exit the process with bad_return_value
-      assert catch_exit(Basic.handle_request(tool_call_req, chan_info(), state)) ==
+      assert catch_exit(Suite.handle_request(tool_call_req, chan_info(), state)) ==
                {:bad_return_value, :invalid_return_value}
     end
 
@@ -916,9 +916,9 @@ defmodule GenMcp.Server.BasicAsyncTest do
 
       # Initial call succeeds
       assert {:reply, :stream, state} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
 
-      assert catch_exit(Basic.handle_info({ref, :some_result}, state)) ==
+      assert catch_exit(Suite.handle_info({ref, :some_result}, state)) ==
                {:bad_return_value, {:bad_tuple, "oops"}}
     end
   end

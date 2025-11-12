@@ -1,4 +1,4 @@
-defmodule GenMcp.MixProject do
+defmodule GenMCP.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/lud/gen_mcp"
@@ -32,7 +32,7 @@ defmodule GenMcp.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {GenMcp.Application, []}
+      mod: {GenMCP.Application, []}
     ]
   end
 
@@ -83,11 +83,11 @@ defmodule GenMcp.MixProject do
   defp modkit do
     [
       mount: [
-        {GenMcp.TestWeb, "test/support/test_web", flavor: :phoenix},
-        {GenMcp.Test, "test/support"},
-        {GenMcp.Support, "test/support"},
-        {GenMcp.ConnCase, "test/support/conn_case"},
-        {GenMcp, "lib/gen_mcp"},
+        {GenMCP.TestWeb, "test/support/test_web", flavor: :phoenix},
+        {GenMCP.Test, "test/support"},
+        {GenMCP.Support, "test/support"},
+        {GenMCP.ConnCase, "test/support/conn_case"},
+        {GenMCP, "lib/gen_mcp"},
         {Mix.Tasks, "lib/mix/tasks", flavor: :mix_task},
         {Plug, "test/support/test_web/plug"}
       ]

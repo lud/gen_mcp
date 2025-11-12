@@ -1,4 +1,4 @@
-defmodule GenMcp.Mux.Session do
+defmodule GenMCP.Mux.Session do
   # This layer is mostly a middleman without much additional value. The server
   # implementation could be the gen server receiving requests directly.
   #
@@ -26,13 +26,13 @@ defmodule GenMcp.Mux.Session do
   IO.warn("@todo test init failure")
   @impl true
   def init(opts) do
-    {server, opts} = Keyword.pop(opts, :server, GenMcp.Server.Basic)
+    {server, opts} = Keyword.pop(opts, :server, GenMCP.Suite)
 
     # pass all other options to the server if the server is not a tuple
     default_server_options = opts
 
     {server_mod, server_arg} = normalize_server(server, default_server_options)
-    Logger.debug("GenMcp session #{opts[:session_id]} initializing with #{inspect(server_mod)}")
+    Logger.debug("GenMCP session #{opts[:session_id]} initializing with #{inspect(server_mod)}")
 
     case server_mod.init(server_arg) do
       {:ok, server_state} -> {:ok, %State{server_mod: server_mod, server_state: server_state}}

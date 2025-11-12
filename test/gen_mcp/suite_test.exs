@@ -1,13 +1,13 @@
 # credo:disable-for-this-file Credo.Check.Readability.LargeNumbers
 
-defmodule GenMcp.Server.BasicTest do
-  alias GenMcp.Mcp.Entities
-  alias GenMcp.Server
-  alias GenMcp.Server.Basic
-  alias GenMcp.Support.PromptRepoMock
-  alias GenMcp.Support.ResourceRepoMock
-  alias GenMcp.Support.ResourceRepoMockTpl
-  alias GenMcp.Support.ToolMock
+defmodule GenMCP.SuiteTest do
+  alias GenMCP.Entities
+  alias GenMCP.Server
+  alias GenMCP.Suite
+  alias GenMCP.Support.PromptRepoMock
+  alias GenMCP.Support.ResourceRepoMock
+  alias GenMCP.Support.ResourceRepoMockTpl
+  alias GenMCP.Support.ToolMock
   import Mox
   use ExUnit.Case, async: true
 
@@ -32,11 +32,11 @@ defmodule GenMcp.Server.BasicTest do
   end
 
   defp check_error(reason) do
-    GenMcp.RpcError.cast_error(reason)
+    GenMCP.RpcError.cast_error(reason)
   end
 
   defp init_session(server_opts \\ []) do
-    assert {:ok, state} = Basic.init(Keyword.merge(@server_info, server_opts))
+    assert {:ok, state} = Suite.init(Keyword.merge(@server_info, server_opts))
 
     init_req = %Entities.InitializeRequest{
       id: "setup-init-1",
@@ -49,7 +49,7 @@ defmodule GenMcp.Server.BasicTest do
     }
 
     assert {:reply, {:result, _result}, %{status: :server_initialized} = state} =
-             Basic.handle_request(init_req, chan_info(), state)
+             Suite.handle_request(init_req, chan_info(), state)
 
     client_init_notif = %Entities.InitializedNotification{
       method: "notifications/initialized",
@@ -57,14 +57,14 @@ defmodule GenMcp.Server.BasicTest do
     }
 
     assert {:noreply, %{status: :client_initialized} = state} =
-             Basic.handle_notification(client_init_notif, state)
+             Suite.handle_notification(client_init_notif, state)
 
     state
   end
 
   describe "handles initialization requests" do
     test "handles InitializeRequest" do
-      {:ok, state} = Basic.init(@server_info)
+      {:ok, state} = Suite.init(@server_info)
 
       init_eq = %Entities.InitializeRequest{
         id: 1,
@@ -77,7 +77,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:result, result}, %{status: :server_initialized}} =
-               Basic.handle_request(init_eq, chan_info(), state)
+               Suite.handle_request(init_eq, chan_info(), state)
 
       assert %Entities.InitializeResult{
                capabilities: %Entities.ServerCapabilities{},
@@ -86,7 +86,7 @@ defmodule GenMcp.Server.BasicTest do
     end
 
     test "handles initialize request and reject tool call request without initialization" do
-      {:ok, state} = Basic.init(@server_info)
+      {:ok, state} = Suite.init(@server_info)
 
       req = %Entities.CallToolRequest{
         id: 2,
@@ -98,14 +98,14 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:error, :not_initialized, %{status: :starting}} =
-               Basic.handle_request(req, chan_info(), state)
+               Suite.handle_request(req, chan_info(), state)
 
       assert {400, %{code: -32603, message: "Server not initialized"}} =
                check_error(:not_initialized)
     end
 
     test "handles initialize request and reject tool call request without initialization notification" do
-      {:ok, state} = Basic.init(@server_info)
+      {:ok, state} = Suite.init(@server_info)
 
       init_req = %Entities.InitializeRequest{
         id: 1,
@@ -118,7 +118,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:result, _result}, %{status: :server_initialized} = state} =
-               Basic.handle_request(init_req, chan_info(), state)
+               Suite.handle_request(init_req, chan_info(), state)
 
       tool_call_req = %Entities.CallToolRequest{
         id: 2,
@@ -130,7 +130,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:error, :not_initialized, %{status: :server_initialized}} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
 
       assert {400, %{code: -32603, message: "Server not initialized"}} =
                check_error(:not_initialized)
@@ -152,13 +152,13 @@ defmodule GenMcp.Server.BasicTest do
 
       # Should return an error with :stop tuple since we're already initialized
       assert {:stop, :already_initialized, {:error, :already_initialized} = err, _} =
-               Basic.handle_request(init_req, chan_info(), state)
+               Suite.handle_request(init_req, chan_info(), state)
 
       assert {400, %{code: -32602, message: "Session is already initialized"}} = check_error(err)
     end
 
     test "rejects initialization with invalid protocol version" do
-      {:ok, state} = Basic.init(@server_info)
+      {:ok, state} = Suite.init(@server_info)
 
       init_req = %Entities.InitializeRequest{
         id: 1,
@@ -172,7 +172,7 @@ defmodule GenMcp.Server.BasicTest do
 
       # Should return an error with :stop tuple for invalid protocol version
       assert {:stop, reason, {:error, {:unsupported_protocol, "2024-01-01"} = reason}, _} =
-               Basic.handle_request(init_req, chan_info(), state)
+               Suite.handle_request(init_req, chan_info(), state)
 
       assert {400,
               %{
@@ -206,12 +206,11 @@ defmodule GenMcp.Server.BasicTest do
 
       assert {:reply,
               {:result,
-               %GenMcp.Mcp.Entities.ListToolsResult{_meta: nil, nextCursor: nil, tools: tools}},
-              _} =
-               Basic.handle_request(%Entities.ListToolsRequest{}, chan_info(), state)
+               %GenMCP.Entities.ListToolsResult{_meta: nil, nextCursor: nil, tools: tools}}, _} =
+               Suite.handle_request(%Entities.ListToolsRequest{}, chan_info(), state)
 
       assert [
-               %GenMcp.Mcp.Entities.Tool{
+               %GenMCP.Entities.Tool{
                  name: "Tool1",
                  title: "Tool 1 title",
                  description: "Tool 1 descr",
@@ -219,7 +218,7 @@ defmodule GenMcp.Server.BasicTest do
                  inputSchema: %{"type" => "object"},
                  outputSchema: %{"type" => "object"}
                },
-               %GenMcp.Mcp.Entities.Tool{
+               %GenMCP.Entities.Tool{
                  inputSchema: %{"type" => "object"},
                  name: "Tool2"
                }
@@ -241,7 +240,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:error, {:unknown_tool, "SomeTool"}}, _} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
     end
 
     test "sync tool" do
@@ -250,10 +249,10 @@ defmodule GenMcp.Server.BasicTest do
       |> expect(:call, fn req, chan, arg ->
         # The whole request is given
 
-        assert %GenMcp.Mcp.Entities.CallToolRequest{
+        assert %GenMCP.Entities.CallToolRequest{
                  id: 2,
                  method: "tools/call",
-                 params: %GenMcp.Mcp.Entities.CallToolRequestParams{
+                 params: %GenMCP.Entities.CallToolRequestParams{
                    _meta: nil,
                    arguments: %{"some" => "arg"},
                    name: "ExistingTool"
@@ -261,7 +260,7 @@ defmodule GenMcp.Server.BasicTest do
                } = req
 
         # We also receive a channel struct istead of the chan info
-        assert %GenMcp.Mux.Channel{} = chan
+        assert %GenMCP.Mux.Channel{} = chan
         assert :some_tool_arg = arg
         # we can return a cast value
         {:result, Server.call_tool_result(text: "hello"), chan}
@@ -279,9 +278,9 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:result, result}, _} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
 
-      assert %GenMcp.Mcp.Entities.CallToolResult{
+      assert %GenMCP.Entities.CallToolResult{
                _meta: nil,
                content: [%{type: :text, text: "hello"}],
                isError: nil,
@@ -308,7 +307,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:error, %JSV.ValidationError{}} = err, _} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
 
       assert {400,
               %{code: -32602, data: %{valid: false, details: []}, message: "Invalid Parameters"}} =
@@ -334,7 +333,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:error, "Something went wrong in the tool"} = err, _} =
-               Basic.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, chan_info(), state)
 
       # Should return HTTP 500 and RPC code -32603 (internal error)
       assert {500, %{code: -32603, message: "Something went wrong in the tool"}} =
@@ -356,7 +355,7 @@ defmodule GenMcp.Server.BasicTest do
       state = init_session(resources: [{ResourceRepoMock, :repo1}])
 
       assert {:reply, {:result, result}, _} =
-               Basic.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
 
       assert %Entities.ListResourcesResult{resources: resources, nextCursor: _} = result
       assert length(resources) == 2
@@ -388,7 +387,7 @@ defmodule GenMcp.Server.BasicTest do
 
       # First page
       assert {:reply, {:result, result1}, _} =
-               Basic.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
 
       assert %Entities.ListResourcesResult{
                resources: [%{name: "Page 1"}],
@@ -397,7 +396,7 @@ defmodule GenMcp.Server.BasicTest do
 
       # Second page
       assert {:reply, {:result, result2}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.ListResourcesRequest{
                    params: %Entities.ListResourcesRequestParams{cursor: pagination}
                  },
@@ -426,7 +425,7 @@ defmodule GenMcp.Server.BasicTest do
         )
 
       assert {:reply, {:result, result}, _} =
-               Basic.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
 
       assert %Entities.ListResourcesResult{resources: [], nextCursor: nil} = result
     end
@@ -455,7 +454,7 @@ defmodule GenMcp.Server.BasicTest do
 
       # First request returns repo1's resources with a cursor to continue to repo2
       assert {:reply, {:result, result1}, _} =
-               Basic.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
 
       assert %Entities.ListResourcesResult{resources: resources1, nextCursor: cursor} = result1
       assert length(resources1) == 2
@@ -465,7 +464,7 @@ defmodule GenMcp.Server.BasicTest do
 
       # Second request with cursor returns repo2's resources
       assert {:reply, {:result, result2}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.ListResourcesRequest{
                    params: %Entities.ListResourcesRequestParams{cursor: cursor}
                  },
@@ -505,7 +504,7 @@ defmodule GenMcp.Server.BasicTest do
 
       # First call should skip the empty repos and return resources from repo3
       assert {:reply, {:result, result}, _} =
-               Basic.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
 
       assert %Entities.ListResourcesResult{resources: resources, nextCursor: nil} = result
       assert length(resources) == 2
@@ -544,7 +543,7 @@ defmodule GenMcp.Server.BasicTest do
 
       # First call should skip repo1 and return repo2's resource with cursor
       assert {:reply, {:result, result1}, _} =
-               Basic.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
 
       assert %Entities.ListResourcesResult{
                resources: [%{name: "API"}],
@@ -555,7 +554,7 @@ defmodule GenMcp.Server.BasicTest do
 
       # Second call should use repo2's cursor, get empty result, skip to repo3
       assert {:reply, {:result, result2}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.ListResourcesRequest{
                    params: %Entities.ListResourcesRequestParams{cursor: cursor}
                  },
@@ -580,7 +579,7 @@ defmodule GenMcp.Server.BasicTest do
 
       # First request succeeds and returns a valid cursor
       assert {:reply, {:result, result1}, _} =
-               Basic.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
 
       assert %Entities.ListResourcesResult{
                resources: [%{name: "Page 1"}],
@@ -595,7 +594,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:error, error}, _} =
-               Basic.handle_request(invalid_request, chan_info(), state)
+               Suite.handle_request(invalid_request, chan_info(), state)
 
       # Verify it returns a proper error that can be cast to RPC error
       assert {400, %{code: -32602, message: "Invalid pagination cursor"}} = check_error(error)
@@ -623,7 +622,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:result, result}, _} =
-               Basic.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, chan_info(), state)
 
       assert %Entities.ReadResourceResult{contents: contents} = result
       assert [%Entities.TextResourceContents{uri: "file:///readme.txt", text: text}] = contents
@@ -649,7 +648,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:result, result}, _} =
-               Basic.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, chan_info(), state)
 
       assert %Entities.ReadResourceResult{contents: [content]} = result
       assert %Entities.TextResourceContents{mimeType: "text/html", text: "<p>Hello</p>"} = content
@@ -676,7 +675,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:result, result}, _} =
-               Basic.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, chan_info(), state)
 
       assert %Entities.ReadResourceResult{contents: [content]} = result
 
@@ -700,7 +699,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:error, {:resource_not_found, "file:///missing.txt"}} = err, _} =
-               Basic.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, chan_info(), state)
 
       # Check that it returns proper RPC error code -32002
       assert {400, %{code: -32002}} = check_error(err)
@@ -720,7 +719,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:error, "Invalid file format"} = err, _} =
-               Basic.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, chan_info(), state)
 
       assert {500, %{code: -32603, message: "Invalid file format"}} = check_error(err)
     end
@@ -747,7 +746,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:result, result}, _} =
-               Basic.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, chan_info(), state)
 
       assert %Entities.ReadResourceResult{contents: [content]} = result
       assert %Entities.TextResourceContents{text: "Remote resource"} = content
@@ -763,7 +762,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:error, {:resource_not_found, "ftp://example.com/file"}} = err, _} =
-               Basic.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, chan_info(), state)
 
       # Check that it returns proper RPC error code -32002
       assert {400, %{code: -32002}} = check_error(err)
@@ -784,7 +783,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:result, result}, _} =
-               Basic.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, chan_info(), state)
 
       assert %Entities.ReadResourceResult{
                contents: [%Entities.TextResourceContents{text: "Hello"}]
@@ -835,7 +834,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:result, result1}, _} =
-               Basic.handle_request(request1, chan_info(), state)
+               Suite.handle_request(request1, chan_info(), state)
 
       assert %Entities.ReadResourceResult{
                contents: [%Entities.TextResourceContents{text: "Secret"}]
@@ -847,7 +846,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:result, result2}, _} =
-               Basic.handle_request(request2, chan_info(), state)
+               Suite.handle_request(request2, chan_info(), state)
 
       assert %Entities.ReadResourceResult{
                contents: [%Entities.TextResourceContents{text: "General"}]
@@ -859,7 +858,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:result, result3}, _} =
-               Basic.handle_request(request3, chan_info(), state)
+               Suite.handle_request(request3, chan_info(), state)
 
       assert %Entities.ReadResourceResult{
                contents: [%Entities.TextResourceContents{text: "Deleted"}]
@@ -894,7 +893,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:result, result}, _} =
-               Basic.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, chan_info(), state)
 
       assert %Entities.ReadResourceResult{contents: [content]} = result
 
@@ -923,7 +922,7 @@ defmodule GenMcp.Server.BasicTest do
       }
 
       assert {:reply, {:error, "expected uri matching" <> _} = err, _} =
-               Basic.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, chan_info(), state)
 
       assert {500, %{code: -32603}} = check_error(err)
     end
@@ -957,7 +956,7 @@ defmodule GenMcp.Server.BasicTest do
         init_session(resources: [{ResourceRepoMockTpl, :repo1}, {ResourceRepoMockTpl, :repo2}])
 
       assert {:reply, {:result, result}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.ListResourceTemplatesRequest{},
                  chan_info(),
                  state
@@ -1002,7 +1001,7 @@ defmodule GenMcp.Server.BasicTest do
         )
 
       assert {:reply, {:result, result}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.ListResourceTemplatesRequest{},
                  chan_info(),
                  state
@@ -1030,7 +1029,7 @@ defmodule GenMcp.Server.BasicTest do
         )
 
       assert {:reply, {:result, result}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.ListResourceTemplatesRequest{},
                  chan_info(),
                  state
@@ -1062,7 +1061,7 @@ defmodule GenMcp.Server.BasicTest do
       state = init_session(prompts: [{PromptRepoMock, :arg}])
 
       assert {:reply, {:result, result}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.ListPromptsRequest{},
                  chan_info(),
                  state
@@ -1087,7 +1086,7 @@ defmodule GenMcp.Server.BasicTest do
 
       # First page
       assert {:reply, {:result, result1}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.ListPromptsRequest{},
                  chan_info(),
                  state
@@ -1102,7 +1101,7 @@ defmodule GenMcp.Server.BasicTest do
 
       # Second page
       assert {:reply, {:result, result2}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.ListPromptsRequest{params: %{cursor: cursor1}},
                  chan_info(),
                  state
@@ -1136,7 +1135,7 @@ defmodule GenMcp.Server.BasicTest do
 
       # First request
       assert {:reply, {:result, result1}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.ListPromptsRequest{},
                  chan_info(),
                  state
@@ -1149,7 +1148,7 @@ defmodule GenMcp.Server.BasicTest do
 
       # Second request
       assert {:reply, {:result, result2}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.ListPromptsRequest{params: %{cursor: cursor1}},
                  chan_info(),
                  state
@@ -1162,7 +1161,7 @@ defmodule GenMcp.Server.BasicTest do
 
       # Third request
       assert {:reply, {:result, result3}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.ListPromptsRequest{params: %{cursor: cursor2}},
                  chan_info(),
                  state
@@ -1180,7 +1179,7 @@ defmodule GenMcp.Server.BasicTest do
       state = init_session(prompts: [{PromptRepoMock, :repo1}])
 
       assert {:reply, {:error, :invalid_cursor}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.ListPromptsRequest{params: %{cursor: "invalid_token"}},
                  chan_info(),
                  state
@@ -1194,7 +1193,7 @@ defmodule GenMcp.Server.BasicTest do
       state = init_session(prompts: [])
 
       assert {:reply, {:result, result}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.ListPromptsRequest{},
                  chan_info(),
                  state
@@ -1229,7 +1228,7 @@ defmodule GenMcp.Server.BasicTest do
       state = init_session(prompts: [{PromptRepoMock, :repo1}])
 
       assert {:reply, {:result, ^result}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.GetPromptRequest{
                    params: %{name: "greeting"}
                  },
@@ -1258,7 +1257,7 @@ defmodule GenMcp.Server.BasicTest do
       state = init_session(prompts: [{PromptRepoMock, :repo1}])
 
       assert {:reply, {:result, ^result}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.GetPromptRequest{
                    params: %{
                      name: "analysis",
@@ -1278,7 +1277,7 @@ defmodule GenMcp.Server.BasicTest do
       state = init_session(prompts: [{PromptRepoMock, :repo1}])
 
       assert {:reply, {:error, {:prompt_not_found, "unknown"}}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.GetPromptRequest{
                    params: %{name: "unknown"}
                  },
@@ -1303,7 +1302,7 @@ defmodule GenMcp.Server.BasicTest do
       state = init_session(prompts: [{PromptRepoMock, :repo1}])
 
       assert {:reply, {:error, "Missing required argument: dataset"}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.GetPromptRequest{
                    params: %{name: "analysis"}
                  },
@@ -1335,7 +1334,7 @@ defmodule GenMcp.Server.BasicTest do
         )
 
       assert {:reply, {:result, ^result}, _} =
-               Basic.handle_request(
+               Suite.handle_request(
                  %Entities.GetPromptRequest{
                    params: %{name: "prompt2"}
                  },

@@ -1,5 +1,5 @@
-defmodule GenMcp.Mux.SessionSupervisor do
-  alias GenMcp.NodeSync
+defmodule GenMCP.Mux.SessionSupervisor do
+  alias GenMCP.NodeSync
   use DynamicSupervisor
 
   def name do

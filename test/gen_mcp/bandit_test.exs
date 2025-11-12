@@ -1,5 +1,5 @@
-defmodule GenMcp.BanditTest do
-  use GenMcp.ConnCase, async: true
+defmodule GenMCP.BanditTest do
+  use GenMCP.ConnCase, async: true
 
   test "can send message to a looping process over SSE" do
     parent = self()

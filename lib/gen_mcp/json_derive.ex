@@ -1,4 +1,4 @@
-defmodule GenMcp.JsonDerive do
+defmodule GenMCP.JsonDerive do
   @moduledoc false
 
   defmacro auto do

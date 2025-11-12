@@ -1,5 +1,5 @@
-defmodule GenMcp.Test.Tools.Sleeper do
-  alias GenMcp.Mcp.Entities.TextContent
+defmodule GenMCP.Test.Tools.Sleeper do
+  alias GenMCP.Entities.TextContent
   require Logger
   use JSV.Schema
 

@@ -1,4 +1,4 @@
-defmodule GenMcp.TestWeb.Endpoint do
+defmodule GenMCP.TestWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :gen_mcp
 
   @moduledoc false
@@ -12,7 +12,7 @@ defmodule GenMcp.TestWeb.Endpoint do
     body_reader: {__MODULE__, :read_body, []},
     json_decoder: Phoenix.json_library()
 
-  plug GenMcp.TestWeb.Router
+  plug GenMCP.TestWeb.Router
 
   def read_body(conn, opts) do
     with {:ok, body, conn} <- Plug.Conn.read_body(conn, opts) do

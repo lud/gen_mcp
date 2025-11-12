@@ -1,7 +1,7 @@
-defmodule GenMcp.Mux do
-  alias GenMcp.Mux.Session
-  alias GenMcp.Mux.SessionSupervisor
-  alias GenMcp.NodeSync
+defmodule GenMCP.Mux do
+  alias GenMCP.Mux.Session
+  alias GenMCP.Mux.SessionSupervisor
+  alias GenMCP.NodeSync
   require Logger
 
   # -- Session Initializing ---------------------------------------------------

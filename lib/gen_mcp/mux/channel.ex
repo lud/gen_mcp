@@ -1,5 +1,5 @@
-defmodule GenMcp.Mux.Channel do
-  alias GenMcp.Mcp.Entities.ProgressNotification
+defmodule GenMCP.Mux.Channel do
+  alias GenMCP.Entities.ProgressNotification
 
   @enforce_keys [:client, :progress_token]
   defstruct @enforce_keys

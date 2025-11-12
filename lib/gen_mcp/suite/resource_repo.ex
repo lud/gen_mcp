@@ -1,6 +1,6 @@
-defmodule GenMcp.ResourceRepo do
+defmodule GenMCP.Suite.ResourceRepo do
   @moduledoc """
-  Behaviour for implementing resource repositories in GenMcp.
+  Behaviour for implementing resource repositories in GenMCP.
 
   A resource repository provides resources (direct or template-based) to the MCP server.
   Resources are identified by URIs and can be listed and read through this interface.
@@ -26,7 +26,7 @@ defmodule GenMcp.ResourceRepo do
   ## Example
 
       defmodule MyApp.FileRepo do
-        @behaviour GenMcp.ResourceRepo
+        @behaviour GenMCP.Suite.ResourceRepo
 
         @impl true
         def prefix(_arg), do: "file:///"
@@ -44,7 +44,7 @@ defmodule GenMcp.ResourceRepo do
 
         @impl true
         def read("file:///readme.txt", _arg) do
-          {:ok, [%GenMcp.Mcp.Entities.TextResourceContents{
+          {:ok, [%GenMCP.Entities.TextResourceContents{
             uri: "file:///readme.txt",
             text: "# Welcome"
           }]}
@@ -53,7 +53,7 @@ defmodule GenMcp.ResourceRepo do
       end
   """
 
-  alias GenMcp.Mcp.Entities
+  alias GenMCP.Entities
 
   @type resource_item :: %{
           required(:uri) => String.t(),
@@ -150,9 +150,9 @@ defmodule GenMcp.ResourceRepo do
 
       # Direct resource
       def read(arg, "file:///readme.txt") do
-        {:ok, %GenMcp.Mcp.Entities.ReadResourceResult{
+        {:ok, %GenMCP.Entities.ReadResourceResult{
           contents: [
-            %GenMcp.Mcp.Entities.TextResourceContents{
+            %GenMCP.Entities.TextResourceContents{
               uri: "file:///readme.txt",
               text: "# Welcome"
             }
@@ -164,9 +164,9 @@ defmodule GenMcp.ResourceRepo do
       def read(arg, %{"path" => path}) do
         case File.read(path) do
           {:ok, content} ->
-            {:ok, %GenMcp.Mcp.Entities.ReadResourceResult{
+            {:ok, %GenMCP.Entities.ReadResourceResult{
               contents: [
-                %GenMcp.Mcp.Entities.TextResourceContents{
+                %GenMCP.Entities.TextResourceContents{
                   uri: "file:///\#{path}",
                   text: content
                 }
@@ -213,10 +213,10 @@ defmodule GenMcp.ResourceRepo do
 
   ## Examples
 
-      iex> GenMcp.ResourceRepo.expand(MyRepo)
+      iex> GenMCP.Suite.ResourceRepo.expand(MyRepo)
       %{mod: MyRepo, arg: [], prefix: "file:///", template: nil}
 
-      iex> GenMcp.ResourceRepo.expand({MyRepo, :custom_arg})
+      iex> GenMCP.Suite.ResourceRepo.expand({MyRepo, :custom_arg})
       %{mod: MyRepo, arg: :custom_arg, prefix: "file:///", template: "file:///{path}"}
   """
   @spec expand(resource_repo) :: resource_repo_descriptor

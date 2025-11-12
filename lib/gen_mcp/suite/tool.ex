@@ -1,6 +1,6 @@
-defmodule GenMcp.Tool do
-  alias GenMcp.Mcp.Entities
-  alias GenMcp.Mux.Channel
+defmodule GenMCP.Suite.Tool do
+  alias GenMCP.Entities
+  alias GenMCP.Mux.Channel
 
   @type tool_annotations :: %{
           optional(:__struct__) => Entities.ToolAnnotations,

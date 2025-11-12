@@ -1,8 +1,8 @@
-defmodule GenMcp.PromptRepoTest do
+defmodule GenMCP.Suite.PromptRepoTest do
   use ExUnit.Case, async: true
 
-  alias GenMcp.PromptRepo
-  alias GenMcp.Support.PromptRepoMock
+  alias GenMCP.Suite.PromptRepo
+  alias GenMCP.Support.PromptRepoMock
 
   import Mox
 
@@ -79,7 +79,7 @@ defmodule GenMcp.PromptRepoTest do
     test "returns prompt result" do
       repo = %{mod: PromptRepoMock, arg: :test_arg}
 
-      result = %GenMcp.Mcp.Entities.GetPromptResult{
+      result = %GenMCP.Entities.GetPromptResult{
         description: "Test prompt",
         messages: []
       }

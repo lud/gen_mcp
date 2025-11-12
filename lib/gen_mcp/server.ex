@@ -1,9 +1,9 @@
-defmodule GenMcp.Server do
-  alias GenMcp.Mcp.Entities
-  alias GenMcp.Mux.Channel
-  alias GenMcp.Tool
+defmodule GenMCP.Server do
+  alias GenMCP.Entities
+  alias GenMCP.Mux.Channel
+  alias GenMCP.Suite.Tool
 
-  require(Elixir.GenMcp.Mcp.Entities.ModMap).require_all()
+  require(Elixir.GenMCP.Entities.ModMap).require_all()
 
   @type state :: term
 
@@ -58,7 +58,7 @@ defmodule GenMcp.Server do
       tools:
         Enum.map(tools, fn
           %Entities.Tool{} = tool -> tool
-          tool -> GenMcp.Tool.describe(tool)
+          tool -> GenMCP.Suite.Tool.describe(tool)
         end)
     }
   end

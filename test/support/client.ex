@@ -1,28 +1,28 @@
-defmodule GenMcp.Test.Client do
+defmodule GenMCP.Test.Client do
   import ExUnit.Assertions
-  require(GenMcp.Mcp.Entities.ModMap).require_all()
+  require(GenMCP.Entities.ModMap).require_all()
 
   [
     # Requests
-    GenMcp.Mcp.Entities.InitializeRequest,
-    GenMcp.Mcp.Entities.PingRequest,
-    GenMcp.Mcp.Entities.ListResourcesRequest,
-    GenMcp.Mcp.Entities.ListResourceTemplatesRequest,
-    GenMcp.Mcp.Entities.ReadResourceRequest,
-    GenMcp.Mcp.Entities.SubscribeRequest,
-    GenMcp.Mcp.Entities.UnsubscribeRequest,
-    GenMcp.Mcp.Entities.ListPromptsRequest,
-    GenMcp.Mcp.Entities.GetPromptRequest,
-    GenMcp.Mcp.Entities.ListToolsRequest,
-    GenMcp.Mcp.Entities.CallToolRequest,
-    GenMcp.Mcp.Entities.SetLevelRequest,
-    GenMcp.Mcp.Entities.CompleteRequest,
+    GenMCP.Entities.InitializeRequest,
+    GenMCP.Entities.PingRequest,
+    GenMCP.Entities.ListResourcesRequest,
+    GenMCP.Entities.ListResourceTemplatesRequest,
+    GenMCP.Entities.ReadResourceRequest,
+    GenMCP.Entities.SubscribeRequest,
+    GenMCP.Entities.UnsubscribeRequest,
+    GenMCP.Entities.ListPromptsRequest,
+    GenMCP.Entities.GetPromptRequest,
+    GenMCP.Entities.ListToolsRequest,
+    GenMCP.Entities.CallToolRequest,
+    GenMCP.Entities.SetLevelRequest,
+    GenMCP.Entities.CompleteRequest,
 
     # Notifications
-    GenMcp.Mcp.Entities.CancelledNotification,
-    GenMcp.Mcp.Entities.InitializedNotification,
-    GenMcp.Mcp.Entities.ProgressNotification,
-    GenMcp.Mcp.Entities.RootsListChangedNotification
+    GenMCP.Entities.CancelledNotification,
+    GenMCP.Entities.InitializedNotification,
+    GenMCP.Entities.ProgressNotification,
+    GenMCP.Entities.RootsListChangedNotification
   ]
   |> Enum.map(fn mod ->
     method = mod.json_schema().properties.method.const
@@ -40,7 +40,7 @@ defmodule GenMcp.Test.Client do
   end
 
   def new(opts \\ []) do
-    opts = Keyword.put_new_lazy(opts, :base_url, &GenMcp.TestWeb.Endpoint.url/0)
+    opts = Keyword.put_new_lazy(opts, :base_url, &GenMCP.TestWeb.Endpoint.url/0)
 
     Req.new(opts)
   end

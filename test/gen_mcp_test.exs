@@ -1,4 +1,4 @@
-defmodule GenMcpTest do
+defmodule GenMCPTest do
   use ExUnit.Case
-  doctest GenMcp
+  doctest GenMCP
 end

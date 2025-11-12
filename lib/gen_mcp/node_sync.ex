@@ -1,4 +1,4 @@
-defmodule GenMcp.NodeSync do
+defmodule GenMCP.NodeSync do
   require Logger
   use GenServer
 

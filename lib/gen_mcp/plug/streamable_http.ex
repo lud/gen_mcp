@@ -1,10 +1,10 @@
-defmodule GenMcp.Plug.StreamableHttp do
-  alias GenMcp.Mcp.Entities.InitializeRequest
-  alias GenMcp.Mcp.Entities.InitializeResult
-  alias GenMcp.Mcp.Entities.JSONRPCResponse
-  alias GenMcp.Mux
-  alias GenMcp.RpcError
-  alias GenMcp.Validator
+defmodule GenMCP.Plug.StreamableHttp do
+  alias GenMCP.Entities.InitializeRequest
+  alias GenMCP.Entities.InitializeResult
+  alias GenMCP.Entities.JSONRPCResponse
+  alias GenMCP.Mux
+  alias GenMCP.RpcError
+  alias GenMCP.Validator
   alias JSV.Codec
   alias JSV.Helpers.MapExt
   import Plug.Conn
@@ -35,8 +35,8 @@ defmodule GenMcp.Plug.StreamableHttp do
 
     {:module, mod, _, _} =
       defmodule module do
-        defdelegate init(opts), to: GenMcp.Plug.StreamableHttp
-        defdelegate call(conn, opts), to: GenMcp.Plug.StreamableHttp
+        defdelegate init(opts), to: GenMCP.Plug.StreamableHttp
+        defdelegate call(conn, opts), to: GenMCP.Plug.StreamableHttp
       end
 
     mod
@@ -173,7 +173,7 @@ defmodule GenMcp.Plug.StreamableHttp do
   defp send_error(conn, reason, opts \\ []) do
     case RpcError.cast_error(reason) do
       {status, payload} ->
-        payload = %GenMcp.Mcp.Entities.JSONRPCError{
+        payload = %GenMCP.Entities.JSONRPCError{
           error: payload,
           id: opts[:msg_id],
           jsonrpc: "2.0"
@@ -248,7 +248,7 @@ defmodule GenMcp.Plug.StreamableHttp do
   defp send_error_response_chunk(conn, msg_id, reason) do
     {_status, error_payload} = RpcError.cast_error(reason)
 
-    payload = %GenMcp.Mcp.Entities.JSONRPCError{
+    payload = %GenMCP.Entities.JSONRPCError{
       error: error_payload,
       id: msg_id,
       jsonrpc: "2.0"

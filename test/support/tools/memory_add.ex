@@ -1,4 +1,4 @@
-defmodule GenMcp.Test.Tools.MemoryAdd do
+defmodule GenMCP.Test.Tools.MemoryAdd do
   use JSV.Schema
 
   def name do

@@ -1,8 +1,8 @@
-defmodule GenMcp.McpJestTest do
+defmodule GenMCP.McpJestTest do
   use ExUnit.Case, async: true
 
   defp url do
-    URI.merge(GenMcp.TestWeb.Endpoint.url(), "/mcp/real")
+    URI.merge(GenMCP.TestWeb.Endpoint.url(), "/mcp/real")
   end
 
   @tag :skip

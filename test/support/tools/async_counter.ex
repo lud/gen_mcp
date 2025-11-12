@@ -1,5 +1,5 @@
-defmodule GenMcp.Test.Tools.AsyncCounter do
-  alias GenMcp.Mcp.Entities.TextContent
+defmodule GenMCP.Test.Tools.AsyncCounter do
+  alias GenMCP.Entities.TextContent
   require Logger
   use JSV.Schema
 
@@ -34,7 +34,7 @@ defmodule GenMcp.Test.Tools.AsyncCounter do
 
   defp count_upto(upto, n, sleep, channel) when n < upto do
     Logger.debug("Counting #{n}/#{upto}")
-    GenMcp.Mux.Channel.send_progress(channel, n, upto)
+    GenMCP.Mux.Channel.send_progress(channel, n, upto)
     Process.sleep(sleep)
     count_upto(upto, n + 1, sleep, channel)
   end

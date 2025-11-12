@@ -1,4 +1,4 @@
-# GenMcp
+# GenMCP
 
 **TODO: Add description**
 

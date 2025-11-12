@@ -1,6 +1,6 @@
 # credo:disable-for-this-file Credo.Check.Readability.LargeNumbers
 
-defmodule GenMcp.RpcError.Compiler do
+defmodule GenMCP.RpcError.Compiler do
   # RPC codes https://docs.trafficserver.apache.org/en/latest/developer-guide/jsonrpc/jsonrpc-node-errors.en.html
   # MCP specific http://mcpevals.io/blog/mcp-error-codes
 
@@ -22,14 +22,14 @@ defmodule GenMcp.RpcError.Compiler do
   end
 end
 
-defmodule GenMcp.RpcError do
+defmodule GenMCP.RpcError do
   @rpc_invalid_request -32600
   @rpc_invalid_params -32602
   @rpc_internal_error -32603
   @rpc_resource_not_found -32002
   @rpc_prompt_not_found @rpc_invalid_params
 
-  import GenMcp.RpcError.Compiler
+  import GenMCP.RpcError.Compiler
   require Logger
 
   defcasterror :missing_session_id, :missing_session_id, 400 do
@@ -65,7 +65,7 @@ defmodule GenMcp.RpcError do
 
   defcasterror {:unsupported_protocol, version}, @rpc_invalid_request, 400 do
     %{
-      data: %{version: version, supported: GenMcp.supported_protocol_versions()},
+      data: %{version: version, supported: GenMCP.supported_protocol_versions()},
       message: "Unsupported protocol version"
     }
   end
