@@ -99,7 +99,7 @@ defmodule GenMcp.MixProject do
       licenses: ["MIT"],
       links: %{
         "Github" => @source_url,
-        "Changelog" => "https://github.com/lud/gen_mcl/blob/main/CHANGELOG.md"
+        "Changelog" => "https://github.com/lud/gen_mcp/blob/main/CHANGELOG.md"
       }
     ]
   end
