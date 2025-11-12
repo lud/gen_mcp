@@ -27,6 +27,7 @@ defmodule GenMcp.RpcError do
   @rpc_invalid_params -32602
   @rpc_internal_error -32603
   @rpc_resource_not_found -32002
+  @rpc_prompt_not_found @rpc_invalid_params
 
   import GenMcp.RpcError.Compiler
   require Logger
@@ -80,6 +81,13 @@ defmodule GenMcp.RpcError do
     %{
       data: %{uri: uri},
       message: "Resource not found: #{uri}"
+    }
+  end
+
+  defcasterror {:prompt_not_found, name} when is_binary(name), @rpc_prompt_not_found, 400 do
+    %{
+      data: %{name: name},
+      message: "Prompt not found: #{name}"
     }
   end
 

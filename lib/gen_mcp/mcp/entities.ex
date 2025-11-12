@@ -71,6 +71,7 @@ defmodule GenMcp.Mcp.Entities.ModMap do
         "EmptyResult" => GenMcp.Mcp.Entities.EmptyResult,
         "EnumSchema" => GenMcp.Mcp.Entities.EnumSchema,
         "GetPromptRequest" => GenMcp.Mcp.Entities.GetPromptRequest,
+        "GetPromptRequestParams" => GenMcp.Mcp.Entities.GetPromptRequestParams,
         "GetPromptResult" => GenMcp.Mcp.Entities.GetPromptResult,
         "ImageContent" => GenMcp.Mcp.Entities.ImageContent,
         "Implementation" => GenMcp.Mcp.Entities.Implementation,
@@ -84,6 +85,7 @@ defmodule GenMcp.Mcp.Entities.ModMap do
         "JSONRPCRequest" => GenMcp.Mcp.Entities.JSONRPCRequest,
         "JSONRPCResponse" => GenMcp.Mcp.Entities.JSONRPCResponse,
         "ListPromptsRequest" => GenMcp.Mcp.Entities.ListPromptsRequest,
+        "ListPromptsRequestParams" => GenMcp.Mcp.Entities.ListPromptsRequestParams,
         "ListPromptsResult" => GenMcp.Mcp.Entities.ListPromptsResult,
         "ListResourceTemplatesRequest" => GenMcp.Mcp.Entities.ListResourceTemplatesRequest,
         "ListResourceTemplatesResult" => GenMcp.Mcp.Entities.ListResourceTemplatesResult,
@@ -913,22 +915,32 @@ defmodule GenMcp.Mcp.Entities.GetPromptRequest do
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
       method: const("prompts/get", default: "prompts/get"),
-      params: %{
-        properties: %{
-          _meta: GenMcp.Mcp.Entities.RequestMeta,
-          arguments: %{
-            additionalProperties: string(),
-            description: "Arguments to use for templating the prompt.",
-            type: "object"
-          },
-          name: string(description: "The name of the prompt or prompt template.")
-        },
-        required: ["name"],
-        type: "object"
-      }
+      params: GenMcp.Mcp.Entities.GetPromptRequestParams
     },
     required: [:params],
     title: "GetPromptRequest",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMcp.Mcp.Entities.GetPromptRequestParams do
+  use JSV.Schema
+  JsonDerive.auto()
+
+  defschema %{
+    properties: %{
+      _meta: GenMcp.Mcp.Entities.RequestMeta,
+      arguments: %{
+        additionalProperties: string(),
+        description: "Arguments to use for templating the prompt.",
+        type: "object"
+      },
+      name: string(description: "The name of the prompt or prompt template.")
+    },
+    required: [:name],
+    title: "GetPromptRequestParams",
     type: "object"
   }
 
@@ -1283,22 +1295,32 @@ defmodule GenMcp.Mcp.Entities.ListPromptsRequest do
     properties: %{
       id: GenMcp.Mcp.Entities.RequestId,
       method: const("prompts/list", default: "prompts/list"),
-      params: %{
-        properties: %{
-          _meta: GenMcp.Mcp.Entities.RequestMeta,
-          cursor:
-            string(
-              description: ~SD"""
-              An opaque token representing the current pagination position. If
-              provided, the server should return results starting after this cursor.
-              """
-            )
-        },
-        type: "object"
-      }
+      params: GenMcp.Mcp.Entities.ListPromptsRequestParams
     },
     required: [],
     title: "ListPromptsRequest",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMcp.Mcp.Entities.ListPromptsRequestParams do
+  use JSV.Schema
+  JsonDerive.auto()
+
+  defschema %{
+    properties: %{
+      _meta: GenMcp.Mcp.Entities.RequestMeta,
+      cursor:
+        string(
+          description: ~SD"""
+          An opaque token representing the current pagination position. If
+          provided, the server should return results starting after this cursor.
+          """
+        )
+    },
+    title: "ListPromptsRequestParams",
     type: "object"
   }
 

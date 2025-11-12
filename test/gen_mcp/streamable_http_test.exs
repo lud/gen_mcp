@@ -957,4 +957,284 @@ defmodule GenMcp.StreamableHttpTest do
              } = resp.body
     end
   end
+
+  describe "prompt operations" do
+    test "list prompts" do
+      session_id = init_session()
+
+      expect(ServerMock, :handle_request, fn req, _chan_info, state ->
+        assert %GenMcp.Mcp.Entities.ListPromptsRequest{
+                 id: 300,
+                 method: "prompts/list"
+               } = req
+
+        result =
+          Server.list_prompts_result(
+            [
+              %{name: "greeting", description: "A friendly greeting"},
+              %{
+                name: "analysis",
+                description: "Data analysis",
+                arguments: [
+                  %{name: "dataset", required: true, description: "Dataset to analyze"}
+                ]
+              }
+            ],
+            nil
+          )
+
+        {:reply, {:result, result}, state}
+      end)
+
+      resp =
+        session_id
+        |> client()
+        |> post_message(%{
+          jsonrpc: "2.0",
+          id: 300,
+          method: "prompts/list",
+          params: %{}
+        })
+
+      assert %{
+               "id" => 300,
+               "jsonrpc" => "2.0",
+               "result" => %{
+                 "prompts" => [
+                   %{
+                     "name" => "greeting",
+                     "description" => "A friendly greeting"
+                   },
+                   %{
+                     "name" => "analysis",
+                     "description" => "Data analysis",
+                     "arguments" => [
+                       %{
+                         "name" => "dataset",
+                         "required" => true,
+                         "description" => "Dataset to analyze"
+                       }
+                     ]
+                   }
+                 ]
+               }
+             } = resp.body
+    end
+
+    test "list prompts with pagination" do
+      session_id = init_session()
+
+      expect(ServerMock, :handle_request, fn req, _chan_info, state ->
+        assert %GenMcp.Mcp.Entities.ListPromptsRequest{
+                 id: 301,
+                 method: "prompts/list",
+                 params: %{cursor: "page-2-token"}
+               } = req
+
+        result =
+          Server.list_prompts_result(
+            [%{name: "prompt3"}],
+            nil
+          )
+
+        {:reply, {:result, result}, state}
+      end)
+
+      resp =
+        session_id
+        |> client()
+        |> post_message(%{
+          jsonrpc: "2.0",
+          id: 301,
+          method: "prompts/list",
+          params: %{cursor: "page-2-token"}
+        })
+
+      assert %{
+               "id" => 301,
+               "jsonrpc" => "2.0",
+               "result" => %{
+                 "prompts" => [%{"name" => "prompt3"}]
+               }
+             } = resp.body
+    end
+
+    test "get prompt without arguments" do
+      session_id = init_session()
+
+      expect(ServerMock, :handle_request, fn req, _chan_info, state ->
+        assert %GenMcp.Mcp.Entities.GetPromptRequest{
+                 id: 302,
+                 method: "prompts/get",
+                 params: %{name: "greeting"}
+               } = req
+
+        result = %GenMcp.Mcp.Entities.GetPromptResult{
+          description: "A friendly greeting",
+          messages: [
+            %GenMcp.Mcp.Entities.PromptMessage{
+              role: :user,
+              content: %GenMcp.Mcp.Entities.TextContent{
+                type: :text,
+                text: "Hello! How can I help you today?"
+              }
+            }
+          ]
+        }
+
+        {:reply, {:result, result}, state}
+      end)
+
+      resp =
+        session_id
+        |> client()
+        |> post_message(%{
+          jsonrpc: "2.0",
+          id: 302,
+          method: "prompts/get",
+          params: %{name: "greeting"}
+        })
+
+      assert %{
+               "id" => 302,
+               "jsonrpc" => "2.0",
+               "result" => %{
+                 "description" => "A friendly greeting",
+                 "messages" => [
+                   %{
+                     "role" => "user",
+                     "content" => %{
+                       "type" => "text",
+                       "text" => "Hello! How can I help you today?"
+                     }
+                   }
+                 ]
+               }
+             } = resp.body
+    end
+
+    test "get prompt with arguments" do
+      session_id = init_session()
+
+      expect(ServerMock, :handle_request, fn req, _chan_info, state ->
+        assert %GenMcp.Mcp.Entities.GetPromptRequest{
+                 id: 303,
+                 method: "prompts/get",
+                 params: %{
+                   name: "analysis",
+                   arguments: %{"dataset" => "sales.csv"}
+                 }
+               } = req
+
+        result = %GenMcp.Mcp.Entities.GetPromptResult{
+          messages: [
+            %GenMcp.Mcp.Entities.PromptMessage{
+              role: :user,
+              content: %GenMcp.Mcp.Entities.TextContent{
+                type: :text,
+                text: "Analyze dataset: sales.csv"
+              }
+            }
+          ]
+        }
+
+        {:reply, {:result, result}, state}
+      end)
+
+      resp =
+        session_id
+        |> client()
+        |> post_message(%{
+          jsonrpc: "2.0",
+          id: 303,
+          method: "prompts/get",
+          params: %{
+            name: "analysis",
+            arguments: %{dataset: "sales.csv"}
+          }
+        })
+
+      assert %{
+               "id" => 303,
+               "jsonrpc" => "2.0",
+               "result" => %{
+                 "messages" => [
+                   %{
+                     "role" => "user",
+                     "content" => %{
+                       "type" => "text",
+                       "text" => "Analyze dataset: sales.csv"
+                     }
+                   }
+                 ]
+               }
+             } = resp.body
+    end
+
+    test "handles prompt not found error" do
+      session_id = init_session()
+
+      expect(ServerMock, :handle_request, fn req, _chan_info, state ->
+        assert %GenMcp.Mcp.Entities.GetPromptRequest{
+                 id: 304,
+                 method: "prompts/get",
+                 params: %{name: "unknown"}
+               } = req
+
+        {:reply, {:error, {:prompt_not_found, "unknown"}}, state}
+      end)
+
+      resp =
+        session_id
+        |> client()
+        |> post_message(%{
+          jsonrpc: "2.0",
+          id: 304,
+          method: "prompts/get",
+          params: %{name: "unknown"}
+        })
+
+      assert %{
+               "id" => 304,
+               "jsonrpc" => "2.0",
+               "error" => %{
+                 "code" => -32602,
+                 "message" => "Prompt not found: unknown",
+                 "data" => %{"name" => "unknown"}
+               }
+             } = resp.body
+    end
+
+    test "handles prompt validation error" do
+      session_id = init_session()
+
+      expect(ServerMock, :handle_request, fn req, _chan_info, state ->
+        assert %GenMcp.Mcp.Entities.GetPromptRequest{
+                 id: 305,
+                 method: "prompts/get"
+               } = req
+
+        {:reply, {:error, "Missing required argument: dataset"}, state}
+      end)
+
+      resp =
+        session_id
+        |> client()
+        |> post_message(%{
+          jsonrpc: "2.0",
+          id: 305,
+          method: "prompts/get",
+          params: %{name: "analysis"}
+        })
+
+      assert %{
+               "id" => 305,
+               "jsonrpc" => "2.0",
+               "error" => %{
+                 "code" => -32603,
+                 "message" => "Missing required argument: dataset"
+               }
+             } = resp.body
+    end
+  end
 end

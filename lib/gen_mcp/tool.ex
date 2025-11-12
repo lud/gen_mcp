@@ -145,6 +145,11 @@ defmodule GenMcp.Tool do
     end)
   end
 
+  IO.warn("""
+  @todo document that the arguments are not validated by default
+  @todo accept an invalid_params response
+  """)
+
   @doc """
   This is a thin wrapper around the tool `c:call/3` callback that also performs
   input validation.

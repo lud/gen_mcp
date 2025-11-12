@@ -4,6 +4,7 @@ defmodule GenMcp.Server.BasicTest do
   alias GenMcp.Mcp.Entities
   alias GenMcp.Server
   alias GenMcp.Server.Basic
+  alias GenMcp.Support.PromptRepoMock
   alias GenMcp.Support.ResourceRepoMock
   alias GenMcp.Support.ResourceRepoMockTpl
   alias GenMcp.Support.ToolMock
@@ -16,6 +17,11 @@ defmodule GenMcp.Server.BasicTest do
     server_name: "Test Server",
     server_version: "0"
   ]
+
+  IO.warn("""
+  @todo we should test that capabilities for tools/resources/prompts are only
+  defined when there is at least one tool/repo
+  """)
 
   defp chan_info do
     {:channel, __MODULE__, self()}
@@ -94,7 +100,8 @@ defmodule GenMcp.Server.BasicTest do
       assert {:error, :not_initialized, %{status: :starting}} =
                Basic.handle_request(req, chan_info(), state)
 
-      check_error(:not_initialized)
+      assert {400, %{code: -32603, message: "Server not initialized"}} =
+               check_error(:not_initialized)
     end
 
     test "handles initialize request and reject tool call request without initialization notification" do
@@ -125,7 +132,8 @@ defmodule GenMcp.Server.BasicTest do
       assert {:error, :not_initialized, %{status: :server_initialized}} =
                Basic.handle_request(tool_call_req, chan_info(), state)
 
-      check_error(:not_initialized)
+      assert {400, %{code: -32603, message: "Server not initialized"}} =
+               check_error(:not_initialized)
     end
 
     test "rejects initialization request when already initialized" do
@@ -146,7 +154,7 @@ defmodule GenMcp.Server.BasicTest do
       assert {:stop, :already_initialized, {:error, :already_initialized} = err, _} =
                Basic.handle_request(init_req, chan_info(), state)
 
-      check_error(err)
+      assert {400, %{code: -32602, message: "Session is already initialized"}} = check_error(err)
     end
 
     test "rejects initialization with invalid protocol version" do
@@ -166,7 +174,12 @@ defmodule GenMcp.Server.BasicTest do
       assert {:stop, reason, {:error, {:unsupported_protocol, "2024-01-01"} = reason}, _} =
                Basic.handle_request(init_req, chan_info(), state)
 
-      check_error(reason)
+      assert {400,
+              %{
+                code: -32600,
+                data: %{version: "2024-01-01", supported: ["2025-06-18"]},
+                message: "Unsupported protocol version"
+              }} = check_error(reason)
     end
   end
 
@@ -297,7 +310,9 @@ defmodule GenMcp.Server.BasicTest do
       assert {:reply, {:error, %JSV.ValidationError{}} = err, _} =
                Basic.handle_request(tool_call_req, chan_info(), state)
 
-      check_error(err)
+      assert {400,
+              %{code: -32602, data: %{valid: false, details: []}, message: "Invalid Parameters"}} =
+               check_error(err)
     end
 
     test "tool returns error string from call callback" do
@@ -583,7 +598,7 @@ defmodule GenMcp.Server.BasicTest do
                Basic.handle_request(invalid_request, chan_info(), state)
 
       # Verify it returns a proper error that can be cast to RPC error
-      check_error(error)
+      assert {400, %{code: -32602, message: "Invalid pagination cursor"}} = check_error(error)
     end
   end
 
@@ -1022,6 +1037,311 @@ defmodule GenMcp.Server.BasicTest do
                )
 
       assert %Entities.ListResourceTemplatesResult{resourceTemplates: []} = result
+    end
+  end
+
+  describe "listing prompts" do
+    test "lists prompts from single repository" do
+      prompts = [
+        %{name: "greeting", description: "Say hello"},
+        %{
+          name: "analysis",
+          description: "Analyze data",
+          arguments: [
+            %{name: "dataset", required: true}
+          ]
+        }
+      ]
+
+      PromptRepoMock
+      |> expect(:prefix, fn :arg -> "some_prefix" end)
+      |> expect(:list, fn nil, :arg ->
+        {prompts, nil}
+      end)
+
+      state = init_session(prompts: [{PromptRepoMock, :arg}])
+
+      assert {:reply, {:result, result}, _} =
+               Basic.handle_request(
+                 %Entities.ListPromptsRequest{},
+                 chan_info(),
+                 state
+               )
+
+      assert %Entities.ListPromptsResult{
+               prompts: ^prompts,
+               nextCursor: nil
+             } = result
+    end
+
+    test "lists prompts with pagination from single repository" do
+      page1 = [%{name: "prompt1"}, %{name: "prompt2"}]
+      page2 = [%{name: "prompt3"}]
+
+      PromptRepoMock
+      |> expect(:prefix, fn :repo1 -> "some_prefix" end)
+      |> expect(:list, fn nil, :repo1 -> {page1, "repo_cursor_2"} end)
+      |> expect(:list, fn "repo_cursor_2", :repo1 -> {page2, nil} end)
+
+      state = init_session(prompts: [{PromptRepoMock, :repo1}])
+
+      # First page
+      assert {:reply, {:result, result1}, _} =
+               Basic.handle_request(
+                 %Entities.ListPromptsRequest{},
+                 chan_info(),
+                 state
+               )
+
+      assert %Entities.ListPromptsResult{
+               prompts: ^page1,
+               nextCursor: cursor1
+             } = result1
+
+      assert is_binary(cursor1)
+
+      # Second page
+      assert {:reply, {:result, result2}, _} =
+               Basic.handle_request(
+                 %Entities.ListPromptsRequest{params: %{cursor: cursor1}},
+                 chan_info(),
+                 state
+               )
+
+      assert %Entities.ListPromptsResult{
+               prompts: ^page2,
+               nextCursor: nil
+             } = result2
+    end
+
+    test "lists prompts across multiple repositories" do
+      PromptRepoMock
+      |> expect(:prefix, 3, fn
+        :repo1 -> "prompt1"
+        :repo2 -> "prompt2"
+        :repo3 -> "prompt3"
+      end)
+      |> expect(:list, fn nil, :repo1 -> {[%{name: "prompt1"}], nil} end)
+      |> expect(:list, fn nil, :repo2 -> {[%{name: "prompt2"}], nil} end)
+      |> expect(:list, fn nil, :repo3 -> {[%{name: "prompt3"}], nil} end)
+
+      state =
+        init_session(
+          prompts: [
+            {PromptRepoMock, :repo1},
+            {PromptRepoMock, :repo2},
+            {PromptRepoMock, :repo3}
+          ]
+        )
+
+      # First request
+      assert {:reply, {:result, result1}, _} =
+               Basic.handle_request(
+                 %Entities.ListPromptsRequest{},
+                 chan_info(),
+                 state
+               )
+
+      assert %Entities.ListPromptsResult{
+               prompts: [%{name: "prompt1"}],
+               nextCursor: cursor1
+             } = result1
+
+      # Second request
+      assert {:reply, {:result, result2}, _} =
+               Basic.handle_request(
+                 %Entities.ListPromptsRequest{params: %{cursor: cursor1}},
+                 chan_info(),
+                 state
+               )
+
+      assert %Entities.ListPromptsResult{
+               prompts: [%{name: "prompt2"}],
+               nextCursor: cursor2
+             } = result2
+
+      # Third request
+      assert {:reply, {:result, result3}, _} =
+               Basic.handle_request(
+                 %Entities.ListPromptsRequest{params: %{cursor: cursor2}},
+                 chan_info(),
+                 state
+               )
+
+      assert %Entities.ListPromptsResult{
+               prompts: [%{name: "prompt3"}],
+               nextCursor: nil
+             } = result3
+    end
+
+    test "handles invalid pagination token" do
+      expect(PromptRepoMock, :prefix, fn :repo1 -> "some_prefix" end)
+
+      state = init_session(prompts: [{PromptRepoMock, :repo1}])
+
+      assert {:reply, {:error, :invalid_cursor}, _} =
+               Basic.handle_request(
+                 %Entities.ListPromptsRequest{params: %{cursor: "invalid_token"}},
+                 chan_info(),
+                 state
+               )
+
+      assert {400, %{code: -32602, message: "Invalid pagination cursor"}} =
+               check_error(:invalid_cursor)
+    end
+
+    test "returns empty list when no prompts configured" do
+      state = init_session(prompts: [])
+
+      assert {:reply, {:result, result}, _} =
+               Basic.handle_request(
+                 %Entities.ListPromptsRequest{},
+                 chan_info(),
+                 state
+               )
+
+      assert %Entities.ListPromptsResult{
+               prompts: [],
+               nextCursor: nil
+             } = result
+    end
+  end
+
+  describe "getting prompts" do
+    test "gets prompt without arguments" do
+      result = %Entities.GetPromptResult{
+        description: "A greeting",
+        messages: [
+          %Entities.PromptMessage{
+            role: :user,
+            content: %Entities.TextContent{type: :text, text: "Hello!"}
+          }
+        ]
+      }
+
+      PromptRepoMock
+      |> expect(:prefix, fn :repo1 -> "gre" end)
+      |> expect(:get, fn "greeting", args, :repo1 ->
+        assert(args == %{})
+        {:ok, result}
+      end)
+
+      state = init_session(prompts: [{PromptRepoMock, :repo1}])
+
+      assert {:reply, {:result, ^result}, _} =
+               Basic.handle_request(
+                 %Entities.GetPromptRequest{
+                   params: %{name: "greeting"}
+                 },
+                 chan_info(),
+                 state
+               )
+    end
+
+    test "gets prompt with valid arguments" do
+      result = %Entities.GetPromptResult{
+        messages: [
+          %Entities.PromptMessage{
+            role: :user,
+            content: %Entities.TextContent{type: :text, text: "Analyze: test.csv"}
+          }
+        ]
+      }
+
+      PromptRepoMock
+      |> expect(:prefix, fn :repo1 -> "an" end)
+      |> expect(:get, fn "analysis", args, :repo1 ->
+        assert(args == %{"dataset" => "test.csv"})
+        {:ok, result}
+      end)
+
+      state = init_session(prompts: [{PromptRepoMock, :repo1}])
+
+      assert {:reply, {:result, ^result}, _} =
+               Basic.handle_request(
+                 %Entities.GetPromptRequest{
+                   params: %{
+                     name: "analysis",
+                     arguments: %{"dataset" => "test.csv"}
+                   }
+                 },
+                 chan_info(),
+                 state
+               )
+    end
+
+    test "returns error for non-existent prompt" do
+      PromptRepoMock
+      |> expect(:prefix, fn :repo1 -> "unknown" end)
+      |> expect(:get, fn "unknown", _, :repo1 -> {:error, :not_found} end)
+
+      state = init_session(prompts: [{PromptRepoMock, :repo1}])
+
+      assert {:reply, {:error, {:prompt_not_found, "unknown"}}, _} =
+               Basic.handle_request(
+                 %Entities.GetPromptRequest{
+                   params: %{name: "unknown"}
+                 },
+                 chan_info(),
+                 state
+               )
+
+      assert {400,
+              %{code: -32602, data: %{name: "unknown"}, message: "Prompt not found: unknown"}} =
+               check_error({:prompt_not_found, "unknown"})
+    end
+
+    IO.warn("@todo allow invalid params return and expect HTTP error 400")
+
+    test "returns error for validation failure" do
+      PromptRepoMock
+      |> expect(:prefix, fn :repo1 -> "analysis" end)
+      |> expect(:get, fn "analysis", _, :repo1 ->
+        {:error, "Missing required argument: dataset"}
+      end)
+
+      state = init_session(prompts: [{PromptRepoMock, :repo1}])
+
+      assert {:reply, {:error, "Missing required argument: dataset"}, _} =
+               Basic.handle_request(
+                 %Entities.GetPromptRequest{
+                   params: %{name: "analysis"}
+                 },
+                 chan_info(),
+                 state
+               )
+
+      assert {500, %{code: -32603}} = check_error("Missing required argument: dataset")
+    end
+
+    test "searches across multiple repos" do
+      result = %Entities.GetPromptResult{
+        messages: []
+      }
+
+      PromptRepoMock
+      |> expect(:prefix, 2, fn
+        :repo1 -> "prompt1"
+        :repo2 -> "prompt2"
+      end)
+      |> expect(:get, fn "prompt2", _, :repo2 -> {:ok, result} end)
+
+      state =
+        init_session(
+          prompts: [
+            {PromptRepoMock, :repo1},
+            {PromptRepoMock, :repo2}
+          ]
+        )
+
+      assert {:reply, {:result, ^result}, _} =
+               Basic.handle_request(
+                 %Entities.GetPromptRequest{
+                   params: %{name: "prompt2"}
+                 },
+                 chan_info(),
+                 state
+               )
     end
   end
 end

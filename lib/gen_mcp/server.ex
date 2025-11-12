@@ -94,8 +94,8 @@ defmodule GenMcp.Server do
 
   def list_resources_result(resources, next_cursor) do
     %Entities.ListResourcesResult{
-      nextCursor: next_cursor,
-      resources: resources
+      resources: resources,
+      nextCursor: next_cursor
     }
   end
 
@@ -155,5 +155,12 @@ defmodule GenMcp.Server do
       end
 
     %Entities.ReadResourceResult{contents: contents}
+  end
+
+  def list_prompts_result(prompts, next_cursor) do
+    %Entities.ListPromptsResult{
+      prompts: prompts,
+      nextCursor: next_cursor
+    }
   end
 end

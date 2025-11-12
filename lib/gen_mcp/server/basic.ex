@@ -1,6 +1,7 @@
 defmodule GenMcp.Server.Basic do
   alias GenMcp.Mcp.Entities
   alias GenMcp.Mux.Channel
+  alias GenMcp.PromptRepo
   alias GenMcp.ResourceRepo
   alias GenMcp.Server
   alias GenMcp.Tool
@@ -19,7 +20,9 @@ defmodule GenMcp.Server.Basic do
       :tool_names,
       :tools_map,
       :resource_prefixes,
-      :repos_map,
+      :resource_repos,
+      :prompt_prefixes,
+      :prompt_repos,
       :token_key,
       :token_salt,
       :trackers
@@ -51,7 +54,15 @@ defmodule GenMcp.Server.Basic do
       |> Enum.map(&ResourceRepo.expand/1)
 
     resource_prefixes = Enum.map(resources, & &1.prefix)
-    repos_map = Map.new(resources, fn %{prefix: prefix} = repo -> {prefix, repo} end)
+    resource_repos = Map.new(resources, fn %{prefix: prefix} = repo -> {prefix, repo} end)
+
+    prompts =
+      opts
+      |> Keyword.get(:prompts, [])
+      |> Enum.map(&PromptRepo.expand/1)
+
+    prompt_prefixes = Enum.map(prompts, & &1.prefix)
+    prompt_repos = Map.new(prompts, fn %{prefix: prefix} = repo -> {prefix, repo} end)
 
     {:ok,
      %State{
@@ -60,7 +71,9 @@ defmodule GenMcp.Server.Basic do
        tool_names: tool_names,
        tools_map: tools_map,
        resource_prefixes: resource_prefixes,
-       repos_map: repos_map,
+       resource_repos: resource_repos,
+       prompt_prefixes: prompt_prefixes,
+       prompt_repos: prompt_repos,
        token_key: random_string(64),
        token_salt: random_string(8),
        trackers: empty_trackers()
@@ -145,30 +158,27 @@ defmodule GenMcp.Server.Basic do
         _ -> nil
       end
 
-    case decode_resource_pagination(cursor, state) do
+    case decode_pagination(cursor, state) do
       {:ok, pagination} ->
         {resources, next_pagination} = list_resources(pagination, state)
 
         result =
           Server.list_resources_result(
             resources,
-            encode_resource_pagination(next_pagination, state)
+            encode_pagination(next_pagination, state)
           )
 
         {:reply, {:result, result}, state}
 
-      {:error, :invalid_cursor} ->
-        {:reply, {:error, :invalid_cursor}, state}
-
-      {:error, :expired_cursor} ->
-        {:reply, {:error, :expired_cursor}, state}
+      {:error, _} = err ->
+        reply_pagination_error(err, state)
     end
   end
 
   def handle_request(%Entities.ReadResourceRequest{} = req, _chan_info, state) do
     uri = req.params.uri
 
-    case find_repo_for_uri(state, uri) do
+    case find_resource_repo_for_uri(state, uri) do
       {:ok, repo} ->
         case ResourceRepo.read_resource(repo, uri) do
           {:ok, result} -> {:reply, {:result, result}, state}
@@ -183,7 +193,7 @@ defmodule GenMcp.Server.Basic do
   def handle_request(%Entities.ListResourceTemplatesRequest{}, _chan_info, state) do
     templates =
       Enum.flat_map(state.resource_prefixes, fn prefix ->
-        case Map.fetch!(state.repos_map, prefix).template do
+        case Map.fetch!(state.resource_repos, prefix).template do
           nil ->
             []
 
@@ -204,6 +214,49 @@ defmodule GenMcp.Server.Basic do
     {:reply, {:result, result}, state}
   end
 
+  def handle_request(%Entities.ListPromptsRequest{} = req, _chan_info, state) do
+    cursor =
+      case req do
+        %{params: %{cursor: global_cursor}} when is_binary(global_cursor) -> global_cursor
+        _ -> nil
+      end
+
+    case decode_pagination(cursor, state) do
+      {:ok, pagination} ->
+        {prompts, next_pagination} = list_prompts(pagination, state)
+
+        result =
+          Server.list_prompts_result(
+            prompts,
+            encode_pagination(next_pagination, state)
+          )
+
+        {:reply, {:result, result}, state}
+
+      {:error, _} = err ->
+        reply_pagination_error(err, state)
+    end
+  end
+
+  def handle_request(%Entities.GetPromptRequest{} = req, _chan_info, state) do
+    {name, arguments} =
+      case req do
+        %{params: %{name: name, arguments: arguments}} when is_map(arguments) -> {name, arguments}
+        %{params: %{name: name}} -> {name, %{}}
+      end
+
+    case find_prompt_repo_for_name(state, name) do
+      {:ok, repo} ->
+        case PromptRepo.get_prompt(repo, name, arguments) do
+          {:ok, result} -> {:reply, {:result, result}, state}
+          {:error, reason} -> {:reply, {:error, reason}, state}
+        end
+
+      {:error, :no_matching_repo} ->
+        {:reply, {:error, {:prompt_not_found, name}}, state}
+    end
+  end
+
   def handle_request(req, _, state) do
     Logger.warning("""
     received unsupported request when status=#{inspect(state.status)}:
@@ -222,11 +275,13 @@ defmodule GenMcp.Server.Basic do
   @impl true
   def handle_info({task_ref, _} = msg, state) when is_reference(task_ref) do
     state =
-      with :error <- handle_task_info(msg, state) do
-        log_unhandled_info(msg)
-        state
-      else
-        {:ok, state} -> state
+      case handle_task_info(msg, state) do
+        :error ->
+          log_unhandled_info(msg)
+          state
+
+        {:ok, state} ->
+          state
       end
 
     {:noreply, state}
@@ -234,13 +289,15 @@ defmodule GenMcp.Server.Basic do
 
   def handle_info({:DOWN, _ref, :process, _pid, _reason} = msg, state) do
     state =
-      with :error <- handle_task_info(msg, state) do
-        # No error log on stale down messages
-        # TODO monitor channels and look for channel disconnection
+      case handle_task_info(msg, state) do
+        :error ->
+          # No error log on stale down messages
+          # TODO monitor channels and look for channel disconnection
 
-        state
-      else
-        {:ok, state} -> state
+          state
+
+        {:ok, state} ->
+          state
       end
 
     {:noreply, state}
@@ -324,19 +381,19 @@ defmodule GenMcp.Server.Basic do
     :crypto.strong_rand_bytes(len) |> Base.encode64(padding: false) |> binary_part(0, len)
   end
 
-  defp encode_resource_pagination(nil, _state) do
+  defp encode_pagination(nil, _state) do
     nil
   end
 
-  defp encode_resource_pagination(pagination, state) do
+  defp encode_pagination(pagination, state) do
     sign_token(pagination, state)
   end
 
-  defp decode_resource_pagination(nil, _state) do
+  defp decode_pagination(nil, _state) do
     {:ok, {_repository_index = 0, _repository_cursor = nil}}
   end
 
-  defp decode_resource_pagination(token, state) do
+  defp decode_pagination(token, state) do
     case verify_token(token, _max_age = :timer.hours(2), state) do
       {:ok, data} -> {:ok, data}
       {:error, :expired} -> {:error, :expired_cursor}
@@ -350,6 +407,16 @@ defmodule GenMcp.Server.Basic do
 
   defp verify_token(token, max_age, state) do
     Plug.Crypto.verify(state.token_key, state.token_salt, token, max_age: max_age)
+  end
+
+  defp reply_pagination_error(err, state) do
+    case err do
+      {:error, :invalid_cursor} ->
+        {:reply, {:error, :invalid_cursor}, state}
+
+      {:error, :expired_cursor} ->
+        {:reply, {:error, :expired_cursor}, state}
+    end
   end
 
   defp call_tool(req, tool, channel, _state) do
@@ -373,24 +440,61 @@ defmodule GenMcp.Server.Basic do
           {list, repo_cursor} -> {list, {repo_index, repo_cursor}}
         end
 
-      {:error, :no_more_repos} ->
+      {:error, :end_of_repos} ->
         {[], nil}
     end
   end
 
   defp resource_repo_at_index(index, state) do
-    case Enum.at(state.resource_prefixes, index) do
-      nil -> {:error, :no_more_repos}
-      prefix -> {:ok, Map.fetch!(state.repos_map, prefix)}
+    repo_at_index(state.resource_prefixes, index, state.resource_repos)
+  end
+
+  defp find_resource_repo_for_uri(state, uri) do
+    find_repo(state.resource_prefixes, uri, state.resource_repos)
+  end
+
+  defp list_prompts({repo_index, repo_cursor}, state) do
+    max_index = length(state.prompt_prefixes) - 1
+
+    case prompt_repo_at_index(repo_index, state) do
+      {:ok, repo} ->
+        case PromptRepo.list_prompts(repo, repo_cursor) do
+          # no more prompts, bump repo index and immediately try next repo
+          {[], _} -> list_prompts({repo_index + 1, _repo_cursor = nil}, state)
+          # some result but no more pages, bump repo index for next request.
+          # some edge case, we do not want to return a pagination cursor if this
+          # is the last repository
+          {list, nil} when repo_index == max_index -> {list, nil}
+          {list, nil} -> {list, {repo_index + 1, _repo_cursor = nil}}
+          # some results with a cursor so no bump
+          {list, repo_cursor} -> {list, {repo_index, repo_cursor}}
+        end
+
+      {:error, :end_of_repos} ->
+        {[], nil}
     end
   end
 
-  defp find_repo_for_uri(state, uri) do
-    # Match against prefixes in declaration order (first match wins)
-    state.resource_prefixes
+  defp prompt_repo_at_index(index, state) do
+    repo_at_index(state.prompt_prefixes, index, state.prompt_repos)
+  end
+
+  defp find_prompt_repo_for_name(state, name) do
+    find_repo(state.prompt_prefixes, name, state.prompt_repos)
+  end
+
+  defp repo_at_index(oredered_keys, index, map) do
+    case Enum.at(oredered_keys, index) do
+      nil -> {:error, :end_of_repos}
+      prefix -> {:ok, Map.fetch!(map, prefix)}
+    end
+  end
+
+  defp find_repo(prefixes, identifier, repos) do
+    prefixes
     |> Enum.find_value(fn prefix ->
-      if String.starts_with?(uri, prefix) do
-        Map.fetch!(state.repos_map, prefix)
+      if String.starts_with?(identifier, prefix) do
+        Map.fetch!(repos, prefix)
       end
     end)
     |> case do

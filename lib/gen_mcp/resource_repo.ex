@@ -55,7 +55,7 @@ defmodule GenMcp.ResourceRepo do
 
   alias GenMcp.Mcp.Entities
 
-  @type resource :: %{
+  @type resource_item :: %{
           required(:uri) => String.t(),
           required(:name) => String.t(),
           optional(:description) => nil | String.t(),
@@ -133,7 +133,7 @@ defmodule GenMcp.ResourceRepo do
       end
   """
   @callback list(pagination_token :: String.t() | nil, arg) ::
-              {[resource], next_cursor :: term | nil}
+              {[resource_item], next_cursor :: term | nil}
 
   @doc """
   Reads resource contents.
@@ -228,9 +228,9 @@ defmodule GenMcp.ResourceRepo do
     Code.ensure_loaded!(mod)
     prefix = mod.prefix(arg)
 
-    if !is_binary(prefix) or String.trim(prefix) == "" do
+    if !is_binary(prefix) do
       raise ArgumentError,
-            "resource repo #{inspect(mod)} must return a valid prefix, got: #{inspect(prefix)}"
+            "resource repo #{inspect(mod)} must return a string prefix, got: #{inspect(prefix)}"
     end
 
     template =

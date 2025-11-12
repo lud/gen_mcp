@@ -193,7 +193,20 @@ defmodule Generator do
 
   def swap_sub_schema(defs, path, name) do
     {sub_schema, defs} =
-      get_and_update_in(defs, path, fn sub -> {sub, %{"$ref": "#/definitions/#{name}"}} end)
+      try do
+        get_and_update_in(defs, path, fn sub -> {sub, %{"$ref": "#/definitions/#{name}"}} end)
+      rescue
+        e in ArgumentError ->
+          case Map.fetch(defs, hd(path)) do
+            {:ok, schema_def} ->
+              IO.warn("check if #{inspect(tl(path))} is defined in #{inspect(schema_def)}", [])
+
+            :error ->
+              IO.warn("could not find schema def #{inspect(hd(path))}")
+          end
+
+          reraise e, __STACKTRACE__
+      end
 
     Map.put(defs, name, sub_schema)
   end
@@ -205,6 +218,8 @@ defmodule Generator do
     |> swap_sub_schema([:CallToolRequest, :properties, :params], :CallToolRequestParams)
     |> swap_sub_schema([:ListResourcesRequest, :properties, :params], :ListResourcesRequestParams)
     |> swap_sub_schema([:ReadResourceRequest, :properties, :params], :ReadResourceRequestParams)
+    |> swap_sub_schema([:ListPromptsRequest, :properties, :params], :ListPromptsRequestParams)
+    |> swap_sub_schema([:GetPromptRequest, :properties, :params], :GetPromptRequestParams)
   end
 
   def prelude do
