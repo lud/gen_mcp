@@ -18,3 +18,4 @@ Mox.defmock(GenMCP.Support.ResourceRepoMockTpl,
 )
 
 Mox.defmock(GenMCP.Support.PromptRepoMock, for: PromptRepo)
+Mox.defmock(GenMCP.Support.AuthorizationMock, for: Plug)

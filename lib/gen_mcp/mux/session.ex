@@ -27,14 +27,14 @@ defmodule GenMCP.Mux.Session do
   @impl true
   def init(opts) do
     {server, opts} = Keyword.pop(opts, :server, GenMCP.Suite)
-
+    session_id = Keyword.fetch!(opts, :session_id)
     # pass all other options to the server if the server is not a tuple
     default_server_options = opts
 
     {server_mod, server_arg} = normalize_server(server, default_server_options)
     Logger.debug("GenMCP session #{opts[:session_id]} initializing with #{inspect(server_mod)}")
 
-    case server_mod.init(server_arg) do
+    case server_mod.init(session_id, server_arg) do
       {:ok, server_state} -> {:ok, %State{server_mod: server_mod, server_state: server_state}}
     end
   end

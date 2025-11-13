@@ -24,7 +24,7 @@ defmodule GenMCP.SuiteTest do
   """)
 
   defp chan_info do
-    {:channel, __MODULE__, self()}
+    {:channel, __MODULE__, self(), %{}}
   end
 
   defp check_error({:error, reason}) do
@@ -345,7 +345,7 @@ defmodule GenMCP.SuiteTest do
     test "lists resources from a direct resource repository" do
       ResourceRepoMock
       |> stub(:prefix, fn :repo1 -> "file:///" end)
-      |> expect(:list, fn nil, :repo1 ->
+      |> expect(:list, fn nil, _channel, :repo1 ->
         {[
            %{uri: "file:///readme.txt", name: "README", description: "Project readme"},
            %{uri: "file:///config.json", name: "Config"}
@@ -376,10 +376,10 @@ defmodule GenMCP.SuiteTest do
     test "lists resources with pagination" do
       ResourceRepoMock
       |> stub(:prefix, fn :repo1 -> "file:///" end)
-      |> expect(:list, fn nil, :repo1 ->
+      |> expect(:list, fn nil, _channel, :repo1 ->
         {[%{uri: "file:///page1.txt", name: "Page 1"}], "next-token"}
       end)
-      |> expect(:list, fn "next-token", :repo1 ->
+      |> expect(:list, fn "next-token", _channel, :repo1 ->
         {[%{uri: "file:///page2.txt", name: "Page 2"}], nil}
       end)
 
@@ -413,7 +413,7 @@ defmodule GenMCP.SuiteTest do
     test "returns empty list when no resources available" do
       ResourceRepoMock
       |> stub(:prefix, fn _ -> "file:///" end)
-      |> expect(:list, 3, fn nil, _ -> {[], nil} end)
+      |> expect(:list, 3, fn nil, _channel, _ -> {[], nil} end)
 
       state =
         init_session(
@@ -439,13 +439,13 @@ defmodule GenMCP.SuiteTest do
         :repo1 -> "file:///"
         :repo2 -> "http://localhost/"
       end)
-      |> expect(:list, fn nil, :repo1 ->
+      |> expect(:list, fn nil, _channel, :repo1 ->
         {[
            %{uri: "file:///readme.txt", name: "Local README"},
            %{uri: "file:///license.txt", name: "Local license"}
          ], nil}
       end)
-      |> expect(:list, fn nil, :repo2 ->
+      |> expect(:list, fn nil, _channel, :repo2 ->
         {[%{uri: "http://localhost/api", name: "API"}], nil}
       end)
 
@@ -484,9 +484,9 @@ defmodule GenMCP.SuiteTest do
         :repo2 -> "http://localhost/"
         :repo3 -> "s3://bucket/"
       end)
-      |> expect(:list, fn nil, :repo1 -> {[], nil} end)
-      |> expect(:list, fn nil, :repo2 -> {[], nil} end)
-      |> expect(:list, fn nil, :repo3 ->
+      |> expect(:list, fn nil, _channel, :repo1 -> {[], nil} end)
+      |> expect(:list, fn nil, _channel, :repo2 -> {[], nil} end)
+      |> expect(:list, fn nil, _channel, :repo3 ->
         {[
            %{uri: "s3://bucket/file1.txt", name: "File 1"},
            %{uri: "s3://bucket/file2.txt", name: "File 2"}
@@ -523,12 +523,12 @@ defmodule GenMCP.SuiteTest do
         :repo2 -> "http://localhost/"
         :repo3 -> "s3://bucket/"
       end)
-      |> expect(:list, fn nil, :repo1 -> {[], nil} end)
-      |> expect(:list, fn nil, :repo2 ->
+      |> expect(:list, fn nil, _channel, :repo1 -> {[], nil} end)
+      |> expect(:list, fn nil, _channel, :repo2 ->
         {[%{uri: "http://localhost/api", name: "API"}], "repo2-cursor"}
       end)
-      |> expect(:list, fn "repo2-cursor", :repo2 -> {[], nil} end)
-      |> expect(:list, fn nil, :repo3 ->
+      |> expect(:list, fn "repo2-cursor", _channel, :repo2 -> {[], nil} end)
+      |> expect(:list, fn nil, _channel, :repo3 ->
         {[%{uri: "s3://bucket/data.txt", name: "Data"}], nil}
       end)
 
@@ -571,7 +571,7 @@ defmodule GenMCP.SuiteTest do
     test "returns error when client provides invalid pagination token" do
       ResourceRepoMock
       |> stub(:prefix, fn :repo1 -> "file:///" end)
-      |> expect(:list, fn nil, :repo1 ->
+      |> expect(:list, fn nil, _channel, :repo1 ->
         {[%{uri: "file:///page1.txt", name: "Page 1"}], "valid-token"}
       end)
 
@@ -605,7 +605,7 @@ defmodule GenMCP.SuiteTest do
     test "reads a direct text resource" do
       ResourceRepoMock
       |> stub(:prefix, fn :repo1 -> "file:///" end)
-      |> expect(:read, fn "file:///readme.txt", :repo1 ->
+      |> expect(:read, fn "file:///readme.txt", _channel, :repo1 ->
         {:ok,
          Server.read_resource_result(
            uri: "file:///readme.txt",
@@ -632,7 +632,7 @@ defmodule GenMCP.SuiteTest do
     test "reads a text resource with custom MIME type" do
       ResourceRepoMock
       |> stub(:prefix, fn :repo1 -> "file:///" end)
-      |> expect(:read, fn "file:///index.html", :repo1 ->
+      |> expect(:read, fn "file:///index.html", _channel, :repo1 ->
         {:ok,
          Server.read_resource_result(
            uri: "file:///index.html",
@@ -659,7 +659,7 @@ defmodule GenMCP.SuiteTest do
 
       ResourceRepoMock
       |> stub(:prefix, fn :repo1 -> "file:///" end)
-      |> expect(:read, fn "file:///data.bin", :repo1 ->
+      |> expect(:read, fn "file:///data.bin", _channel, :repo1 ->
         {:ok,
          Server.read_resource_result(
            uri: "file:///data.bin",
@@ -688,7 +688,7 @@ defmodule GenMCP.SuiteTest do
     test "returns not found error for missing resource" do
       ResourceRepoMock
       |> stub(:prefix, fn :repo1 -> "file:///" end)
-      |> expect(:read, fn "file:///missing.txt", :repo1 ->
+      |> expect(:read, fn "file:///missing.txt", _channel, :repo1 ->
         {:error, :not_found}
       end)
 
@@ -708,7 +708,7 @@ defmodule GenMCP.SuiteTest do
     test "returns custom error message from repository" do
       ResourceRepoMock
       |> stub(:prefix, fn :repo1 -> "file:///" end)
-      |> expect(:read, fn "file:///invalid.txt", :repo1 ->
+      |> expect(:read, fn "file:///invalid.txt", _channel, :repo1 ->
         {:error, "Invalid file format"}
       end)
 
@@ -730,7 +730,7 @@ defmodule GenMCP.SuiteTest do
         :repo1 -> "file:///"
         :repo2 -> "http://example.com/"
       end)
-      |> expect(:read, fn "http://example.com/resource", :repo2 ->
+      |> expect(:read, fn "http://example.com/resource", _channel, :repo2 ->
         {:ok,
          Server.read_resource_result(
            uri: "http://example.com/resource",
@@ -771,7 +771,7 @@ defmodule GenMCP.SuiteTest do
     test "reads resource with repository using module shorthand" do
       ResourceRepoMock
       |> stub(:prefix, fn [] -> "file:///" end)
-      |> expect(:read, fn "file:///readme.txt", [] ->
+      |> expect(:read, fn "file:///readme.txt", _channel, [] ->
         {:ok, Server.read_resource_result(uri: "file:///readme.txt", text: "Hello")}
       end)
 
@@ -807,15 +807,15 @@ defmodule GenMCP.SuiteTest do
         :trash_repo -> "file:///trash/"
       end)
       # Private path should route to first repo
-      |> expect(:read, fn "file:///private/secret.txt", :private_repo ->
+      |> expect(:read, fn "file:///private/secret.txt", _channel, :private_repo ->
         {:ok, Server.read_resource_result(uri: "file:///private/secret.txt", text: "Secret")}
       end)
       # General path (without private) should route to second repo
-      |> expect(:read, fn "file:///readme.txt", :general_repo ->
+      |> expect(:read, fn "file:///readme.txt", _channel, :general_repo ->
         {:ok, Server.read_resource_result(uri: "file:///readme.txt", text: "General")}
       end)
       # Trash path should ALSO route to second repo (not third) because it matches first
-      |> expect(:read, fn "file:///trash/deleted.txt", :general_repo ->
+      |> expect(:read, fn "file:///trash/deleted.txt", _channel, :general_repo ->
         {:ok, Server.read_resource_result(uri: "file:///trash/deleted.txt", text: "Deleted")}
       end)
 
@@ -877,7 +877,7 @@ defmodule GenMCP.SuiteTest do
       |> stub(:template, fn :repo1 ->
         %{uriTemplate: "file://{/path*}", name: "FileTemplate"}
       end)
-      |> expect(:read, fn %{"path" => ["config", "app.json"]}, :repo1 ->
+      |> expect(:read, fn %{"path" => ["config", "app.json"]}, _channel, :repo1 ->
         {:ok,
          Server.read_resource_result(
            uri: "file:///config/app.json",
@@ -1054,7 +1054,7 @@ defmodule GenMCP.SuiteTest do
 
       PromptRepoMock
       |> expect(:prefix, fn :arg -> "some_prefix" end)
-      |> expect(:list, fn nil, :arg ->
+      |> expect(:list, fn nil, _channel, :arg ->
         {prompts, nil}
       end)
 
@@ -1079,8 +1079,8 @@ defmodule GenMCP.SuiteTest do
 
       PromptRepoMock
       |> expect(:prefix, fn :repo1 -> "some_prefix" end)
-      |> expect(:list, fn nil, :repo1 -> {page1, "repo_cursor_2"} end)
-      |> expect(:list, fn "repo_cursor_2", :repo1 -> {page2, nil} end)
+      |> expect(:list, fn nil, _channel, :repo1 -> {page1, "repo_cursor_2"} end)
+      |> expect(:list, fn "repo_cursor_2", _channel, :repo1 -> {page2, nil} end)
 
       state = init_session(prompts: [{PromptRepoMock, :repo1}])
 
@@ -1120,9 +1120,9 @@ defmodule GenMCP.SuiteTest do
         :repo2 -> "prompt2"
         :repo3 -> "prompt3"
       end)
-      |> expect(:list, fn nil, :repo1 -> {[%{name: "prompt1"}], nil} end)
-      |> expect(:list, fn nil, :repo2 -> {[%{name: "prompt2"}], nil} end)
-      |> expect(:list, fn nil, :repo3 -> {[%{name: "prompt3"}], nil} end)
+      |> expect(:list, fn nil, _channel, :repo1 -> {[%{name: "prompt1"}], nil} end)
+      |> expect(:list, fn nil, _channel, :repo2 -> {[%{name: "prompt2"}], nil} end)
+      |> expect(:list, fn nil, _channel, :repo3 -> {[%{name: "prompt3"}], nil} end)
 
       state =
         init_session(
@@ -1220,7 +1220,7 @@ defmodule GenMCP.SuiteTest do
 
       PromptRepoMock
       |> expect(:prefix, fn :repo1 -> "gre" end)
-      |> expect(:get, fn "greeting", args, :repo1 ->
+      |> expect(:get, fn "greeting", args, _channel, :repo1 ->
         assert(args == %{})
         {:ok, result}
       end)
@@ -1249,7 +1249,7 @@ defmodule GenMCP.SuiteTest do
 
       PromptRepoMock
       |> expect(:prefix, fn :repo1 -> "an" end)
-      |> expect(:get, fn "analysis", args, :repo1 ->
+      |> expect(:get, fn "analysis", args, _channel, :repo1 ->
         assert(args == %{"dataset" => "test.csv"})
         {:ok, result}
       end)
@@ -1272,7 +1272,7 @@ defmodule GenMCP.SuiteTest do
     test "returns error for non-existent prompt" do
       PromptRepoMock
       |> expect(:prefix, fn :repo1 -> "unknown" end)
-      |> expect(:get, fn "unknown", _, :repo1 -> {:error, :not_found} end)
+      |> expect(:get, fn "unknown", _, _channel, :repo1 -> {:error, :not_found} end)
 
       state = init_session(prompts: [{PromptRepoMock, :repo1}])
 
@@ -1295,7 +1295,7 @@ defmodule GenMCP.SuiteTest do
     test "returns error for validation failure" do
       PromptRepoMock
       |> expect(:prefix, fn :repo1 -> "analysis" end)
-      |> expect(:get, fn "analysis", _, :repo1 ->
+      |> expect(:get, fn "analysis", _, _channel, :repo1 ->
         {:error, "Missing required argument: dataset"}
       end)
 
@@ -1323,7 +1323,7 @@ defmodule GenMCP.SuiteTest do
         :repo1 -> "prompt1"
         :repo2 -> "prompt2"
       end)
-      |> expect(:get, fn "prompt2", _, :repo2 -> {:ok, result} end)
+      |> expect(:get, fn "prompt2", _, _channel, :repo2 -> {:ok, result} end)
 
       state =
         init_session(
@@ -1344,3 +1344,7 @@ defmodule GenMCP.SuiteTest do
     end
   end
 end
+
+IO.warn("""
+Todo test that channel info + assigns is given to repo,prompts and tool callbacks
+""")

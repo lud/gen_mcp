@@ -69,23 +69,24 @@ defmodule GenMCP.Suite.Tool do
   The `request` contains the full call information including parameters and
   arguments to validate against the input schema.
 
+  The `channel` provides access to the client connection and authorization context
+  via `channel.assigns`. It can be used to send progress notifications to the HTTP
+  connection that delivered the request.
+
   The callback can return a result tuple, request a server response, or indicate
   async processing.
-
-  The `channel` can be used to send progress notifications to the HTTP
-  connection that delivered the request.
   """
   @callback call(Entities.CallToolRequest.t(), Channel.t(), arg) :: call_result
 
   @doc """
   Continues processing the tool request after `c:call/3` has returned a value.
 
-
   The `key` indicates whether this is a response to a server request
   (`{:response, tag}`) or an async result (`{:async, ref}`). The `response`
   contains the result value, and the `channel` is associated with the original
-  client request. The `arg` provides implementation-specific options. This
-  callback returns the same result types as `call/3`.
+  client request and provides authorization context. The `arg` provides
+  implementation-specific options. This callback returns the same result types
+  as `call/3`.
   """
   @callback continue({tag, client_response | (task_result :: term)}, Channel.t(), arg) ::
               call_result

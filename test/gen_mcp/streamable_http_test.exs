@@ -31,7 +31,7 @@ defmodule GenMCP.StreamableHttpTest do
 
   test "we can run the initialization" do
     ServerMock
-    |> expect(:init, fn _ -> {:ok, :some_session_state} end)
+    |> expect(:init, fn _, _ -> {:ok, :some_session_state} end)
     |> expect(:handle_request, fn req, chan_info, :some_session_state ->
       assert %GenMCP.Entities.InitializeRequest{
                id: 123,
@@ -55,8 +55,10 @@ defmodule GenMCP.StreamableHttpTest do
 
       # We are using a real HTTP client in test so the chan_info pid is not the
       # test pid.
-      assert {:channel, GenMCP.Plug.StreamableHttp, pid} = chan_info
+      assert {:channel, GenMCP.Plug.StreamableHttp, pid, assigns} = chan_info
       assert is_pid(pid)
+      assert 1 = map_size(assigns)
+      assert %{gen_mcp_session_id: _} = assigns
 
       init_result =
         Server.intialize_result(
@@ -106,7 +108,7 @@ defmodule GenMCP.StreamableHttpTest do
 
   defp init_session(init_state \\ :some_state) do
     ServerMock
-    |> expect(:init, fn _ -> {:ok, init_state} end)
+    |> expect(:init, fn _, _ -> {:ok, init_state} end)
     |> expect(:handle_request, fn _req, _chan_info, state ->
       init_result =
         Server.intialize_result(

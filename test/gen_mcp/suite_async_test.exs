@@ -18,7 +18,7 @@ defmodule GenMCP.SuiteAsyncTest do
   ]
 
   defp chan_info do
-    {:channel, __MODULE__, self()}
+    {:channel, __MODULE__, self(), %{}}
   end
 
   defp task_sup do

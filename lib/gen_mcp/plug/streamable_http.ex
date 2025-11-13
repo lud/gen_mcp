@@ -45,6 +45,10 @@ defmodule GenMCP.Plug.StreamableHttp do
   # -- Internal ---------------------------------------------------------------
 
   @stream_keepalive_timeout :timer.seconds(25)
+  @session_id_assign_key :gen_mcp_session_id
+
+  # TODO(doc) the :assigns option has less precedence than :copy_assigns.
+  # Assigns copied from the conn will overwrite static assigns.
 
   def http_get(conn, _opts) do
     send_resp(conn, 405, "Method Not Allowed")
@@ -98,7 +102,7 @@ defmodule GenMCP.Plug.StreamableHttp do
   defp dispatch_req(conn, msg_id, %InitializeRequest{} = req, opts) do
     with {:ok, session_id} <- Mux.start_session(opts),
          {:result, %InitializeResult{} = result} <-
-           Mux.request(session_id, req, channel_info(conn, req)) do
+           Mux.request(session_id, req, channel_info(conn, req, session_id, opts)) do
       conn
       |> with_session_id(session_id)
       |> send_result_response(200, msg_id, result)
@@ -107,15 +111,15 @@ defmodule GenMCP.Plug.StreamableHttp do
     end
   end
 
-  defp dispatch_req(conn, msg_id, req, _opts) do
+  defp dispatch_req(conn, msg_id, req, opts) do
     case fetch_session_id(conn) do
-      {:ok, session_id} -> do_dispatch_req(conn, session_id, msg_id, req)
+      {:ok, session_id} -> do_dispatch_req(conn, session_id, msg_id, req, opts)
       {:error, reason} -> send_error(conn, reason)
     end
   end
 
-  defp do_dispatch_req(conn, session_id, msg_id, req) do
-    case Mux.request(session_id, req, channel_info(conn, req)) do
+  defp do_dispatch_req(conn, session_id, msg_id, req, opts) do
+    case Mux.request(session_id, req, channel_info(conn, req, session_id, opts)) do
       {:result, result} -> send_result_response(conn, 200, msg_id, result)
       {:error, reason} -> send_error(conn, reason, msg_id: msg_id)
       :stream -> stream_start(conn, 200, msg_id)
@@ -144,8 +148,25 @@ defmodule GenMCP.Plug.StreamableHttp do
     end
   end
 
-  defp channel_info(_conn, _req) do
-    {:channel, __MODULE__, self()}
+  defp channel_info(conn, _req, session_id, opts) do
+    %{assigns: conn_assigns} = conn
+
+    static_assigns =
+      opts
+      |> Keyword.get(:assigns, %{})
+      |> Map.put(@session_id_assign_key, session_id)
+
+    copied_assign_keys = Keyword.get(opts, :copy_assigns, [])
+
+    assigns =
+      Enum.reduce(copied_assign_keys, static_assigns, fn key, acc ->
+        case Map.fetch(conn_assigns, key) do
+          {:ok, value} -> Map.put(acc, key, value)
+          :error -> acc
+        end
+      end)
+
+    {:channel, __MODULE__, self(), assigns}
   end
 
   defp send_accepted(conn) do
@@ -281,3 +302,5 @@ defmodule GenMCP.Plug.StreamableHttp do
     end
   end
 end
+
+IO.warn("move this to Transport namespace instead of Plug")

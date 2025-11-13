@@ -83,7 +83,7 @@ defmodule GenMCP.Suite do
   @impl true
   def handle_request(
         %Entities.InitializeRequest{} = req,
-        _chan_info,
+        chan_info,
         %{status: :starting} = state
       ) do
     case check_protocol_version(req) do
@@ -101,7 +101,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%Entities.InitializeRequest{} = _req, _chan_info, state) do
+  def handle_request(%Entities.InitializeRequest{} = _req, chan_info, state) do
     reason = :already_initialized
     {:stop, reason, {:error, reason}, state}
   end
@@ -128,7 +128,7 @@ defmodule GenMCP.Suite do
 
     case state.tools_map do
       %{^tool_name => tool} ->
-        channel = build_channel(chan_info, req)
+        channel = build_channel(chan_info, req, state)
 
         case call_tool(req, tool, channel, state) do
           {:result, result, _chan} ->
@@ -151,7 +151,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%Entities.ListResourcesRequest{} = req, _chan_info, state) do
+  def handle_request(%Entities.ListResourcesRequest{} = req, chan_info, state) do
     cursor =
       case req do
         %{params: %{cursor: global_cursor}} when is_binary(global_cursor) -> global_cursor
@@ -160,7 +160,8 @@ defmodule GenMCP.Suite do
 
     case decode_pagination(cursor, state) do
       {:ok, pagination} ->
-        {resources, next_pagination} = list_resources(pagination, state)
+        channel = build_channel(chan_info, req, state)
+        {resources, next_pagination} = list_resources(pagination, channel, state)
 
         result =
           Server.list_resources_result(
@@ -175,12 +176,14 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%Entities.ReadResourceRequest{} = req, _chan_info, state) do
+  def handle_request(%Entities.ReadResourceRequest{} = req, chan_info, state) do
     uri = req.params.uri
 
     case find_resource_repo_for_uri(state, uri) do
       {:ok, repo} ->
-        case ResourceRepo.read_resource(repo, uri) do
+        channel = build_channel(chan_info, req, state)
+
+        case ResourceRepo.read_resource(repo, uri, channel) do
           {:ok, result} -> {:reply, {:result, result}, state}
           {:error, reason} -> {:reply, {:error, reason}, state}
         end
@@ -190,7 +193,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%Entities.ListResourceTemplatesRequest{}, _chan_info, state) do
+  def handle_request(%Entities.ListResourceTemplatesRequest{}, chan_info, state) do
     templates =
       Enum.flat_map(state.resource_prefixes, fn prefix ->
         case Map.fetch!(state.resource_repos, prefix).template do
@@ -214,7 +217,7 @@ defmodule GenMCP.Suite do
     {:reply, {:result, result}, state}
   end
 
-  def handle_request(%Entities.ListPromptsRequest{} = req, _chan_info, state) do
+  def handle_request(%Entities.ListPromptsRequest{} = req, chan_info, state) do
     cursor =
       case req do
         %{params: %{cursor: global_cursor}} when is_binary(global_cursor) -> global_cursor
@@ -223,7 +226,8 @@ defmodule GenMCP.Suite do
 
     case decode_pagination(cursor, state) do
       {:ok, pagination} ->
-        {prompts, next_pagination} = list_prompts(pagination, state)
+        channel = build_channel(chan_info, req, state)
+        {prompts, next_pagination} = list_prompts(pagination, channel, state)
 
         result =
           Server.list_prompts_result(
@@ -238,7 +242,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%Entities.GetPromptRequest{} = req, _chan_info, state) do
+  def handle_request(%Entities.GetPromptRequest{} = req, chan_info, state) do
     {name, arguments} =
       case req do
         %{params: %{name: name, arguments: arguments}} when is_map(arguments) -> {name, arguments}
@@ -247,7 +251,9 @@ defmodule GenMCP.Suite do
 
     case find_prompt_repo_for_name(state, name) do
       {:ok, repo} ->
-        case PromptRepo.get_prompt(repo, name, arguments) do
+        channel = build_channel(chan_info, req, state)
+
+        case PromptRepo.get_prompt(repo, name, arguments, channel) do
           {:ok, result} -> {:reply, {:result, result}, state}
           {:error, reason} -> {:reply, {:error, reason}, state}
         end
@@ -373,7 +379,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  defp build_channel(chan_info, req) do
+  defp build_channel(chan_info, req, _state) do
     Channel.from_client(chan_info, req)
   end
 
@@ -423,14 +429,14 @@ defmodule GenMCP.Suite do
     Tool.call(tool, req, channel)
   end
 
-  defp list_resources({repo_index, repo_cursor}, state) do
+  defp list_resources({repo_index, repo_cursor}, channel, state) do
     max_index = length(state.resource_prefixes) - 1
 
     case resource_repo_at_index(repo_index, state) do
       {:ok, repo} ->
-        case ResourceRepo.list_resources(repo, repo_cursor) do
+        case ResourceRepo.list_resources(repo, repo_cursor, channel) do
           # no more resources, bump repo index and immediately try next repo
-          {[], _} -> list_resources({repo_index + 1, _repo_cursor = nil}, state)
+          {[], _} -> list_resources({repo_index + 1, _repo_cursor = nil}, channel, state)
           # some result but no more pages, bump repo index for next request.
           # some edge case, we do not want to return a pagination cursor if this
           # is the last repository
@@ -453,14 +459,14 @@ defmodule GenMCP.Suite do
     find_repo(state.resource_prefixes, uri, state.resource_repos)
   end
 
-  defp list_prompts({repo_index, repo_cursor}, state) do
+  defp list_prompts({repo_index, repo_cursor}, channel, state) do
     max_index = length(state.prompt_prefixes) - 1
 
     case prompt_repo_at_index(repo_index, state) do
       {:ok, repo} ->
-        case PromptRepo.list_prompts(repo, repo_cursor) do
+        case PromptRepo.list_prompts(repo, repo_cursor, channel) do
           # no more prompts, bump repo index and immediately try next repo
-          {[], _} -> list_prompts({repo_index + 1, _repo_cursor = nil}, state)
+          {[], _} -> list_prompts({repo_index + 1, _repo_cursor = nil}, channel, state)
           # some result but no more pages, bump repo index for next request.
           # some edge case, we do not want to return a pagination cursor if this
           # is the last repository

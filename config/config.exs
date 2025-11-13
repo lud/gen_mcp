@@ -17,3 +17,5 @@ config :logger, :default_formatter,
   metadata: [:node]
 
 config :phoenix, :logger, true
+
+config :phoenix, :plug_init_mode, :runtime

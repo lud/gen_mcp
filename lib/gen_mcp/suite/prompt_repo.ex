@@ -25,10 +25,15 @@ defmodule GenMCP.Suite.PromptRepo do
 
   @callback prefix(arg) :: String.t()
 
-  @callback list(pagination_token :: String.t() | nil, arg) ::
+  @callback list(pagination_token :: String.t() | nil, GenMCP.Mux.Channel.t(), arg) ::
               {[prompt_item], next_cursor :: term | nil}
 
-  @callback get(name :: String.t(), arguments :: %{binary => term}, arg) ::
+  @callback get(
+              name :: String.t(),
+              arguments :: %{binary => term},
+              GenMCP.Mux.Channel.t(),
+              arg
+            ) ::
               {:ok, Entities.GetPromptResult.t()} | {:error, :not_found | String.t()}
 
   @spec expand(prompt_repo) :: prompt_repo_descriptor
@@ -68,8 +73,8 @@ defmodule GenMCP.Suite.PromptRepo do
   @todo accept an invalid_params response
   """)
 
-  def get_prompt(repo, name, arguments) do
-    case repo.mod.get(name, arguments, repo.arg) do
+  def get_prompt(repo, name, arguments, channel) do
+    case repo.mod.get(name, arguments, channel, repo.arg) do
       {:ok, %Entities.GetPromptResult{}} = ok -> ok
       {:error, :not_found} -> {:error, {:prompt_not_found, name}}
       {:error, message} when is_binary(message) -> {:error, message}
@@ -77,8 +82,8 @@ defmodule GenMCP.Suite.PromptRepo do
     end
   end
 
-  def list_prompts(repo, cursor) do
-    case repo.mod.list(cursor, repo.arg) do
+  def list_prompts(repo, cursor, channel) do
+    case repo.mod.list(cursor, channel, repo.arg) do
       {list, cursor} when is_list(list) -> {list, cursor}
       other -> exit({:bad_return_value, other})
     end

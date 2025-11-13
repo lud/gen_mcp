@@ -8,6 +8,10 @@ defmodule GenMCP.Suite.PromptRepoTest do
 
   setup :verify_on_exit!
 
+  defp build_channel do
+    %GenMCP.Mux.Channel{client: self(), progress_token: nil, assigns: %{}}
+  end
+
   describe "expand/1" do
     test "expands module atom" do
       expect(PromptRepoMock, :prefix, fn [] -> "some_prefix" end)
@@ -46,31 +50,35 @@ defmodule GenMCP.Suite.PromptRepoTest do
         %{name: "analysis", description: "Analyze data"}
       ]
 
-      expect(PromptRepoMock, :list, fn nil, :test_arg ->
+      expect(PromptRepoMock, :list, fn nil, _channel, :test_arg ->
         {prompts, nil}
       end)
 
-      assert {^prompts, nil} = PromptRepo.list_prompts(repo, nil)
+      channel = build_channel()
+      assert {^prompts, nil} = PromptRepo.list_prompts(repo, nil, channel)
     end
 
     test "handles pagination cursor" do
       repo = %{mod: PromptRepoMock, arg: []}
 
-      expect(PromptRepoMock, :list, fn "page2", [] ->
+      expect(PromptRepoMock, :list, fn "page2", _channel, [] ->
         {[%{name: "prompt3"}], "page3"}
       end)
 
-      assert {[%{name: "prompt3"}], "page3"} = PromptRepo.list_prompts(repo, "page2")
+      channel = build_channel()
+      assert {[%{name: "prompt3"}], "page3"} = PromptRepo.list_prompts(repo, "page2", channel)
     end
 
     test "exits on invalid return value" do
       repo = %{mod: PromptRepoMock, arg: []}
 
-      expect(PromptRepoMock, :list, fn _, _ ->
+      expect(PromptRepoMock, :list, fn _, _channel, _ ->
         :invalid
       end)
 
-      assert catch_exit(PromptRepo.list_prompts(repo, nil)) ==
+      channel = build_channel()
+
+      assert catch_exit(PromptRepo.list_prompts(repo, nil, channel)) ==
                {:bad_return_value, :invalid}
     end
   end
@@ -84,43 +92,50 @@ defmodule GenMCP.Suite.PromptRepoTest do
         messages: []
       }
 
-      expect(PromptRepoMock, :get, fn "greeting", %{}, :test_arg ->
+      expect(PromptRepoMock, :get, fn "greeting", %{}, _channel, :test_arg ->
         {:ok, result}
       end)
 
-      assert {:ok, ^result} = PromptRepo.get_prompt(repo, "greeting", %{})
+      channel = build_channel()
+      assert {:ok, ^result} = PromptRepo.get_prompt(repo, "greeting", %{}, channel)
     end
 
     test "transforms :not_found to {:prompt_not_found, name}" do
       repo = %{mod: PromptRepoMock, arg: []}
 
-      expect(PromptRepoMock, :get, fn "unknown", %{}, [] ->
+      expect(PromptRepoMock, :get, fn "unknown", %{}, _channel, [] ->
         {:error, :not_found}
       end)
 
+      channel = build_channel()
+
       assert {:error, {:prompt_not_found, "unknown"}} =
-               PromptRepo.get_prompt(repo, "unknown", %{})
+               PromptRepo.get_prompt(repo, "unknown", %{}, channel)
     end
 
     test "passes through string error messages" do
       repo = %{mod: PromptRepoMock, arg: []}
 
-      expect(PromptRepoMock, :get, fn "test", %{}, [] ->
+      expect(PromptRepoMock, :get, fn "test", %{}, _channel, [] ->
         {:error, "Missing required argument: dataset"}
       end)
 
+      channel = build_channel()
+
       assert {:error, "Missing required argument: dataset"} =
-               PromptRepo.get_prompt(repo, "test", %{})
+               PromptRepo.get_prompt(repo, "test", %{}, channel)
     end
 
     test "exits on invalid return value" do
       repo = %{mod: PromptRepoMock, arg: []}
 
-      expect(PromptRepoMock, :get, fn _, _, _ ->
+      expect(PromptRepoMock, :get, fn _, _, _channel, _ ->
         {:ok, :not_a_result}
       end)
 
-      assert catch_exit(PromptRepo.get_prompt(repo, "test", %{})) ==
+      channel = build_channel()
+
+      assert catch_exit(PromptRepo.get_prompt(repo, "test", %{}, channel)) ==
                {:bad_return_value, {:ok, :not_a_result}}
     end
   end

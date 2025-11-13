@@ -123,16 +123,19 @@ defmodule GenMCP.Suite.ResourceRepo do
 
   The `pagination_token` parameter is `nil` for the first page.
 
+  The `channel` provides authorization context via `channel.assigns` to filter
+  resources based on user permissions.
+
   ## Example
 
-      def list(nil, _arg) do
+      def list(nil, channel, _arg) do
         {[
           %{uri: "file:///readme.txt", name: "README", description: "Project readme"},
           %{uri: "file:///config.json", name: "Config"}
         ], nil}
       end
   """
-  @callback list(pagination_token :: String.t() | nil, arg) ::
+  @callback list(pagination_token :: String.t() | nil, GenMCP.Mux.Channel.t(), arg) ::
               {[resource_item], next_cursor :: term | nil}
 
   @doc """
@@ -140,6 +143,9 @@ defmodule GenMCP.Suite.ResourceRepo do
 
   For direct resources, receives the full URI as a string.
   For template-based resources, receives a map of template arguments.
+
+  The `channel` provides authorization context via `channel.assigns` to enforce
+  access controls on resources.
 
   Returns:
   - `{:ok, %ReadResourceResult{}}` - Result with list of content blocks (TextResourceContents or BlobResourceContents)
@@ -149,7 +155,7 @@ defmodule GenMCP.Suite.ResourceRepo do
   ## Examples
 
       # Direct resource
-      def read(arg, "file:///readme.txt") do
+      def read("file:///readme.txt", channel, arg) do
         {:ok, %GenMCP.Entities.ReadResourceResult{
           contents: [
             %GenMCP.Entities.TextResourceContents{
@@ -161,7 +167,7 @@ defmodule GenMCP.Suite.ResourceRepo do
       end
 
       # Template-based resource
-      def read(arg, %{"path" => path}) do
+      def read(%{"path" => path}, channel, arg) do
         case File.read(path) do
           {:ok, content} ->
             {:ok, %GenMCP.Entities.ReadResourceResult{
@@ -177,16 +183,16 @@ defmodule GenMCP.Suite.ResourceRepo do
         end
       end
   """
-  @callback read(uri_or_template_args, arg) ::
+  @callback read(uri_or_template_args, GenMCP.Mux.Channel.t(), arg) ::
               {:ok, Entities.ReadResourceResult.t()} | {:error, :not_found | String.t()}
             when uri_or_template_args: String.t() | %{String.t() => term}
 
   @doc """
   Parses a URI to extract template arguments or validate URI format.
 
-  This callback will be called before calling `c:read/2` if the `c:template/1`
+  This callback will be called before calling `c:read/3` if the `c:template/1`
   callback is implemented and returns a string. In that case it must return
-  either a map or a string, wrapped in a result tuple. The `c:read/2` callback
+  either a map or a string, wrapped in a result tuple. The `c:read/3` callback
   will be called with that value instead of the original URI.
 
   Returns:
@@ -262,8 +268,8 @@ defmodule GenMCP.Suite.ResourceRepo do
     descriptor
   end
 
-  def list_resources(repo, cursor) do
-    case repo.mod.list(cursor, repo.arg) do
+  def list_resources(repo, cursor, channel) do
+    case repo.mod.list(cursor, channel, repo.arg) do
       {list, cursor} when is_list(list) -> {list, cursor}
       other -> exit({:bad_return_value, other})
     end
@@ -272,7 +278,7 @@ defmodule GenMCP.Suite.ResourceRepo do
   @doc """
   Reads a resource from the repository.
 
-  This function delegates to the repository's `read/2` callback and normalizes
+  This function delegates to the repository's `read/3` callback and normalizes
   the result. The callback should return `{:ok, %ReadResourceResult{}}`.
 
   - `{:ok, %ReadResourceResult{}}` is passed through as-is
@@ -283,6 +289,7 @@ defmodule GenMCP.Suite.ResourceRepo do
 
   - `repo` - Repository descriptor map
   - `uri` - The URI of the resource to read
+  - `channel` - Channel with authorization context
 
   ## Returns
 
@@ -290,12 +297,12 @@ defmodule GenMCP.Suite.ResourceRepo do
   - `{:error, {:resource_not_found, uri}}` - Resource not found
   - `{:error, String.t()}` - Custom error message from repository
   """
-  @spec read_resource(resource_repo_descriptor, String.t()) ::
+  @spec read_resource(resource_repo_descriptor, String.t(), GenMCP.Mux.Channel.t()) ::
           {:ok, Entities.ReadResourceResult.t()}
           | {:error, {:resource_not_found, String.t()} | String.t()}
-  def read_resource(%{template: template} = repo, uri) when is_map(template) do
+  def read_resource(%{template: template} = repo, uri, channel) when is_map(template) do
     with {:ok, uri_or_args} <- parse_uri(repo, uri),
-         {:ok, result} <- do_read(repo, uri_or_args) do
+         {:ok, result} <- do_read(repo, uri_or_args, channel) do
       {:ok, result}
     else
       {:error, :not_found} -> {:error, {:resource_not_found, uri}}
@@ -304,9 +311,9 @@ defmodule GenMCP.Suite.ResourceRepo do
     end
   end
 
-  def read_resource(repo, uri) when is_binary(uri) do
+  def read_resource(repo, uri, channel) when is_binary(uri) do
     # No template, pass URI directly to read callback
-    case do_read(repo, uri) do
+    case do_read(repo, uri, channel) do
       {:ok, %Entities.ReadResourceResult{}} = ok -> ok
       {:error, :not_found} -> {:error, {:resource_not_found, uri}}
       {:error, message} when is_binary(message) -> {:error, message}
@@ -314,8 +321,8 @@ defmodule GenMCP.Suite.ResourceRepo do
     end
   end
 
-  defp do_read(repo, uri_or_args) do
-    repo.mod.read(uri_or_args, repo.arg)
+  defp do_read(repo, uri_or_args, channel) do
+    repo.mod.read(uri_or_args, channel, repo.arg)
   end
 
   defp parse_uri(repo, uri) do
