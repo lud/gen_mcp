@@ -36,7 +36,7 @@ defmodule GenMCP.SuiteTest do
   end
 
   defp init_session(server_opts \\ []) do
-    assert {:ok, state} = Suite.init(Keyword.merge(@server_info, server_opts))
+    assert {:ok, state} = Suite.init("some-session-id", Keyword.merge(@server_info, server_opts))
 
     init_req = %Entities.InitializeRequest{
       id: "setup-init-1",
@@ -64,7 +64,7 @@ defmodule GenMCP.SuiteTest do
 
   describe "handles initialization requests" do
     test "handles InitializeRequest" do
-      {:ok, state} = Suite.init(@server_info)
+      {:ok, state} = Suite.init("some-session-id", @server_info)
 
       init_eq = %Entities.InitializeRequest{
         id: 1,
@@ -86,7 +86,7 @@ defmodule GenMCP.SuiteTest do
     end
 
     test "handles initialize request and reject tool call request without initialization" do
-      {:ok, state} = Suite.init(@server_info)
+      {:ok, state} = Suite.init("some-session-id", @server_info)
 
       req = %Entities.CallToolRequest{
         id: 2,
@@ -105,7 +105,7 @@ defmodule GenMCP.SuiteTest do
     end
 
     test "handles initialize request and reject tool call request without initialization notification" do
-      {:ok, state} = Suite.init(@server_info)
+      {:ok, state} = Suite.init("some-session-id", @server_info)
 
       init_req = %Entities.InitializeRequest{
         id: 1,
@@ -158,7 +158,7 @@ defmodule GenMCP.SuiteTest do
     end
 
     test "rejects initialization with invalid protocol version" do
-      {:ok, state} = Suite.init(@server_info)
+      {:ok, state} = Suite.init("some-session-id", @server_info)
 
       init_req = %Entities.InitializeRequest{
         id: 1,

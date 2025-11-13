@@ -1,28 +1,21 @@
-defmodule GenMCP.NodeSync do
+defmodule GenMCP.Cluster.NodeSync do
   require Logger
   use GenServer
 
+  IO.warn("@todo configurable NODE_ID via app config, if nil random")
+
   @gen_opts ~w(name timeout debug spawn_opt hibernate_after)a
-  @scope :gen_mcp_pg_scope
-  @glob :gen_mcp_global
-  @group :node_sync
+  @scope GenMCP.Cluster.scope()
+  @glob :gen_mcp_node_sync_glob
+  @group :gen_mcp_node_sync_group
   @tag __MODULE__
   @name __MODULE__
   @node_id_bits 16
   @max_node_id 2 ** @node_id_bits - 1
 
-  def pg_child_spec do
-    %{
-      id: :pg,
-      module: :pg,
-      start: {:pg, :start_link, [@scope]},
-      type: :supervisor
-    }
-  end
-
   def node_id do
     case :persistent_term.get(__MODULE__, nil) do
-      nil -> raise "NodeSync is not initialized"
+      nil -> raise "#{inspect(__MODULE__)} is not initialized"
       id -> id
     end
   end
@@ -186,8 +179,8 @@ defmodule GenMCP.NodeSync do
     Enum.random(0..@max_node_id)
   end
 
-  defp append_member([member | rest], member) do
-    [member | rest]
+  defp append_member([same | rest], same) do
+    [same | rest]
   end
 
   defp append_member([h | rest], member) do

@@ -32,8 +32,10 @@ defmodule GenMCP.Suite do
 
   Record.defrecordp(:tracker, id: nil, tool_name: nil, channel: nil, tag: nil)
 
+  IO.warn("@todo add session ID to global assigns")
+
   @impl true
-  def init(opts) do
+  def init(_session_id, opts) do
     # For tools and resources we keep a list of names/prefixes to preserve the
     # original order given in the options. This is especially useful for
     # resources where prefixes can overlap.
