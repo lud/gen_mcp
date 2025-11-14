@@ -129,6 +129,13 @@ defmodule GenMCP.RpcError do
     }
   end
 
+  defcasterror {:session_not_found, sid} when is_binary(sid), @rpc_internal_error, 404 do
+    %{
+      data: %{session_id: sid},
+      message: "Session not found"
+    }
+  end
+
   # -- catchall ---------------------------------------------------------------
 
   @raise_on_unknown Mix.env() == :test

@@ -107,8 +107,22 @@ defmodule GenMCP.Suite do
     {:stop, reason, {:error, reason}, state}
   end
 
-  def handle_request(_req, _, %{status: status} = state)
-      when status in [:starting, :server_initialized] do
+  # Handling requests requires having handled the first initialization request.
+  # Once this is done, we accept other requests even before receiving the client
+  # initialized notification.
+  #
+  # According to the docs:
+  #
+  # > The server SHOULD NOT send requests other than pings and logging before
+  # > receiving the initialized notification.
+  #
+  # Our interpretation is that this notification tells that the client is ready
+  # to handle server requests, not that it will not send client requests.
+  #
+  # Also, this is much more simple as we do not have to deal with http requests
+  # delays changing order of delivery and do not have to buffer requests until
+  # the client notification is received.
+  def handle_request(_req, _, %{status: status} = state) when status in [:starting] do
     {:error, :not_initialized, state}
   end
 

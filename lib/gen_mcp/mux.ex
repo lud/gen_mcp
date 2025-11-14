@@ -33,44 +33,62 @@ defmodule GenMCP.Mux do
 
   # -- Calling Session --------------------------------------------------------
 
-  def request(session_id, request, channel, timeout \\ 5000) do
-    safe_call(session_id, {:"$gen_mcp", :request, request, channel}, timeout)
+  def request(session_id, request, chan_info, timeout \\ 5000) do
+    call_session(session_id, {:"$gen_mcp", :request, request, chan_info}, timeout)
   end
 
   def notify(session_id, notification, timeout \\ 5000) do
-    safe_call(session_id, {:"$gen_mcp", :notification, notification}, timeout)
+    call_session(session_id, {:"$gen_mcp", :notification, notification}, timeout)
   end
 
-  def safe_call(session_id, callarg, timeout \\ 5000) do
-    GenServer.call(via_session(session_id), callarg, timeout)
+  # -- Stopping Session -------------------------------------------------------
+
+  def stop_session(session_id, timeout \\ :timer.minutes(1)) do
+    call_session(session_id, {:"$gen_mcp", :stop}, timeout)
+  end
+
+  # -- OTP Plumbing ---------------------------------------------------------
+
+  def call_session(session_id, callarg, timeout \\ 5000) do
+    case lookup_pid(session_id) do
+      {:ok, pid} -> GenServer.call(pid, callarg, timeout)
+      :error -> {:error, {:session_not_found, session_id}}
+    end
   end
 
   IO.warn("todo proper 404 response for session not found")
 
-  def via_session(session_id) when is_binary(session_id) do
+  def lookup_pid(session_id) when is_binary(session_id) do
     case NodeSync.node_of(session_id) do
       {:ok, n} when n == node() ->
-        {:via, Registry, {registry(), session_id}}
+        pid_result(whereis(session_id))
 
       {:ok, remote_node} ->
         Logger.debug("retrieving session #{session_id} on node #{inspect(remote_node)}")
 
-        lookup = :rpc.call(remote_node, GenMCP.Mux, :whereis, [session_id])
+        rpc = :rpc.call(remote_node, GenMCP.Mux, :whereis, [session_id])
+        pid_result(rpc)
 
-        case lookup do
-          {:ok, pid} -> pid
-          :error -> raise "could not find session #{session_id} on node #{inspect(remote_node)}"
-        end
+      :error ->
+        :error
     end
   end
 
   @doc false
+  # Retrieves pids locally only, exported for tests and debug
   def whereis(session_id) do
     Logger.debug("retrieving local pid for session #{session_id}")
 
     case Registry.lookup(registry(), session_id) do
-      [{pid, _}] -> {:ok, pid}
-      [] -> :error
+      [{pid, _}] -> pid
+      [] -> nil
+    end
+  end
+
+  defp pid_result(pid_or_nil) do
+    case pid_or_nil do
+      pid when is_pid(pid) -> {:ok, pid}
+      nil -> :error
     end
   end
 end

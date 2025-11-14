@@ -93,7 +93,10 @@ defmodule GenMCP.SuiteTest do
                check_error(:not_initialized)
     end
 
-    test "handles initialize request and reject tool call request without initialization notification" do
+    test "handles initialize request and accepts tool call request without initialization notification" do
+      # We do not require client to be ready as we do not support elicitation or
+      # sampling yet
+
       {:ok, state} = Suite.init("some-session-id", @server_info)
 
       init_req = %Entities.InitializeRequest{
@@ -118,11 +121,8 @@ defmodule GenMCP.SuiteTest do
         }
       }
 
-      assert {:error, :not_initialized, %{status: :server_initialized}} =
+      assert {:reply, {:error, {:unknown_tool, "SomeTool"}}, %{status: :server_initialized}} =
                Suite.handle_request(tool_call_req, chan_info(), state)
-
-      assert {400, %{code: -32603, message: "Server not initialized"}} =
-               check_error(:not_initialized)
     end
 
     test "rejects initialization request when already initialized" do

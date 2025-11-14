@@ -1,4 +1,4 @@
-require GenMCP.Plug.StreamableHttp, as: StreamableHttp
+require GenMCP.Transport.StreamableHttp, as: StreamableHttp
 StreamableHttp.defplug(GenMCP.TestWeb.Router.McpMock)
 StreamableHttp.defplug(GenMCP.TestWeb.Router.McpReal)
 

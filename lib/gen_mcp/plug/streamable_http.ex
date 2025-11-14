@@ -1,4 +1,4 @@
-defmodule GenMCP.Plug.StreamableHttp do
+defmodule GenMCP.Transport.StreamableHttp do
   alias GenMCP.Entities.InitializeRequest
   alias GenMCP.Entities.InitializeResult
   alias GenMCP.Entities.JSONRPCResponse
@@ -24,6 +24,10 @@ defmodule GenMCP.Plug.StreamableHttp do
     http_post(conn, conn.assigns.gen_mcp_streamable_http_opts)
   end
 
+  delete "/" do
+    http_delete(conn, conn.assigns.gen_mcp_streamable_http_opts)
+  end
+
   match _ do
     send_resp(conn, 404, "Not found")
   end
@@ -35,8 +39,8 @@ defmodule GenMCP.Plug.StreamableHttp do
 
     {:module, mod, _, _} =
       defmodule module do
-        defdelegate init(opts), to: GenMCP.Plug.StreamableHttp
-        defdelegate call(conn, opts), to: GenMCP.Plug.StreamableHttp
+        defdelegate init(opts), to: GenMCP.Transport.StreamableHttp
+        defdelegate call(conn, opts), to: GenMCP.Transport.StreamableHttp
       end
 
     mod
@@ -46,6 +50,7 @@ defmodule GenMCP.Plug.StreamableHttp do
 
   @stream_keepalive_timeout :timer.seconds(25)
   @session_id_assign_key :gen_mcp_session_id
+  @session_id_header "mcp-session-id"
 
   # TODO(doc) the :assigns option has less precedence than :copy_assigns.
   # Assigns copied from the conn will overwrite static assigns.
@@ -77,6 +82,10 @@ defmodule GenMCP.Plug.StreamableHttp do
 
   def http_post(conn, _opts) do
     send_error(conn, :bad_rpc)
+  end
+
+  def http_delete(conn, _opts) do
+    terminate_session(conn)
   end
 
   defp msg_id_from_req(body) do
@@ -135,7 +144,14 @@ defmodule GenMCP.Plug.StreamableHttp do
     end
   end
 
-  @session_id_header "mcp-session-id"
+  defp terminate_session(conn) do
+    with {:ok, session_id} <- fetch_session_id(conn),
+         :ok <- Mux.stop_session(session_id) do
+      send_resp(conn, 204, "")
+    else
+      {:error, reason} -> send_error(conn, reason)
+    end
+  end
 
   defp with_session_id(conn, session_id) do
     Plug.Conn.put_resp_header(conn, @session_id_header, session_id)

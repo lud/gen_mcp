@@ -1,6 +1,8 @@
 # credo:disable-for-this-file Credo.Check.Readability.LargeNumbers
 
 defmodule GenMCP.StreamableHttpTest do
+  alias GenMCP.Cluster.NodeSync
+  alias GenMCP.Entities
   alias GenMCP.ConnCase
   alias GenMCP.Mux.Channel
   alias GenMCP.Server
@@ -58,18 +60,18 @@ defmodule GenMCP.StreamableHttpTest do
     ServerMock
     |> expect(:init, fn _, _ -> {:ok, :some_session_state} end)
     |> expect(:handle_request, fn req, chan_info, :some_session_state ->
-      assert %GenMCP.Entities.InitializeRequest{
+      assert %Entities.InitializeRequest{
                id: 123,
                method: "initialize",
-               params: %GenMCP.Entities.InitializeRequestParams{
+               params: %Entities.InitializeRequestParams{
                  _meta: nil,
-                 capabilities: %GenMCP.Entities.ClientCapabilities{
+                 capabilities: %Entities.ClientCapabilities{
                    elicitation: nil,
                    experimental: nil,
                    roots: nil,
                    sampling: nil
                  },
-                 clientInfo: %GenMCP.Entities.Implementation{
+                 clientInfo: %Entities.Implementation{
                    name: "test client",
                    title: nil,
                    version: "0.0.0"
@@ -80,7 +82,7 @@ defmodule GenMCP.StreamableHttpTest do
 
       # We are using a real HTTP client in test so the chan_info pid is not the
       # test pid.
-      assert {:channel, GenMCP.Plug.StreamableHttp, pid, assigns} = chan_info
+      assert {:channel, GenMCP.Transport.StreamableHttp, pid, assigns} = chan_info
       assert is_pid(pid)
       assert 1 = map_size(assigns)
       assert %{gen_mcp_session_id: _} = assigns
@@ -111,7 +113,7 @@ defmodule GenMCP.StreamableHttpTest do
     session_id = expect_session_header(resp)
 
     expect(ServerMock, :handle_notification, fn notif, :some_session_state_1 ->
-      assert %GenMCP.Entities.InitializedNotification{
+      assert %Entities.InitializedNotification{
                method: "notifications/initialized",
                params: %{}
              } = notif
@@ -238,7 +240,7 @@ defmodule GenMCP.StreamableHttpTest do
     session_id = init_session()
 
     expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-      assert %GenMCP.Entities.ListToolsRequest{id: 123, method: "tools/list", params: %{}} =
+      assert %Entities.ListToolsRequest{id: 123, method: "tools/list", params: %{}} =
                req
 
       resp =
@@ -300,10 +302,10 @@ defmodule GenMCP.StreamableHttpTest do
     session_id = init_session()
 
     expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-      assert %GenMCP.Entities.CallToolRequest{
+      assert %Entities.CallToolRequest{
                id: 456,
                method: "tools/call",
-               params: %GenMCP.Entities.CallToolRequestParams{
+               params: %Entities.CallToolRequestParams{
                  _meta: %{"progressToken" => "hello"},
                  arguments: %{"some" => "arg"},
                  name: "SomeTool"
@@ -339,10 +341,10 @@ defmodule GenMCP.StreamableHttpTest do
     session_id = init_session()
 
     expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-      assert %GenMCP.Entities.CallToolRequest{
+      assert %Entities.CallToolRequest{
                id: 456,
                method: "tools/call",
-               params: %GenMCP.Entities.CallToolRequestParams{
+               params: %Entities.CallToolRequestParams{
                  _meta: nil,
                  arguments: %{},
                  name: "SomeUnknownTool"
@@ -383,10 +385,10 @@ defmodule GenMCP.StreamableHttpTest do
     # But then how do the session/server know which chan_info send updates to?
 
     expect(ServerMock, :handle_request, fn req, chan_info, _state ->
-      assert %GenMCP.Entities.CallToolRequest{
+      assert %Entities.CallToolRequest{
                id: 456,
                method: "tools/call",
-               params: %GenMCP.Entities.CallToolRequestParams{
+               params: %Entities.CallToolRequestParams{
                  arguments: %{"arg" => 123},
                  name: "SomeAsyncTool"
                }
@@ -517,10 +519,10 @@ defmodule GenMCP.StreamableHttpTest do
 
     ServerMock
     |> expect(:handle_request, fn req, chan_info, _state ->
-      assert %GenMCP.Entities.CallToolRequest{
+      assert %Entities.CallToolRequest{
                id: 457,
                method: "tools/call",
-               params: %GenMCP.Entities.CallToolRequestParams{
+               params: %Entities.CallToolRequestParams{
                  arguments: %{"arg" => 123},
                  name: "AsyncToolWithError"
                }
@@ -665,7 +667,7 @@ defmodule GenMCP.StreamableHttpTest do
       session_id = init_session()
 
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-        assert %GenMCP.Entities.ListResourcesRequest{
+        assert %Entities.ListResourcesRequest{
                  id: 200,
                  method: "resources/list",
                  params: %{}
@@ -716,10 +718,10 @@ defmodule GenMCP.StreamableHttpTest do
       assert cursor == "next-page-token"
 
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-        assert %GenMCP.Entities.ListResourcesRequest{
+        assert %Entities.ListResourcesRequest{
                  id: 201,
                  method: "resources/list",
-                 params: %GenMCP.Entities.ListResourcesRequestParams{cursor: ^cursor}
+                 params: %Entities.ListResourcesRequestParams{cursor: ^cursor}
                } = req
 
         result =
@@ -767,10 +769,10 @@ defmodule GenMCP.StreamableHttpTest do
       session_id = init_session()
 
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-        assert %GenMCP.Entities.ListResourcesRequest{
+        assert %Entities.ListResourcesRequest{
                  id: 202,
                  method: "resources/list",
-                 params: %GenMCP.Entities.ListResourcesRequestParams{
+                 params: %Entities.ListResourcesRequestParams{
                    cursor: "some-cursor"
                  }
                } = req
@@ -804,10 +806,10 @@ defmodule GenMCP.StreamableHttpTest do
       session_id = init_session()
 
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-        assert %GenMCP.Entities.ReadResourceRequest{
+        assert %Entities.ReadResourceRequest{
                  id: 204,
                  method: "resources/read",
-                 params: %GenMCP.Entities.ReadResourceRequestParams{
+                 params: %Entities.ReadResourceRequestParams{
                    uri: "file:///readme.txt"
                  }
                } = req
@@ -851,10 +853,10 @@ defmodule GenMCP.StreamableHttpTest do
       session_id = init_session()
 
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-        assert %GenMCP.Entities.ReadResourceRequest{
+        assert %Entities.ReadResourceRequest{
                  id: 205,
                  method: "resources/read",
-                 params: %GenMCP.Entities.ReadResourceRequestParams{
+                 params: %Entities.ReadResourceRequestParams{
                    uri: "file:///missing.txt"
                  }
                } = req
@@ -890,10 +892,10 @@ defmodule GenMCP.StreamableHttpTest do
       session_id = init_session()
 
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-        assert %GenMCP.Entities.ReadResourceRequest{
+        assert %Entities.ReadResourceRequest{
                  id: 206,
                  method: "resources/read",
-                 params: %GenMCP.Entities.ReadResourceRequestParams{
+                 params: %Entities.ReadResourceRequestParams{
                    uri: "file:///wrongprefix/data.txt"
                  }
                } = req
@@ -931,7 +933,7 @@ defmodule GenMCP.StreamableHttpTest do
       session_id = init_session()
 
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-        assert %GenMCP.Entities.ListResourceTemplatesRequest{
+        assert %Entities.ListResourceTemplatesRequest{
                  id: 207,
                  method: "resources/templates/list",
                  params: %{}
@@ -990,7 +992,7 @@ defmodule GenMCP.StreamableHttpTest do
       session_id = init_session()
 
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-        assert %GenMCP.Entities.ListPromptsRequest{
+        assert %Entities.ListPromptsRequest{
                  id: 300,
                  method: "prompts/list"
                } = req
@@ -1052,7 +1054,7 @@ defmodule GenMCP.StreamableHttpTest do
       session_id = init_session()
 
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-        assert %GenMCP.Entities.ListPromptsRequest{
+        assert %Entities.ListPromptsRequest{
                  id: 301,
                  method: "prompts/list",
                  params: %{cursor: "page-2-token"}
@@ -1090,18 +1092,18 @@ defmodule GenMCP.StreamableHttpTest do
       session_id = init_session()
 
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-        assert %GenMCP.Entities.GetPromptRequest{
+        assert %Entities.GetPromptRequest{
                  id: 302,
                  method: "prompts/get",
                  params: %{name: "greeting"}
                } = req
 
-        result = %GenMCP.Entities.GetPromptResult{
+        result = %Entities.GetPromptResult{
           description: "A friendly greeting",
           messages: [
-            %GenMCP.Entities.PromptMessage{
+            %Entities.PromptMessage{
               role: :user,
-              content: %GenMCP.Entities.TextContent{
+              content: %Entities.TextContent{
                 type: :text,
                 text: "Hello! How can I help you today?"
               }
@@ -1144,7 +1146,7 @@ defmodule GenMCP.StreamableHttpTest do
       session_id = init_session()
 
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-        assert %GenMCP.Entities.GetPromptRequest{
+        assert %Entities.GetPromptRequest{
                  id: 303,
                  method: "prompts/get",
                  params: %{
@@ -1153,11 +1155,11 @@ defmodule GenMCP.StreamableHttpTest do
                  }
                } = req
 
-        result = %GenMCP.Entities.GetPromptResult{
+        result = %Entities.GetPromptResult{
           messages: [
-            %GenMCP.Entities.PromptMessage{
+            %Entities.PromptMessage{
               role: :user,
-              content: %GenMCP.Entities.TextContent{
+              content: %Entities.TextContent{
                 type: :text,
                 text: "Analyze dataset: sales.csv"
               }
@@ -1202,7 +1204,7 @@ defmodule GenMCP.StreamableHttpTest do
       session_id = init_session()
 
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-        assert %GenMCP.Entities.GetPromptRequest{
+        assert %Entities.GetPromptRequest{
                  id: 304,
                  method: "prompts/get",
                  params: %{name: "unknown"}
@@ -1236,7 +1238,7 @@ defmodule GenMCP.StreamableHttpTest do
       session_id = init_session()
 
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-        assert %GenMCP.Entities.GetPromptRequest{
+        assert %Entities.GetPromptRequest{
                  id: 305,
                  method: "prompts/get"
                } = req
@@ -1262,6 +1264,54 @@ defmodule GenMCP.StreamableHttpTest do
                  "message" => "Missing required argument: dataset"
                }
              } = resp.body
+    end
+  end
+
+  describe "session location and termination" do
+    test "request to unknown session id returns 404 with -32603 error" do
+      unknown_session_id = "unknown-session-id-12345"
+
+      resp =
+        unknown_session_id
+        |> client()
+        |> post_message(%{
+          jsonrpc: "2.0",
+          id: 789,
+          method: "tools/list",
+          params: %{}
+        })
+        |> expect_status(404)
+
+      assert %{
+               "error" => %{
+                 "code" => -32603,
+                 "message" => _message
+               },
+               "id" => 789,
+               "jsonrpc" => "2.0"
+             } = resp.body
+    end
+
+    test "delete session terminates the session" do
+      session_id = init_session()
+
+      assert is_pid(GenMCP.Mux.whereis(session_id))
+
+      session_id
+      |> client()
+      |> Req.delete!()
+      |> expect_status(204)
+
+      assert nil == GenMCP.Mux.whereis(session_id)
+    end
+
+    test "delete unknown session is 404" do
+      session_id = "#{NodeSync.node_id()}-some-unknown-session"
+
+      session_id
+      |> client()
+      |> Req.delete!()
+      |> expect_status(404)
     end
   end
 end
