@@ -116,6 +116,7 @@ defmodule GenMCP.Suite.Tool do
     quote do
       @gen_mcp_suite_too_opts unquote(Macro.escape(opts))
       @before_compile unquote(__MODULE__)
+      import GenMCP.Mux.Channel, only: [assign: 3]
     end
   end
 

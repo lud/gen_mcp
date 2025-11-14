@@ -11,6 +11,10 @@ defmodule GenMCP.Mux.Channel do
         }
   @type chan_info :: {:channel, module, pid}
 
+  def from_client({:channel, module, pid, assigns}, req, base_assigns) when is_pid(pid) do
+    from_client({:channel, module, pid, Map.merge(base_assigns, assigns)}, req)
+  end
+
   def from_client({:channel, _module, pid, assigns}, req) when is_pid(pid) do
     progress_token =
       case req do
@@ -50,5 +54,10 @@ defmodule GenMCP.Mux.Channel do
   def send_error(channel, error) do
     send(channel.client, {:"$gen_mcp", :error, error})
     channel
+  end
+
+  @spec assign(t, atom, term) :: t
+  def assign(%__MODULE__{assigns: assigns} = channel, key, value) when is_atom(key) do
+    %{channel | assigns: Map.put(assigns, key, value)}
   end
 end

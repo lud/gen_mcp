@@ -2,6 +2,7 @@
 
 defmodule GenMCP.SuiteAsyncTest do
   alias GenMCP.Entities
+  alias GenMCP.Mux.Channel
   alias GenMCP.Server
   alias GenMCP.Suite
   alias GenMCP.Support.ToolMock
@@ -17,8 +18,8 @@ defmodule GenMCP.SuiteAsyncTest do
     server_version: "0"
   ]
 
-  defp chan_info do
-    {:channel, __MODULE__, self(), %{}}
+  defp chan_info(assigns \\ %{}) do
+    {:channel, __MODULE__, self(), assigns}
   end
 
   defp task_sup do
@@ -33,7 +34,7 @@ defmodule GenMCP.SuiteAsyncTest do
     GenMCP.RpcError.cast_error(reason)
   end
 
-  defp init_session(server_opts) do
+  defp init_session(server_opts, init_assigns \\ %{}) do
     assert {:ok, state} = Suite.init("some-session-id", Keyword.merge(@server_info, server_opts))
 
     init_req = %Entities.InitializeRequest{
@@ -47,7 +48,7 @@ defmodule GenMCP.SuiteAsyncTest do
     }
 
     assert {:reply, {:result, _result}, %{status: :server_initialized} = state} =
-             Suite.handle_request(init_req, chan_info(), state)
+             Suite.handle_request(init_req, chan_info(init_assigns), state)
 
     client_init_notif = %Entities.InitializedNotification{
       method: "notifications/initialized",
@@ -854,6 +855,97 @@ defmodule GenMCP.SuiteAsyncTest do
       assert_raise RuntimeError, ~r/duplicate/i, fn ->
         Suite.handle_request(req_two, chan_info(), state)
       end
+    end
+  end
+
+  describe "assigns transmission" do
+    test "assigns from initialize, tool call, and tool modifications flow through async callbacks" do
+      stub(ToolMock, :info, fn
+        :name, _ -> "AssignsTool"
+        _, _ -> nil
+      end)
+
+      # session init
+
+      init_assigns = %{from_initialize: true, shared_assign: "from_init"}
+
+      state = init_session([tools: [ToolMock]], init_assigns)
+
+      # 1st tool call
+
+      tool_call_req = %Entities.CallToolRequest{
+        id: 1001,
+        method: "tools/call",
+        params: %Entities.CallToolRequestParams{
+          name: "AssignsTool",
+          arguments: {}
+        }
+      }
+
+      # Call request assigns override initialize assigns
+      call_assigns = %{from_call: true, shared_assign: "from_call"}
+
+      ref1 = make_ref()
+      ref2 = make_ref()
+
+      ToolMock
+      |> expect(:call, fn _req, chan, _arg ->
+        assert %{
+                 from_initialize: true,
+                 from_call: true,
+                 shared_assign: "from_call"
+               } = chan.assigns
+
+        # Tool adds its own assigns and overrides one
+        chan = Channel.assign(chan, :from_call_step1, true)
+        chan = Channel.assign(chan, :shared_assign, "from_tool_step1")
+
+        {:async, {:step1, ref1}, chan}
+      end)
+      |> expect(:continue, 2, fn
+        {:step1, {:ok, :step1_complete}}, chan, _arg ->
+          # Verify all assigns from first call
+          assert %{
+                   from_initialize: true,
+                   from_call: true,
+                   from_call_step1: true,
+                   shared_assign: "from_tool_step1"
+                 } = chan.assigns
+
+          # Tool adds more assigns for next step
+          chan = Channel.assign(chan, :from_continue_step1, true)
+          chan = Channel.assign(chan, :shared_assign, "from_continue_step1")
+
+          {:async, {:step2, ref2}, chan}
+
+        {:step2, {:ok, :step2_complete}}, chan, _arg ->
+          # Verify all assigns including the new ones from continue
+          assert %{
+                   from_initialize: true,
+                   from_call: true,
+                   from_call_step1: true,
+                   from_continue_step1: true,
+                   shared_assign: "from_continue_step1"
+                 } = chan.assigns
+
+          {:result, Server.call_tool_result(text: "Assigns verified"), chan}
+      end)
+
+      # Initial call
+      assert {:reply, :stream, state} =
+               Suite.handle_request(tool_call_req, chan_info(call_assigns), state)
+
+      # Process first async result
+      assert {:noreply, state} = Suite.handle_info({ref1, :step1_complete}, state)
+
+      # Process second async result
+      assert {:noreply, _state} = Suite.handle_info({ref2, :step2_complete}, state)
+
+      # Assert final result is delivered to client
+      assert_receive {:"$gen_mcp", :result,
+                      %Entities.CallToolResult{
+                        content: [%Entities.TextContent{text: "Assigns verified"}]
+                      }}
     end
   end
 

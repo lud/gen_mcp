@@ -23,8 +23,8 @@ defmodule GenMCP.SuiteTest do
   defined when there is at least one tool/repo
   """)
 
-  defp chan_info do
-    {:channel, __MODULE__, self(), %{}}
+  defp chan_info(assigns \\ %{}) do
+    {:channel, __MODULE__, self(), assigns}
   end
 
   defp check_error({:error, reason}) do
@@ -35,7 +35,7 @@ defmodule GenMCP.SuiteTest do
     GenMCP.RpcError.cast_error(reason)
   end
 
-  defp init_session(server_opts \\ []) do
+  defp init_session(server_opts \\ [], init_assigns \\ %{}) do
     assert {:ok, state} = Suite.init("some-session-id", Keyword.merge(@server_info, server_opts))
 
     init_req = %Entities.InitializeRequest{
@@ -49,7 +49,7 @@ defmodule GenMCP.SuiteTest do
     }
 
     assert {:reply, {:result, _result}, %{status: :server_initialized} = state} =
-             Suite.handle_request(init_req, chan_info(), state)
+             Suite.handle_request(init_req, chan_info(init_assigns), state)
 
     client_init_notif = %Entities.InitializedNotification{
       method: "notifications/initialized",
@@ -345,14 +345,17 @@ defmodule GenMCP.SuiteTest do
     test "lists resources from a direct resource repository" do
       ResourceRepoMock
       |> stub(:prefix, fn :repo1 -> "file:///" end)
-      |> expect(:list, fn nil, _channel, :repo1 ->
+      |> expect(:list, fn nil, channel, :repo1 ->
+        %{some_assign: "some_assign"} = channel.assigns
+
         {[
            %{uri: "file:///readme.txt", name: "README", description: "Project readme"},
            %{uri: "file:///config.json", name: "Config"}
          ], nil}
       end)
 
-      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+      init_assigns = %{some_assign: "some_assign"}
+      state = init_session([resources: [{ResourceRepoMock, :repo1}]], init_assigns)
 
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
@@ -376,14 +379,19 @@ defmodule GenMCP.SuiteTest do
     test "lists resources with pagination" do
       ResourceRepoMock
       |> stub(:prefix, fn :repo1 -> "file:///" end)
-      |> expect(:list, fn nil, _channel, :repo1 ->
+      |> expect(:list, fn nil, channel, :repo1 ->
+        assert %{some_assign: "some_assign"} = channel.assigns
+
         {[%{uri: "file:///page1.txt", name: "Page 1"}], "next-token"}
       end)
-      |> expect(:list, fn "next-token", _channel, :repo1 ->
+      |> expect(:list, fn "next-token", channel, :repo1 ->
+        assert %{some_assign: "some_assign"} = channel.assigns
+
         {[%{uri: "file:///page2.txt", name: "Page 2"}], nil}
       end)
 
-      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+      init_assigns = %{some_assign: "some_assign"}
+      state = init_session([resources: [{ResourceRepoMock, :repo1}]], init_assigns)
 
       # First page
       assert {:reply, {:result, result1}, _} =
@@ -1054,11 +1062,14 @@ defmodule GenMCP.SuiteTest do
 
       PromptRepoMock
       |> expect(:prefix, fn :arg -> "some_prefix" end)
-      |> expect(:list, fn nil, _channel, :arg ->
+      |> expect(:list, fn nil, channel, :arg ->
+        %{some_assign: "some_assign"} = channel.assigns
+
         {prompts, nil}
       end)
 
-      state = init_session(prompts: [{PromptRepoMock, :arg}])
+      init_assigns = %{some_assign: "some_assign"}
+      state = init_session([prompts: [{PromptRepoMock, :arg}]], init_assigns)
 
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(
@@ -1079,10 +1090,19 @@ defmodule GenMCP.SuiteTest do
 
       PromptRepoMock
       |> expect(:prefix, fn :repo1 -> "some_prefix" end)
-      |> expect(:list, fn nil, _channel, :repo1 -> {page1, "repo_cursor_2"} end)
-      |> expect(:list, fn "repo_cursor_2", _channel, :repo1 -> {page2, nil} end)
+      |> expect(:list, fn nil, channel, :repo1 ->
+        %{some_assign: "some_assign"} = channel.assigns
 
-      state = init_session(prompts: [{PromptRepoMock, :repo1}])
+        {page1, "repo_cursor_2"}
+      end)
+      |> expect(:list, fn "repo_cursor_2", channel, :repo1 ->
+        %{some_assign: "some_assign"} = channel.assigns
+
+        {page2, nil}
+      end)
+
+      init_assigns = %{some_assign: "some_assign"}
+      state = init_session([prompts: [{PromptRepoMock, :repo1}]], init_assigns)
 
       # First page
       assert {:reply, {:result, result1}, _} =

@@ -25,14 +25,15 @@ defmodule GenMCP.Suite do
       :prompt_repos,
       :token_key,
       :token_salt,
-      :trackers
+      :trackers,
+      :init_assigns
     ]
     defstruct @enforce_keys
   end
 
   Record.defrecordp(:tracker, id: nil, tool_name: nil, channel: nil, tag: nil)
 
-  IO.warn("@todo add session ID to global assigns")
+  IO.warn("@todo initialize tools after extensions so we get channel assigns to select tools")
 
   @impl true
   def init(_session_id, opts) do
@@ -78,16 +79,13 @@ defmodule GenMCP.Suite do
        prompt_repos: prompt_repos,
        token_key: random_string(64),
        token_salt: random_string(8),
-       trackers: empty_trackers()
+       trackers: empty_trackers(),
+       init_assigns: %{}
      }}
   end
 
   @impl true
-  def handle_request(
-        %Entities.InitializeRequest{} = req,
-        _chan_info,
-        %{status: :starting} = state
-      ) do
+  def handle_request(%Entities.InitializeRequest{} = req, chan_info, %{status: :starting} = state) do
     case check_protocol_version(req) do
       :ok ->
         init_result =
@@ -96,7 +94,8 @@ defmodule GenMCP.Suite do
             server_info: Server.server_info(name: "Mock Server", version: "foo", title: "stuff")
           )
 
-        {:reply, {:result, init_result}, %{state | status: :server_initialized}}
+        state = %{state | status: :server_initialized, init_assigns: elem(chan_info, 3)}
+        {:reply, {:result, init_result}, state}
 
       {:error, reason} = err ->
         {:stop, reason, err, state}
@@ -381,8 +380,8 @@ defmodule GenMCP.Suite do
     end
   end
 
-  defp build_channel(chan_info, req, _state) do
-    Channel.from_client(chan_info, req)
+  defp build_channel(chan_info, req, state) do
+    Channel.from_client(chan_info, req, state.init_assigns)
   end
 
   defp random_string(len) do
