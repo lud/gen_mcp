@@ -15,18 +15,18 @@ defmodule GenMCP.Suite do
   defmodule State do
     # We keep tools both as a list and as a map
     @enforce_keys [
-      :status,
-      :server_info,
-      :tool_names,
-      :tools_map,
-      :resource_prefixes,
-      :resource_repos,
+      :init_assigns,
       :prompt_prefixes,
       :prompt_repos,
+      :resource_prefixes,
+      :resource_repos,
+      :server_info,
+      :session_id,
+      :status,
       :token_key,
-      :token_salt,
-      :trackers,
-      :init_assigns
+      :tool_names,
+      :tools_map,
+      :trackers
     ]
     defstruct @enforce_keys
   end
@@ -36,7 +36,7 @@ defmodule GenMCP.Suite do
   IO.warn("@todo initialize tools after extensions so we get channel assigns to select tools")
 
   @impl true
-  def init(_session_id, opts) do
+  def init(session_id, opts) do
     # For tools and resources we keep a list of names/prefixes to preserve the
     # original order given in the options. This is especially useful for
     # resources where prefixes can overlap.
@@ -69,6 +69,7 @@ defmodule GenMCP.Suite do
 
     {:ok,
      %State{
+       session_id: session_id,
        status: :starting,
        server_info: build_server_info(opts),
        tool_names: tool_names,
@@ -78,7 +79,6 @@ defmodule GenMCP.Suite do
        prompt_prefixes: prompt_prefixes,
        prompt_repos: prompt_repos,
        token_key: random_string(64),
-       token_salt: random_string(8),
        trackers: empty_trackers(),
        init_assigns: %{}
      }}
@@ -423,11 +423,11 @@ defmodule GenMCP.Suite do
   end
 
   defp sign_token(data, state) do
-    Plug.Crypto.sign(state.token_key, state.token_salt, data)
+    Plug.Crypto.sign(state.token_key, _salt = state.session_id, data)
   end
 
   defp verify_token(token, max_age, state) do
-    Plug.Crypto.verify(state.token_key, state.token_salt, token, max_age: max_age)
+    Plug.Crypto.verify(state.token_key, _salt = state.session_id, token, max_age: max_age)
   end
 
   defp reply_pagination_error(err, state) do

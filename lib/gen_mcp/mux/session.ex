@@ -89,8 +89,6 @@ defmodule GenMCP.Mux.Session do
 
   @impl true
   def handle_info({:timeout, tref, :session_timeout} = msg, state) do
-    msg |> dbg()
-
     case state.session_timeout_ref do
       ^tref ->
         Logger.info("session #{state.session_id} terminating (client timeout)")
