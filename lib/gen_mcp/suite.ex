@@ -85,7 +85,7 @@ defmodule GenMCP.Suite do
   @impl true
   def handle_request(
         %Entities.InitializeRequest{} = req,
-        chan_info,
+        _chan_info,
         %{status: :starting} = state
       ) do
     case check_protocol_version(req) do
@@ -103,7 +103,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%Entities.InitializeRequest{} = _req, chan_info, state) do
+  def handle_request(%Entities.InitializeRequest{} = _req, _chan_info, state) do
     reason = :already_initialized
     {:stop, reason, {:error, reason}, state}
   end
@@ -195,7 +195,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%Entities.ListResourceTemplatesRequest{}, chan_info, state) do
+  def handle_request(%Entities.ListResourceTemplatesRequest{}, _chan_info, state) do
     templates =
       Enum.flat_map(state.resource_prefixes, fn prefix ->
         case Map.fetch!(state.resource_repos, prefix).template do

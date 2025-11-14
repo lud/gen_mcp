@@ -6,7 +6,7 @@ defmodule GenMCP.BanditTest do
 
     task =
       Task.async(fn ->
-        Req.get!("http://localhost:5002/dummy/sse-test",
+        Req.get!("http://localhost:5000/dummy/sse-test",
           retry: false,
           into: fn {:data, data}, {req, resp} ->
             case data do

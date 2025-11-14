@@ -33,6 +33,14 @@ defmodule GenMCP.Suite.Tool do
           | Entities.ListRootsResult.t()
           | Entities.ElicitResult.t()
 
+  @type json_encodable ::
+          %{optional(binary | atom | number) => json_encodable}
+          | [json_encodable]
+          | number
+          | binary
+          | boolean
+          | nil
+
   @doc """
   Returns metadata information a  bout the tool based on the requested key.
 
@@ -64,6 +72,17 @@ defmodule GenMCP.Suite.Tool do
   @callback output_schema(arg) :: nil | schema
 
   @doc """
+  Validates the request and returns it. It can swap the arguments in the request
+  for a cast version or a completely different map/struct.
+
+  The returned request will be given to `c:call/3`.
+
+  Error can be any term but will be encoded as an invalid parameters error.
+  """
+  @callback validate_request(Entities.CallToolRequest.t(), arg) ::
+              {:ok, Entities.CallToolRequest.t()} | {:error, String.t() | json_encodable}
+
+  @doc """
   Processes a tool call request and returns the result.
 
   The `request` contains the full call information including parameters and
@@ -91,14 +110,102 @@ defmodule GenMCP.Suite.Tool do
   @callback continue({tag, client_response | (task_result :: term)}, Channel.t(), arg) ::
               call_result
 
-  # * name - it's the name matching a call too request params. names given to an
-  #   instance of the DefaultServer must be unique
-  # * mod - the module implementing the Tool behaviour
-  # * arg - the last argument given to all behaviour calls
-  # * info - an optional map with the following optional keys
-  #     - title
-  #     - description
-  #     - annotations
+  @optional_callbacks validate_request: 2, continue: 3, output_schema: 1
+
+  defmacro __using__(opts) do
+    quote do
+      @gen_mcp_suite_too_opts unquote(Macro.escape(opts))
+      @before_compile unquote(__MODULE__)
+    end
+  end
+
+  defmacro __before_compile__(env) do
+    opts = Module.get_attribute(env.module, :gen_mcp_suite_too_opts)
+
+    quote do
+      # The behaviour option is only used to remove warnings from tests, to test
+      # incomplete tool implementation.
+      case unquote(opts[:behaviour]) do
+        false -> :ok
+        _ -> @behaviour unquote(__MODULE__)
+      end
+
+      unquote(def_infos(opts))
+      unquote(def_validator(opts[:input_schema]))
+    end
+  end
+
+  defp def_infos(infos) do
+    quote bind_quoted: binding() do
+      @impl true
+
+      keys = [:name, :title, :description, :annotations]
+
+      values =
+        Enum.flat_map(keys, fn k ->
+          case Keyword.fetch(infos, k) do
+            {:ok, v} -> [{k, v}]
+            :error -> []
+          end
+        end)
+
+      values =
+        if length(values) < length(keys) do
+          values ++ [:catchall]
+        else
+          values
+        end
+
+      Enum.each(values, fn
+        {k, v} ->
+          def info(unquote(k), _arg) do
+            unquote(Macro.escape(v))
+          end
+
+        :catchall ->
+          def info(_key, _arg) do
+            nil
+          end
+      end)
+    end
+  end
+
+  # No input schema defined, maybe it will be implemented by hand, so we do not
+  # raise here.
+  defp def_validator(nil) do
+    []
+  end
+
+  defp def_validator(input_opt) do
+    quote bind_quoted: [input_opt: input_opt] do
+      @jsv_input_root JSV.build!(input_opt)
+
+      @impl true
+      def input_schema(_arg) do
+        unquote(Macro.escape(input_opt))
+      end
+
+      @impl true
+      def validate_request(req, _) do
+        %{params: params} = req
+
+        arguments =
+          case params do
+            %{arguments: arguments} -> arguments
+            %{} -> nil
+          end
+
+        case JSV.validate(arguments, @jsv_input_root) do
+          {:ok, new_arguments} ->
+            req = %{req | params: %{params | arguments: new_arguments}}
+            {:ok, req}
+
+          {:error, e} ->
+            {:error, e}
+        end
+      end
+    end
+  end
 
   @doc """
   Transforms `module` and `{module, arg}` into a tool descriptor.
@@ -117,7 +224,7 @@ defmodule GenMCP.Suite.Tool do
     name = mod.info(:name, arg)
 
     if !is_binary(name) or String.trim(name) == "" do
-      raise ArgumentError, "tool #{inspect(mod)} must return a valid name"
+      raise ArgumentError, "tool #{inspect(mod)} must define a valid name"
     end
 
     %{name: name, mod: mod, arg: arg}
@@ -133,8 +240,16 @@ defmodule GenMCP.Suite.Tool do
       description: mod.info(:description, arg),
       title: mod.info(:title, arg),
       inputSchema: normalize_schema(mod.input_schema(arg)),
-      outputSchema: normalize_schema(mod.output_schema(arg))
+      outputSchema: normalize_schema(output_schema(mod, arg))
     }
+  end
+
+  defp output_schema(mod, arg) do
+    if function_exported?(mod, :output_schema, 1) do
+      mod.output_schema(arg)
+    else
+      nil
+    end
   end
 
   defp normalize_schema(schema) do
@@ -147,7 +262,7 @@ defmodule GenMCP.Suite.Tool do
   end
 
   IO.warn("""
-  @todo document that the arguments are not validated by default
+  @todo document that the arguments are not validated by default, only if validate_request is implemented
   @todo accept an invalid_params response
   """)
 
@@ -159,7 +274,32 @@ defmodule GenMCP.Suite.Tool do
   def call(tool, %Entities.CallToolRequest{} = req, channel) do
     %{params: %Entities.CallToolRequestParams{name: name}} = req
     %{mod: mod, arg: arg, name: ^name} = tool
-    handle_result(mod.call(req, channel, arg))
+
+    case validate_request(tool, req) do
+      {:ok, req} -> handle_result(mod.call(req, channel, arg))
+      {:error, term} -> invalid_params(req, term, channel)
+    end
+  end
+
+  # TODO(optim) cache exported optional in expand phase
+  defp validate_request(tool, req) do
+    %{mod: mod, arg: arg} = tool
+
+    if function_exported?(mod, :validate_request, 2) do
+      case mod.validate_request(req, arg) do
+        {:ok, req} -> {:ok, req}
+        {:error, _} = err -> err
+        other -> exit({:bad_return_value, other})
+      end
+    else
+      {:ok, req}
+    end
+  end
+
+  IO.warn("test that rpc error can encode {:invalid_parameters, reason} with invalid params code")
+
+  defp invalid_params(_req, reason, channel) do
+    {:error, {:invalid_params, reason}, channel}
   end
 
   def continue(tool, {_tag, _result} = cont, channel) do

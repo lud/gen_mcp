@@ -4,7 +4,7 @@ alias GenMCP.Suite.Tool
 alias GenMCP.Server
 
 Mox.defmock(GenMCP.Support.ServerMock, for: Server)
-Mox.defmock(GenMCP.Support.ToolMock, for: Tool)
+Mox.defmock(GenMCP.Support.ToolMock, for: Tool, skip_optional_callbacks: [validate_request: 2])
 Mox.defmock(GenMCP.Support.ResourceRepoMock, for: ResourceRepo, skip_optional_callbacks: true)
 
 IO.warn("""

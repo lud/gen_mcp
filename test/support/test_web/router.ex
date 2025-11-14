@@ -43,7 +43,8 @@ defmodule GenMCP.TestWeb.Router do
 
     forward "/real", GenMCP.TestWeb.Router.McpReal,
       server_name: "Real Server",
-      server_version: "0.0.1"
+      server_version: "0.0.1",
+      tools: [GenMCP.Test.Tools.ErlangHasher]
   end
 
   pipeline :auth do

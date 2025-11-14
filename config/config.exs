@@ -1,8 +1,10 @@
 import Config
 
+port = String.to_integer(System.get_env("PORT", "5000"))
+
 config :gen_mcp, GenMCP.TestWeb.Endpoint,
-  http: [ip: {127, 0, 0, 1}, port: 5002],
-  url: [host: "localhost", port: 5002, scheme: "http"],
+  http: [ip: {127, 0, 0, 1}, port: port],
+  url: [host: "localhost", port: port, scheme: "http"],
   server: true,
   debug_errors: true,
   code_reloader: false,

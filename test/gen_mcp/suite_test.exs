@@ -1290,7 +1290,11 @@ defmodule GenMCP.SuiteTest do
                check_error({:prompt_not_found, "unknown"})
     end
 
-    IO.warn("@todo allow invalid params return and expect HTTP error 400")
+    IO.warn("@todo implement required params error and expect HTTP error 400")
+
+    IO.warn(
+      "@todo test we can return invalid params from the call as well, to skip validate_request"
+    )
 
     test "returns error for validation failure" do
       PromptRepoMock

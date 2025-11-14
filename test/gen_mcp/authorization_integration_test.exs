@@ -56,8 +56,8 @@ defmodule GenMCP.AuthorizationIntegrationTest do
             protocolVersion: "2025-06-18"
           }
         })
+        |> expect_status(401)
 
-      assert 401 == resp.status
       assert ["PlugWasCalled"] == resp.headers["www-authenticate"]
 
       # Server was not called
@@ -72,8 +72,8 @@ defmodule GenMCP.AuthorizationIntegrationTest do
           method: "notifications/initialized",
           params: %{}
         })
+        |> expect_status(401)
 
-      assert 401 == resp.status
       assert ["PlugWasCalled"] == resp.headers["www-authenticate"]
 
       # Server was not called
@@ -92,8 +92,8 @@ defmodule GenMCP.AuthorizationIntegrationTest do
             arguments: %{}
           }
         })
+        |> expect_status(401)
 
-      assert 401 == resp.status
       assert ["PlugWasCalled"] == resp.headers["www-authenticate"]
 
       # Server was not called
@@ -102,7 +102,7 @@ defmodule GenMCP.AuthorizationIntegrationTest do
   end
 
   describe "when auth plug passes the connection through" do
-    setup ctx do
+    setup do
       GenMCP.Support.AuthorizationMock
       |> stub(:init, fn opts -> opts end)
       |> stub(:call, fn conn, _opts ->

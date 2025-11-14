@@ -45,11 +45,32 @@ defmodule GenMCP.Mux do
     GenServer.call(via_session(session_id), callarg, timeout)
   end
 
-  IO.warn("test with a peer node")
+  IO.warn("todo proper 404 response for session not found")
 
-  def via_session(session_id) do
+  def via_session(session_id) when is_binary(session_id) do
     case NodeSync.node_of(session_id) do
-      {:ok, n} when n == node() -> {:via, Registry, {registry(), session_id}}
+      {:ok, n} when n == node() ->
+        {:via, Registry, {registry(), session_id}}
+
+      {:ok, remote_node} ->
+        Logger.debug("retrieving session #{session_id} on node #{inspect(remote_node)}")
+
+        lookup = :rpc.call(remote_node, GenMCP.Mux, :whereis, [session_id])
+
+        case lookup do
+          {:ok, pid} -> pid
+          :error -> raise "could not find session #{session_id} on node #{inspect(remote_node)}"
+        end
+    end
+  end
+
+  @doc false
+  def whereis(session_id) do
+    Logger.debug("retrieving local pid for session #{session_id}")
+
+    case Registry.lookup(registry(), session_id) do
+      [{pid, _}] -> {:ok, pid}
+      [] -> :error
     end
   end
 end

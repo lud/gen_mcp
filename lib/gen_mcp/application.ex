@@ -21,8 +21,7 @@ defmodule GenMCP.Application do
         {Task, &connect/0}
       ] ++
         if env() == :dev do
-          # [GenMCP.TestWeb.Endpoint]
-          []
+          [GenMCP.TestWeb.Endpoint]
         else
           []
         end
@@ -44,13 +43,10 @@ defmodule GenMCP.Application do
 
         case int do
           0 ->
-            Process.sleep(Enum.random(1000..5000))
             Node.connect(:"genmcpdev-#{1}@127.0.0.1")
 
           n ->
-            Process.sleep(Enum.random(1000..5000))
             Node.connect(:"genmcpdev-#{n - 1}@127.0.0.1")
-            Process.sleep(Enum.random(1000..5000))
             Node.connect(:"genmcpdev-#{n + 1}@127.0.0.1")
         end
 

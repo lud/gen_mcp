@@ -10,4 +10,5 @@ windows:
       - shell_command:
           - just run 3
       - shell_command:
-          - just run 4
+          - nginx -c $(realpath test/support/nginx.conf) -s stop
+          - nginx -c $(realpath test/support/nginx.conf)

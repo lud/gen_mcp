@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "GenMCP-Dev-Server": {
+      "url": "http://localhost:5099/mcp/real",
+      "type": "http"
+    }
+  },
+  "inputs": [ ]
+}

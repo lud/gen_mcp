@@ -63,7 +63,7 @@ defmodule GenMCP.Server do
     }
   end
 
-  IO.warn("move as a helper in the Tool module and implement better API")
+  IO.warn("move as a helper in the MCP module and implement better API")
   # supports error: true
   # TODO support error: binary() -> add the error in the content as text
   # TODO support error: term -> add the inspected term in the content as text
