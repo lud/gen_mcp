@@ -25,6 +25,7 @@ end
 defmodule GenMCP.RpcError do
   @rpc_invalid_request -32600
   @rpc_invalid_params -32602
+  @rpc_method_not_found -32601
   @rpc_internal_error -32603
   @rpc_resource_not_found -32002
   @rpc_prompt_not_found @rpc_invalid_params
@@ -115,13 +116,22 @@ defmodule GenMCP.RpcError do
     }
   end
 
-  @raise_on_unknown Mix.env() == :test
-
   defcasterror {:session_start_failed, _reason}, @rpc_internal_error, 500 do
     %{
       message: "Session Start Error"
     }
   end
+
+  defcasterror {:unknown_method, method} when is_binary(method), @rpc_method_not_found, 400 do
+    %{
+      data: %{method: method},
+      message: "Unknown method #{method}"
+    }
+  end
+
+  # -- catchall ---------------------------------------------------------------
+
+  @raise_on_unknown Mix.env() == :test
 
   defcasterror reason, @rpc_internal_error, 500 do
     msg = "unknown MCP RPC error: #{inspect(reason)}"

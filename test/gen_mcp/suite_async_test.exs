@@ -7,6 +7,7 @@ defmodule GenMCP.SuiteAsyncTest do
   alias GenMCP.Suite
   alias GenMCP.Support.ToolMock
   import Mox
+  import GenMCP.Test.Helpers
   use ExUnit.Case, async: true
 
   @moduletag :capture_log
@@ -18,20 +19,8 @@ defmodule GenMCP.SuiteAsyncTest do
     server_version: "0"
   ]
 
-  defp chan_info(assigns \\ %{}) do
-    {:channel, __MODULE__, self(), assigns}
-  end
-
   defp task_sup do
     start_supervised!(Task.Supervisor)
-  end
-
-  defp check_error({:error, reason}) do
-    check_error(reason)
-  end
-
-  defp check_error(reason) do
-    GenMCP.RpcError.cast_error(reason)
   end
 
   defp init_session(server_opts, init_assigns \\ %{}) do

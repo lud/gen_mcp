@@ -29,6 +29,31 @@ defmodule GenMCP.StreamableHttpTest do
     assert 405 = Req.get!(client()).status
   end
 
+  test "unknown RPC method" do
+    resp =
+      post_invalid_message(client(), %{
+        jsonrpc: "2.0",
+        id: 123,
+        method: "some_unknownw_method",
+        params: %{
+          foo: "bar"
+        }
+      })
+
+    assert %{
+             status: 400,
+             body: %{
+               "error" => %{
+                 "code" => -32601,
+                 "data" => %{"method" => "some_unknownw_method"},
+                 "message" => "Unknown method some_unknownw_method"
+               },
+               "id" => 123,
+               "jsonrpc" => "2.0"
+             }
+           } = resp
+  end
+
   test "we can run the initialization" do
     ServerMock
     |> expect(:init, fn _, _ -> {:ok, :some_session_state} end)

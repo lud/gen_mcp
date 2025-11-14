@@ -9,7 +9,7 @@ defmodule GenMCP.TestWeb.Router.AuthWrapper do
   @auth_plug (if Mix.env() == :test do
                 GenMCP.Support.AuthorizationMock
               else
-                SomeModule
+                GenMCP.TestWeb.Router.NoAuth
               end)
 
   def init(opts) do
@@ -18,6 +18,16 @@ defmodule GenMCP.TestWeb.Router.AuthWrapper do
 
   def call(conn, _opts) do
     @auth_plug.call(conn, [])
+  end
+end
+
+defmodule GenMCP.TestWeb.Router.NoAuth do
+  def init(opts) do
+    opts
+  end
+
+  def call(conn, _opts) do
+    conn
   end
 end
 

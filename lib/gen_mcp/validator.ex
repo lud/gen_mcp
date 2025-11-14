@@ -57,8 +57,6 @@ defmodule GenMCP.Validator do
     {:error, {:unknown_method, method}}
   end
 
-  IO.warn("test unknown method")
-
   @doc """
   Validates request but also notifications, and returns the kind
   (:request/:notification) with the cast message.

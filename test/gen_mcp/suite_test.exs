@@ -9,6 +9,7 @@ defmodule GenMCP.SuiteTest do
   alias GenMCP.Support.ResourceRepoMockTpl
   alias GenMCP.Support.ToolMock
   import Mox
+  import GenMCP.Test.Helpers
   use ExUnit.Case, async: true
 
   setup :verify_on_exit!
@@ -22,18 +23,6 @@ defmodule GenMCP.SuiteTest do
   @todo we should test that capabilities for tools/resources/prompts are only
   defined when there is at least one tool/repo
   """)
-
-  defp chan_info(assigns \\ %{}) do
-    {:channel, __MODULE__, self(), assigns}
-  end
-
-  defp check_error({:error, reason}) do
-    check_error(reason)
-  end
-
-  defp check_error(reason) do
-    GenMCP.RpcError.cast_error(reason)
-  end
 
   defp init_session(server_opts \\ [], init_assigns \\ %{}) do
     assert {:ok, state} = Suite.init("some-session-id", Keyword.merge(@server_info, server_opts))
@@ -239,8 +228,11 @@ defmodule GenMCP.SuiteTest do
         }
       }
 
-      assert {:reply, {:error, {:unknown_tool, "SomeTool"}}, _} =
+      assert {:reply, {:error, {:unknown_tool, "SomeTool"}} = err, _} =
                Suite.handle_request(tool_call_req, chan_info(), state)
+
+      assert {400, %{code: -32602, data: %{tool: "SomeTool"}, message: "Unknown tool SomeTool"}} =
+               check_error(err)
     end
 
     test "sync tool" do
