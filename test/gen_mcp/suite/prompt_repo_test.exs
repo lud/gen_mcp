@@ -87,7 +87,7 @@ defmodule GenMCP.Suite.PromptRepoTest do
     test "returns prompt result" do
       repo = %{mod: PromptRepoMock, arg: :test_arg}
 
-      result = %GenMCP.Entities.GetPromptResult{
+      result = %GenMCP.MCP.GetPromptResult{
         description: "Test prompt",
         messages: []
       }

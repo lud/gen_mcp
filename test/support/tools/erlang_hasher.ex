@@ -33,7 +33,7 @@ defmodule GenMCP.Test.Tools.ErlangHasher do
     hash_value = :erlang.phash2(subject, range)
     result_text = Integer.to_string(hash_value)
 
-    result = Server.call_tool_result(text: result_text)
+    result = MCP.call_tool_result(text: result_text)
 
     {:result, result, channel}
   end

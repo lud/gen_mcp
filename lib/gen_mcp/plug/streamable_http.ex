@@ -1,7 +1,7 @@
 defmodule GenMCP.Transport.StreamableHttp do
-  alias GenMCP.Entities.InitializeRequest
-  alias GenMCP.Entities.InitializeResult
-  alias GenMCP.Entities.JSONRPCResponse
+  alias GenMCP.MCP.InitializeRequest
+  alias GenMCP.MCP.InitializeResult
+  alias GenMCP.MCP.JSONRPCResponse
   alias GenMCP.Mux
   alias GenMCP.RpcError
   alias GenMCP.Validator
@@ -210,7 +210,7 @@ defmodule GenMCP.Transport.StreamableHttp do
   defp send_error(conn, reason, opts \\ []) do
     case RpcError.cast_error(reason) do
       {status, payload} ->
-        payload = %GenMCP.Entities.JSONRPCError{
+        payload = %GenMCP.MCP.JSONRPCError{
           error: payload,
           id: opts[:msg_id],
           jsonrpc: "2.0"
@@ -285,7 +285,7 @@ defmodule GenMCP.Transport.StreamableHttp do
   defp send_error_response_chunk(conn, msg_id, reason) do
     {_status, error_payload} = RpcError.cast_error(reason)
 
-    payload = %GenMCP.Entities.JSONRPCError{
+    payload = %GenMCP.MCP.JSONRPCError{
       error: error_payload,
       id: msg_id,
       jsonrpc: "2.0"

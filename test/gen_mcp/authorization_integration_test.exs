@@ -1,4 +1,5 @@
 defmodule GenMCP.AuthorizationIntegrationTest do
+  alias GenMCP.MCP
   alias GenMCP.Server
   alias GenMCP.Support.ServerMock
   import GenMCP.Test.Client
@@ -136,9 +137,9 @@ defmodule GenMCP.AuthorizationIntegrationTest do
         assert not Map.has_key?(assigns, :unexisting_assign)
 
         init_result =
-          Server.intialize_result(
-            capabilities: Server.capabilities(tools: true),
-            server_info: Server.server_info(name: "Mock Server", version: "0.0.1")
+          MCP.intialize_result(
+            capabilities: MCP.capabilities(tools: true),
+            server_info: MCP.server_info(name: "Mock Server", version: "0.0.1")
           )
 
         {:reply, {:result, init_result}, :session_state}
@@ -173,9 +174,9 @@ defmodule GenMCP.AuthorizationIntegrationTest do
         assert assigns[:shared_assign] == "value_from_auth"
 
         init_result =
-          Server.intialize_result(
-            capabilities: Server.capabilities(tools: true),
-            server_info: Server.server_info(name: "Mock Server", version: "0.0.1")
+          MCP.intialize_result(
+            capabilities: MCP.capabilities(tools: true),
+            server_info: MCP.server_info(name: "Mock Server", version: "0.0.1")
           )
 
         {:reply, {:result, init_result}, :session_state_1}
@@ -188,7 +189,7 @@ defmodule GenMCP.AuthorizationIntegrationTest do
         assert assigns[:assign_from_auth] == "value_from_auth"
         assert assigns[:shared_assign] == "value_from_auth"
 
-        call_tool_result = Server.call_tool_result(text: "hello")
+        call_tool_result = MCP.call_tool_result(text: "hello")
 
         {:reply, {:result, call_tool_result}, :session_state_2}
       end)

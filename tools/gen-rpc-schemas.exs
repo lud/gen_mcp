@@ -102,6 +102,7 @@ defmodule Generator do
     defs =
       schema
       |> Map.fetch!(:definitions)
+      |> filter_schemas()
       |> inherit_schemas()
       |> swap_sub_schemas()
       |> Enum.sort()
@@ -114,7 +115,7 @@ defmodule Generator do
 
     code = Enum.intersperse([prelude(), mod_map(defs, metaschema), modules], "\n\n")
 
-    File.write!("lib/gen_mcp/entities.ex", code)
+    File.write!("lib/gen_mcp/mcp/schemas.ex", code)
 
     {_, 0} = System.cmd("mix", ~w(format --migrate))
 
@@ -127,7 +128,8 @@ defmodule Generator do
         [msg_id: true, request_meta: true, set_default_method: true]
 
       :CompleteRequest ->
-        [msg_id: true, request_meta: true, set_default_method: true]
+        # [msg_id: true, request_meta: true, set_default_method: true]
+        :skip
 
       :GetPromptRequest ->
         [msg_id: true, request_meta: true, set_default_method: true]
@@ -154,7 +156,8 @@ defmodule Generator do
         [msg_id: true, request_meta: true, set_default_method: true]
 
       :SetLevelRequest ->
-        [msg_id: true, request_meta: true, set_default_method: true]
+        # [msg_id: true, request_meta: true, set_default_method: true]
+        :skip
 
       :SubscribeRequest ->
         [msg_id: true, request_meta: true, set_default_method: true]
@@ -162,9 +165,247 @@ defmodule Generator do
       :UnsubscribeRequest ->
         [msg_id: true, request_meta: true, set_default_method: true]
 
-      _ ->
+      :Annotations ->
         []
+
+      :AudioContent ->
+        :skip
+
+      :BaseMetadata ->
+        :skip
+
+      :BlobResourceContents ->
+        []
+
+      :BooleanSchema ->
+        []
+
+      :CallToolResult ->
+        []
+
+      :CancelledNotification ->
+        :skip
+
+      :ClientCapabilities ->
+        []
+
+      :ClientNotification ->
+        :skip
+
+      :ClientRequest ->
+        :skip
+
+      :ClientResult ->
+        :skip
+
+      :CompleteRequest ->
+        :skip
+
+      :CompleteResult ->
+        :skip
+
+      :ContentBlock ->
+        :skip
+
+      :CreateMessageRequest ->
+        :skip
+
+      :CreateMessageResult ->
+        :skip
+
+      :Cursor ->
+        :skip
+
+      :ElicitRequest ->
+        :skip
+
+      :ElicitResult ->
+        :skip
+
+      :EmbeddedResource ->
+        :skip
+
+      :EmptyResult ->
+        :skip
+
+      :EnumSchema ->
+        :skip
+
+      :GetPromptResult ->
+        []
+
+      :ImageContent ->
+        :skip
+
+      :Implementation ->
+        []
+
+      :InitializedNotification ->
+        []
+
+      :InitializeResult ->
+        []
+
+      :JSONRPCError ->
+        []
+
+      :JSONRPCMessage ->
+        :skip
+
+      :JSONRPCNotification ->
+        :skip
+
+      :JSONRPCRequest ->
+        :skip
+
+      :JSONRPCResponse ->
+        []
+
+      :ListPromptsResult ->
+        []
+
+      :ListResourcesResult ->
+        []
+
+      :ListResourceTemplatesResult ->
+        []
+
+      :ListRootsRequest ->
+        :skip
+
+      :ListRootsResult ->
+        :skip
+
+      :ListToolsResult ->
+        []
+
+      :LoggingLevel ->
+        :skip
+
+      :LoggingMessageNotification ->
+        :skip
+
+      :ModelHint ->
+        :skip
+
+      :ModelPreferences ->
+        :skip
+
+      :Notification ->
+        :skip
+
+      :NumberSchema ->
+        :skip
+
+      :PaginatedRequest ->
+        :skip
+
+      :PaginatedResult ->
+        :skip
+
+      :PrimitiveSchemaDefinition ->
+        :skip
+
+      :ProgressNotification ->
+        []
+
+      :ProgressToken ->
+        []
+
+      :Prompt ->
+        :skip
+
+      :PromptArgument ->
+        :skip
+
+      :PromptListChangedNotification ->
+        :skip
+
+      :PromptMessage ->
+        []
+
+      :PromptReference ->
+        :skip
+
+      :ReadResourceResult ->
+        []
+
+      :Request ->
+        :skip
+
+      :RequestId ->
+        []
+
+      :Resource ->
+        :skip
+
+      :ResourceContents ->
+        :skip
+
+      :ResourceLink ->
+        :skip
+
+      :ResourceListChangedNotification ->
+        :skip
+
+      :ResourceTemplate ->
+        []
+
+      :ResourceTemplateReference ->
+        :skip
+
+      :ResourceUpdatedNotification ->
+        :skip
+
+      :Result ->
+        :skip
+
+      :Role ->
+        []
+
+      :Root ->
+        :skip
+
+      :RootsListChangedNotification ->
+        :skip
+
+      :SamplingMessage ->
+        :skip
+
+      :ServerCapabilities ->
+        []
+
+      :ServerNotification ->
+        :skip
+
+      :ServerRequest ->
+        :skip
+
+      :ServerResult ->
+        :skip
+
+      :StringSchema ->
+        :skip
+
+      :TextContent ->
+        []
+
+      :TextResourceContents ->
+        []
+
+      :Tool ->
+        []
+
+      :ToolAnnotations ->
+        :skip
+
+      :ToolListChangedNotification ->
+        :skip
     end
+  end
+
+  defp skip_definition?(name) do
+    :skip == module_config(name)
   end
 
   defp requires_message_id?(name) do
@@ -177,6 +418,12 @@ defmodule Generator do
 
   defp set_default_method?(name) do
     true == Keyword.get(module_config(name), :set_default_method)
+  end
+
+  defp filter_schemas(defs) do
+    Enum.reject(defs, fn {name, _} ->
+      skip_definition?(name)
+    end)
   end
 
   defp inherit_schemas(defs) do
@@ -226,11 +473,6 @@ defmodule Generator do
     """
     require GenMCP.JsonDerive, as: JsonDerive
 
-    # Support modkit renaming
-    defmodule #{inspect(base_module())} do
-      @moduledoc false
-    end
-
     defmodule #{inspect(module_name("Meta"))} do
       use JSV.Schema
 
@@ -238,7 +480,7 @@ defmodule Generator do
         %{
           additionalProperties: %{},
           description: "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
-          properties: %{progressToken: GenMCP.Entities.ProgressToken},
+          properties: %{progressToken: #{inspect(base_module())}.ProgressToken},
           type: "object"
         }
       end
@@ -251,7 +493,7 @@ defmodule Generator do
         %{
           additionalProperties: %{},
           description: "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
-          properties: %{progressToken: GenMCP.Entities.ProgressToken},
+          properties: %{progressToken: #{inspect(base_module())}.ProgressToken},
           type: "object"
         }
       end
@@ -511,7 +753,7 @@ defmodule Generator do
   end
 
   def base_module do
-    GenMCP.Entities
+    GenMCP.MCP
   end
 
   defp module_name(name) do

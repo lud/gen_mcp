@@ -85,6 +85,7 @@ defmodule GenMCP.MixProject do
       mount: [
         {GenMCP.TestWeb, "test/support/test_web", flavor: :phoenix},
         {GenMCP.Test, "test/support"},
+        {GenMCP.MCP, :ignore},
         {GenMCP.Support, "test/support"},
         {GenMCP.ConnCase, "test/support/conn_case"},
         {GenMCP, "lib/gen_mcp"},

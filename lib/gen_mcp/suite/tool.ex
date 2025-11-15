@@ -1,9 +1,9 @@
 defmodule GenMCP.Suite.Tool do
-  alias GenMCP.Entities
+  alias GenMCP.MCP
   alias GenMCP.Mux.Channel
 
   @type tool_annotations :: %{
-          optional(:__struct__) => Entities.ToolAnnotations,
+          optional(:__struct__) => MCP.ToolAnnotations,
           optional(:destructiveHint) => boolean,
           optional(:idempotentHint) => boolean,
           optional(:openWorldHint) => boolean,
@@ -29,9 +29,9 @@ defmodule GenMCP.Suite.Tool do
 
   @type request :: term
   @type client_response ::
-          Entities.CreateMessageResult.t()
-          | Entities.ListRootsResult.t()
-          | Entities.ElicitResult.t()
+          MCP.CreateMessageResult.t()
+          | MCP.ListRootsResult.t()
+          | MCP.ElicitResult.t()
 
   @type json_encodable ::
           %{optional(binary | atom | number) => json_encodable}
@@ -79,8 +79,8 @@ defmodule GenMCP.Suite.Tool do
 
   Error can be any term but will be encoded as an invalid parameters error.
   """
-  @callback validate_request(Entities.CallToolRequest.t(), arg) ::
-              {:ok, Entities.CallToolRequest.t()} | {:error, String.t() | json_encodable}
+  @callback validate_request(MCP.CallToolRequest.t(), arg) ::
+              {:ok, MCP.CallToolRequest.t()} | {:error, String.t() | json_encodable}
 
   @doc """
   Processes a tool call request and returns the result.
@@ -95,7 +95,7 @@ defmodule GenMCP.Suite.Tool do
   The callback can return a result tuple, request a server response, or indicate
   async processing.
   """
-  @callback call(Entities.CallToolRequest.t(), Channel.t(), arg) :: call_result
+  @callback call(MCP.CallToolRequest.t(), Channel.t(), arg) :: call_result
 
   @doc """
   Continues processing the tool request after `c:call/3` has returned a value.
@@ -231,11 +231,11 @@ defmodule GenMCP.Suite.Tool do
     %{name: name, mod: mod, arg: arg}
   end
 
-  @spec describe(tool) :: Entities.Tool.t()
+  @spec describe(tool) :: MCP.Tool.t()
   def describe(tool) do
     %{mod: mod, arg: arg, name: name} = expand(tool)
 
-    %Entities.Tool{
+    %MCP.Tool{
       name: name,
       annotations: mod.info(:annotations, arg),
       description: mod.info(:description, arg),
@@ -271,9 +271,9 @@ defmodule GenMCP.Suite.Tool do
   This is a thin wrapper around the tool `c:call/3` callback that also performs
   input validation.
   """
-  @spec call(tool_descriptor, Entities.CallToolRequest.t(), Channel.t()) :: call_result
-  def call(tool, %Entities.CallToolRequest{} = req, channel) do
-    %{params: %Entities.CallToolRequestParams{name: name}} = req
+  @spec call(tool_descriptor, MCP.CallToolRequest.t(), Channel.t()) :: call_result
+  def call(tool, %MCP.CallToolRequest{} = req, channel) do
+    %{params: %MCP.CallToolRequestParams{name: name}} = req
     %{mod: mod, arg: arg, name: ^name} = tool
 
     case validate_request(tool, req) do

@@ -1,29 +1,31 @@
 defmodule GenMCP.Validator do
   alias JSV.Ref
-  require GenMCP.Entities.ModMap, as: ModMap
+  require GenMCP.MCP.ModMap, as: ModMap
   ModMap.require_all()
+
+  IO.warn("todo support cancellation (cancelled notification)")
 
   validable = [
     request: [
-      GenMCP.Entities.InitializeRequest,
-      GenMCP.Entities.PingRequest,
-      GenMCP.Entities.ListResourcesRequest,
-      GenMCP.Entities.ListResourceTemplatesRequest,
-      GenMCP.Entities.ReadResourceRequest,
-      GenMCP.Entities.SubscribeRequest,
-      GenMCP.Entities.UnsubscribeRequest,
-      GenMCP.Entities.ListPromptsRequest,
-      GenMCP.Entities.GetPromptRequest,
-      GenMCP.Entities.ListToolsRequest,
-      GenMCP.Entities.CallToolRequest,
-      GenMCP.Entities.SetLevelRequest,
-      GenMCP.Entities.CompleteRequest
+      GenMCP.MCP.InitializeRequest,
+      # GenMCP.MCP.PingRequest,
+      GenMCP.MCP.ListResourcesRequest,
+      GenMCP.MCP.ListResourceTemplatesRequest,
+      GenMCP.MCP.ReadResourceRequest,
+      # GenMCP.MCP.SubscribeRequest,
+      # GenMCP.MCP.UnsubscribeRequest,
+      GenMCP.MCP.ListPromptsRequest,
+      GenMCP.MCP.GetPromptRequest,
+      GenMCP.MCP.ListToolsRequest,
+      GenMCP.MCP.CallToolRequest
+      # GenMCP.MCP.SetLevelRequest,
+      # GenMCP.MCP.CompleteRequest
     ],
     notification: [
-      GenMCP.Entities.CancelledNotification,
-      GenMCP.Entities.InitializedNotification,
-      GenMCP.Entities.ProgressNotification,
-      GenMCP.Entities.RootsListChangedNotification
+      # GenMCP.MCP.CancelledNotification,
+      GenMCP.MCP.InitializedNotification,
+      GenMCP.MCP.ProgressNotification
+      # GenMCP.MCP.RootsListChangedNotification
     ]
   ]
 

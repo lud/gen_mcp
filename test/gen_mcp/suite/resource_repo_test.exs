@@ -1,5 +1,5 @@
 defmodule GenMCP.Suite.ResourceRepoTest do
-  alias GenMCP.Entities
+  alias GenMCP.MCP
   alias GenMCP.Mux.Channel
   alias GenMCP.Suite.ResourceRepo
   alias GenMCP.Support.ResourceRepoMock
@@ -217,9 +217,9 @@ defmodule GenMCP.Suite.ResourceRepoTest do
 
   describe "read_resource/3 for direct resources" do
     test "returns resource result from callback module" do
-      result = %Entities.ReadResourceResult{
+      result = %MCP.ReadResourceResult{
         contents: [
-          %Entities.TextResourceContents{
+          %MCP.TextResourceContents{
             uri: "file:///readme.txt",
             text: "# Welcome"
           }
@@ -268,7 +268,7 @@ defmodule GenMCP.Suite.ResourceRepoTest do
     end
 
     test "passes channel with assigns to read callback" do
-      result = %Entities.ReadResourceResult{contents: []}
+      result = %MCP.ReadResourceResult{contents: []}
 
       ResourceRepoMock
       |> stub(:prefix, fn _ -> "file:///" end)
@@ -303,9 +303,9 @@ defmodule GenMCP.Suite.ResourceRepoTest do
     test "reads template resource using default URI template matching" do
       # Given the module does not export parse_uri/2
 
-      result = %Entities.ReadResourceResult{
+      result = %MCP.ReadResourceResult{
         contents: [
-          %Entities.TextResourceContents{
+          %MCP.TextResourceContents{
             uri: "file:///config/app.json",
             text: ~s({"port": 3000})
           }
@@ -346,9 +346,9 @@ defmodule GenMCP.Suite.ResourceRepoTest do
     end
 
     test "calls parse_uri callback when provided" do
-      result = %Entities.ReadResourceResult{
+      result = %MCP.ReadResourceResult{
         contents: [
-          %Entities.TextResourceContents{uri: "file:///test.txt", text: "content"}
+          %MCP.TextResourceContents{uri: "file:///test.txt", text: "content"}
         ]
       }
 
@@ -407,7 +407,7 @@ defmodule GenMCP.Suite.ResourceRepoTest do
     end
 
     test "passes channel with assigns to read callback for template resource" do
-      result = %Entities.ReadResourceResult{contents: []}
+      result = %MCP.ReadResourceResult{contents: []}
 
       ResourceRepoMockTpl
       |> stub(:prefix, fn _ -> "file:///" end)

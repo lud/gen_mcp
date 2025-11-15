@@ -44,7 +44,7 @@ defmodule GenMCP.Suite.ResourceRepo do
 
         @impl true
         def read("file:///readme.txt", _arg) do
-          {:ok, [%GenMCP.Entities.TextResourceContents{
+          {:ok, [%GenMCP.MCP.TextResourceContents{
             uri: "file:///readme.txt",
             text: "# Welcome"
           }]}
@@ -53,7 +53,7 @@ defmodule GenMCP.Suite.ResourceRepo do
       end
   """
 
-  alias GenMCP.Entities
+  alias GenMCP.MCP
 
   @type resource_item :: %{
           required(:uri) => String.t(),
@@ -70,7 +70,7 @@ defmodule GenMCP.Suite.ResourceRepo do
           optional(:title) => nil | String.t()
         }
   @type contents :: [
-          Entities.TextResourceContents.t() | Entities.BlobResourceContents.t()
+          MCP.TextResourceContents.t() | MCP.BlobResourceContents.t()
         ]
   @type arg :: term
   @type resource_repo :: module | {module, arg} | resource_repo_descriptor
@@ -156,9 +156,9 @@ defmodule GenMCP.Suite.ResourceRepo do
 
       # Direct resource
       def read("file:///readme.txt", channel, arg) do
-        {:ok, %GenMCP.Entities.ReadResourceResult{
+        {:ok, %GenMCP.MCP.ReadResourceResult{
           contents: [
-            %GenMCP.Entities.TextResourceContents{
+            %GenMCP.MCP.TextResourceContents{
               uri: "file:///readme.txt",
               text: "# Welcome"
             }
@@ -170,9 +170,9 @@ defmodule GenMCP.Suite.ResourceRepo do
       def read(%{"path" => path}, channel, arg) do
         case File.read(path) do
           {:ok, content} ->
-            {:ok, %GenMCP.Entities.ReadResourceResult{
+            {:ok, %GenMCP.MCP.ReadResourceResult{
               contents: [
-                %GenMCP.Entities.TextResourceContents{
+                %GenMCP.MCP.TextResourceContents{
                   uri: "file:///\#{path}",
                   text: content
                 }
@@ -184,7 +184,7 @@ defmodule GenMCP.Suite.ResourceRepo do
       end
   """
   @callback read(uri_or_template_args, GenMCP.Mux.Channel.t(), arg) ::
-              {:ok, Entities.ReadResourceResult.t()} | {:error, :not_found | String.t()}
+              {:ok, MCP.ReadResourceResult.t()} | {:error, :not_found | String.t()}
             when uri_or_template_args: String.t() | %{String.t() => term}
 
   @doc """
@@ -298,7 +298,7 @@ defmodule GenMCP.Suite.ResourceRepo do
   - `{:error, String.t()}` - Custom error message from repository
   """
   @spec read_resource(resource_repo_descriptor, String.t(), GenMCP.Mux.Channel.t()) ::
-          {:ok, Entities.ReadResourceResult.t()}
+          {:ok, MCP.ReadResourceResult.t()}
           | {:error, {:resource_not_found, String.t()} | String.t()}
   def read_resource(%{template: template} = repo, uri, channel) when is_map(template) do
     with {:ok, uri_or_args} <- parse_uri(repo, uri),
@@ -314,7 +314,7 @@ defmodule GenMCP.Suite.ResourceRepo do
   def read_resource(repo, uri, channel) when is_binary(uri) do
     # No template, pass URI directly to read callback
     case do_read(repo, uri, channel) do
-      {:ok, %Entities.ReadResourceResult{}} = ok -> ok
+      {:ok, %MCP.ReadResourceResult{}} = ok -> ok
       {:error, :not_found} -> {:error, {:resource_not_found, uri}}
       {:error, message} when is_binary(message) -> {:error, message}
       other -> exit({:bad_return_value, other})

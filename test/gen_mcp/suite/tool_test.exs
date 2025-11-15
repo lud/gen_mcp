@@ -1,5 +1,5 @@
 defmodule GenMCP.Suite.ToolTest do
-  alias GenMCP.Entities
+  alias GenMCP.MCP
   alias GenMCP.Suite.Tool
   import GenMCP.Test.Helpers
   use ExUnit.Case, async: true
@@ -138,10 +138,10 @@ defmodule GenMCP.Suite.ToolTest do
 
       # Valid request is ok
 
-      valid_req = %Entities.CallToolRequest{
+      valid_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "some_name",
           arguments: %{"foo" => 123}
         }
@@ -152,10 +152,10 @@ defmodule GenMCP.Suite.ToolTest do
 
       # invalid request will not hit the call callback if rejected
 
-      bad_req = %Entities.CallToolRequest{
+      bad_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "some_name",
           arguments: %{"foo" => "not_an_int"}
         }
@@ -167,7 +167,7 @@ defmodule GenMCP.Suite.ToolTest do
       assert %{type: :object, properties: %{foo: %{type: :integer}}} =
                UseInputSchema.input_schema(nil)
 
-      assert %GenMCP.Entities.Tool{
+      assert %GenMCP.MCP.Tool{
                _meta: nil,
                annotations: nil,
                description: "some descr",
@@ -207,10 +207,10 @@ defmodule GenMCP.Suite.ToolTest do
 
       # invalid request is allowed by user validator
 
-      bad_req = %Entities.CallToolRequest{
+      bad_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "some_name",
           arguments: %{"foo" => "not_an_int"}
         }
@@ -251,7 +251,7 @@ defmodule GenMCP.Suite.ToolTest do
              } == UseOutputSchema.output_schema(nil)
 
       # Tool.describe should normalize the schema
-      assert %GenMCP.Entities.Tool{
+      assert %GenMCP.MCP.Tool{
                _meta: nil,
                annotations: nil,
                description: nil,
@@ -406,10 +406,10 @@ defmodule GenMCP.Suite.ToolTest do
 
       # Valid request is ok
 
-      valid_req = %Entities.CallToolRequest{
+      valid_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "some_name",
           arguments: %{"foo" => 123}
         }
@@ -420,10 +420,10 @@ defmodule GenMCP.Suite.ToolTest do
 
       # invalid request will not hit the call callback if rejected
 
-      bad_req = %Entities.CallToolRequest{
+      bad_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "some_name",
           arguments: %{"foo" => "not_an_int"}
         }
@@ -435,7 +435,7 @@ defmodule GenMCP.Suite.ToolTest do
       assert %{type: :nothing_related} =
                RawInputSchema.input_schema(nil)
 
-      assert %GenMCP.Entities.Tool{
+      assert %GenMCP.MCP.Tool{
                _meta: nil,
                annotations: nil,
                description: nil,
@@ -467,10 +467,10 @@ defmodule GenMCP.Suite.ToolTest do
 
       # invalid request is allowed by user validator
 
-      bad_req = %Entities.CallToolRequest{
+      bad_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "some_name",
           arguments: %{"foo" => "not_an_int"}
         }
@@ -511,7 +511,7 @@ defmodule GenMCP.Suite.ToolTest do
              } == RawOutputSchema.output_schema(nil)
 
       # Tool.describe should normalize the schema
-      assert %GenMCP.Entities.Tool{
+      assert %GenMCP.MCP.Tool{
                _meta: nil,
                annotations: nil,
                description: nil,

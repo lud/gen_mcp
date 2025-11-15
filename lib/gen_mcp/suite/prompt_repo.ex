@@ -1,5 +1,5 @@
 defmodule GenMCP.Suite.PromptRepo do
-  alias GenMCP.Entities
+  alias GenMCP.MCP
 
   @type prompt_repo :: module | {module, arg} | prompt_repo_descriptor
   @type prompt_repo_descriptor :: %{
@@ -34,7 +34,7 @@ defmodule GenMCP.Suite.PromptRepo do
               GenMCP.Mux.Channel.t(),
               arg
             ) ::
-              {:ok, Entities.GetPromptResult.t()} | {:error, :not_found | String.t()}
+              {:ok, MCP.GetPromptResult.t()} | {:error, :not_found | String.t()}
 
   @spec expand(prompt_repo) :: prompt_repo_descriptor
   def expand(mod) when is_atom(mod) do
@@ -75,7 +75,7 @@ defmodule GenMCP.Suite.PromptRepo do
 
   def get_prompt(repo, name, arguments, channel) do
     case repo.mod.get(name, arguments, channel, repo.arg) do
-      {:ok, %Entities.GetPromptResult{}} = ok -> ok
+      {:ok, %MCP.GetPromptResult{}} = ok -> ok
       {:error, :not_found} -> {:error, {:prompt_not_found, name}}
       {:error, message} when is_binary(message) -> {:error, message}
       other -> exit({:bad_return_value, other})

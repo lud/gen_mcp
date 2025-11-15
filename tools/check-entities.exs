@@ -1,12 +1,12 @@
-root = JSV.build!(GenMCP.Entities.TextContent)
+root = JSV.build!(GenMCP.MCP.TextContent)
 JSV.validate!(%{"text" => "hello", "type" => "text"}, root)
 
-root = JSV.build!(GenMCP.Entities.CreateMessageRequest)
+root = JSV.build!(GenMCP.MCP.ListToolsRequest)
 
 JSV.validate!(
   %{
-    "method" => "sampling/createMessage",
-    "params" => %{"maxTokens" => 123, "messages" => [], "includeContext" => "allServers"}
+    "method" => "tools/list",
+    "params" => %{}
   },
   root
 )

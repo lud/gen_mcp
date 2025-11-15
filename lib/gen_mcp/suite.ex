@@ -1,5 +1,5 @@
 defmodule GenMCP.Suite do
-  alias GenMCP.Entities
+  alias GenMCP.MCP
   alias GenMCP.Mux.Channel
   alias GenMCP.Server
   alias GenMCP.Suite.PromptRepo
@@ -85,13 +85,13 @@ defmodule GenMCP.Suite do
   end
 
   @impl true
-  def handle_request(%Entities.InitializeRequest{} = req, chan_info, %{status: :starting} = state) do
+  def handle_request(%MCP.InitializeRequest{} = req, chan_info, %{status: :starting} = state) do
     case check_protocol_version(req) do
       :ok ->
         init_result =
-          Server.intialize_result(
-            capabilities: Server.capabilities(tools: true, resources: true),
-            server_info: Server.server_info(name: "Mock Server", version: "foo", title: "stuff")
+          MCP.intialize_result(
+            capabilities: MCP.capabilities(tools: true, resources: true),
+            server_info: MCP.server_info(name: "Mock Server", version: "foo", title: "stuff")
           )
 
         state = %{state | status: :server_initialized, init_assigns: elem(chan_info, 3)}
@@ -102,7 +102,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%Entities.InitializeRequest{} = _req, _chan_info, state) do
+  def handle_request(%MCP.InitializeRequest{} = _req, _chan_info, state) do
     reason = :already_initialized
     {:stop, reason, {:error, reason}, state}
   end
@@ -127,7 +127,7 @@ defmodule GenMCP.Suite do
   end
 
   # TODO handle cursor?
-  def handle_request(%Entities.ListToolsRequest{}, _, state) do
+  def handle_request(%MCP.ListToolsRequest{}, _, state) do
     %{tool_names: tool_names, tools_map: tools_map} = state
 
     tools =
@@ -135,10 +135,10 @@ defmodule GenMCP.Suite do
         name -> tools_map |> Map.fetch!(name) |> Tool.describe()
       end)
 
-    {:reply, {:result, Server.list_tools_result(tools)}, state}
+    {:reply, {:result, MCP.list_tools_result(tools)}, state}
   end
 
-  def handle_request(%Entities.CallToolRequest{} = req, chan_info, state) do
+  def handle_request(%MCP.CallToolRequest{} = req, chan_info, state) do
     tool_name = req.params.name
 
     case state.tools_map do
@@ -166,7 +166,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%Entities.ListResourcesRequest{} = req, chan_info, state) do
+  def handle_request(%MCP.ListResourcesRequest{} = req, chan_info, state) do
     cursor =
       case req do
         %{params: %{cursor: global_cursor}} when is_binary(global_cursor) -> global_cursor
@@ -179,7 +179,7 @@ defmodule GenMCP.Suite do
         {resources, next_pagination} = list_resources(pagination, channel, state)
 
         result =
-          Server.list_resources_result(
+          MCP.list_resources_result(
             resources,
             encode_pagination(next_pagination, state)
           )
@@ -191,7 +191,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%Entities.ReadResourceRequest{} = req, chan_info, state) do
+  def handle_request(%MCP.ReadResourceRequest{} = req, chan_info, state) do
     uri = req.params.uri
 
     case find_resource_repo_for_uri(state, uri) do
@@ -208,7 +208,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%Entities.ListResourceTemplatesRequest{}, _chan_info, state) do
+  def handle_request(%MCP.ListResourceTemplatesRequest{}, _chan_info, state) do
     templates =
       Enum.flat_map(state.resource_prefixes, fn prefix ->
         case Map.fetch!(state.resource_repos, prefix).template do
@@ -219,7 +219,7 @@ defmodule GenMCP.Suite do
             # Build the ResourceTemplate struct using the raw template string
             [
               struct!(
-                Entities.ResourceTemplate,
+                MCP.ResourceTemplate,
                 tpl_desc
                 |> Map.put(:uriTemplate, parsed_template.raw)
                 |> Map.drop([:__struct__])
@@ -228,11 +228,11 @@ defmodule GenMCP.Suite do
         end
       end)
 
-    result = Server.list_resource_templates_result(templates)
+    result = MCP.list_resource_templates_result(templates)
     {:reply, {:result, result}, state}
   end
 
-  def handle_request(%Entities.ListPromptsRequest{} = req, chan_info, state) do
+  def handle_request(%MCP.ListPromptsRequest{} = req, chan_info, state) do
     cursor =
       case req do
         %{params: %{cursor: global_cursor}} when is_binary(global_cursor) -> global_cursor
@@ -245,7 +245,7 @@ defmodule GenMCP.Suite do
         {prompts, next_pagination} = list_prompts(pagination, channel, state)
 
         result =
-          Server.list_prompts_result(
+          MCP.list_prompts_result(
             prompts,
             encode_pagination(next_pagination, state)
           )
@@ -257,7 +257,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%Entities.GetPromptRequest{} = req, chan_info, state) do
+  def handle_request(%MCP.GetPromptRequest{} = req, chan_info, state) do
     {name, arguments} =
       case req do
         %{params: %{name: name, arguments: arguments}} when is_map(arguments) -> {name, arguments}
@@ -289,7 +289,7 @@ defmodule GenMCP.Suite do
   end
 
   @impl true
-  def handle_notification(%Entities.InitializedNotification{}, state) do
+  def handle_notification(%MCP.InitializedNotification{}, state) do
     {:noreply, %{state | status: :client_initialized}}
   end
 
@@ -384,10 +384,10 @@ defmodule GenMCP.Suite do
     name = Keyword.fetch!(init_opts, :server_name)
     version = Keyword.fetch!(init_opts, :server_version)
     title = Keyword.get(init_opts, :server_title, nil)
-    Server.server_info(name: name, version: version, title: title)
+    MCP.server_info(name: name, version: version, title: title)
   end
 
-  defp check_protocol_version(%Entities.InitializeRequest{} = req) do
+  defp check_protocol_version(%MCP.InitializeRequest{} = req) do
     case req do
       %{params: %{protocolVersion: version}} when version in @supported_protocol_versions -> :ok
       %{params: %{protocolVersion: version}} -> {:error, {:unsupported_protocol, version}}

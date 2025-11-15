@@ -1,7 +1,7 @@
 # credo:disable-for-this-file Credo.Check.Readability.LargeNumbers
 
 defmodule GenMCP.SuiteTest do
-  alias GenMCP.Entities
+  alias GenMCP.MCP
   alias GenMCP.Server
   alias GenMCP.Suite
   alias GenMCP.Support.PromptRepoMock
@@ -27,10 +27,10 @@ defmodule GenMCP.SuiteTest do
   defp init_session(server_opts \\ [], init_assigns \\ %{}) do
     assert {:ok, state} = Suite.init("some-session-id", Keyword.merge(@server_info, server_opts))
 
-    init_req = %Entities.InitializeRequest{
+    init_req = %MCP.InitializeRequest{
       id: "setup-init-1",
       method: "initialize",
-      params: %Entities.InitializeRequestParams{
+      params: %MCP.InitializeRequestParams{
         capabilities: %{},
         clientInfo: %{name: "test", version: "1.0.0"},
         protocolVersion: "2025-06-18"
@@ -40,7 +40,7 @@ defmodule GenMCP.SuiteTest do
     assert {:reply, {:result, _result}, %{status: :server_initialized} = state} =
              Suite.handle_request(init_req, chan_info(init_assigns), state)
 
-    client_init_notif = %Entities.InitializedNotification{
+    client_init_notif = %MCP.InitializedNotification{
       method: "notifications/initialized",
       params: %{}
     }
@@ -55,10 +55,10 @@ defmodule GenMCP.SuiteTest do
     test "handles InitializeRequest" do
       {:ok, state} = Suite.init("some-session-id", @server_info)
 
-      init_eq = %Entities.InitializeRequest{
+      init_eq = %MCP.InitializeRequest{
         id: 1,
         method: "initialize",
-        params: %Entities.InitializeRequestParams{
+        params: %MCP.InitializeRequestParams{
           capabilities: %{},
           clientInfo: %{name: "test", version: "1.0.0"},
           protocolVersion: "2025-06-18"
@@ -68,8 +68,8 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, result}, %{status: :server_initialized}} =
                Suite.handle_request(init_eq, chan_info(), state)
 
-      assert %Entities.InitializeResult{
-               capabilities: %Entities.ServerCapabilities{},
+      assert %MCP.InitializeResult{
+               capabilities: %MCP.ServerCapabilities{},
                protocolVersion: "2025-06-18"
              } = result
     end
@@ -77,10 +77,10 @@ defmodule GenMCP.SuiteTest do
     test "handles initialize request and reject tool call request without initialization" do
       {:ok, state} = Suite.init("some-session-id", @server_info)
 
-      req = %Entities.CallToolRequest{
+      req = %MCP.CallToolRequest{
         id: 2,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "SomeTool",
           arguments: %{}
         }
@@ -99,10 +99,10 @@ defmodule GenMCP.SuiteTest do
 
       {:ok, state} = Suite.init("some-session-id", @server_info)
 
-      init_req = %Entities.InitializeRequest{
+      init_req = %MCP.InitializeRequest{
         id: 1,
         method: "initialize",
-        params: %Entities.InitializeRequestParams{
+        params: %MCP.InitializeRequestParams{
           capabilities: %{},
           clientInfo: %{name: "test", version: "1.0.0"},
           protocolVersion: "2025-06-18"
@@ -112,10 +112,10 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, _result}, %{status: :server_initialized} = state} =
                Suite.handle_request(init_req, chan_info(), state)
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 2,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "SomeTool",
           arguments: %{}
         }
@@ -129,10 +129,10 @@ defmodule GenMCP.SuiteTest do
       state = init_session()
 
       # Attempt to initialize again while already initialized
-      init_req = %Entities.InitializeRequest{
+      init_req = %MCP.InitializeRequest{
         id: "setup-init-2",
         method: "initialize",
-        params: %Entities.InitializeRequestParams{
+        params: %MCP.InitializeRequestParams{
           capabilities: %{},
           clientInfo: %{name: "test", version: "1.0.0"},
           protocolVersion: "2025-06-18"
@@ -149,10 +149,10 @@ defmodule GenMCP.SuiteTest do
     test "rejects initialization with invalid protocol version" do
       {:ok, state} = Suite.init("some-session-id", @server_info)
 
-      init_req = %Entities.InitializeRequest{
+      init_req = %MCP.InitializeRequest{
         id: 1,
         method: "initialize",
-        params: %Entities.InitializeRequestParams{
+        params: %MCP.InitializeRequestParams{
           capabilities: %{},
           clientInfo: %{name: "test", version: "1.0.0"},
           protocolVersion: "2024-01-01"
@@ -194,12 +194,12 @@ defmodule GenMCP.SuiteTest do
       state = init_session(tools: [{ToolMock, :tool1}, {ToolMock, :tool2}])
 
       assert {:reply,
-              {:result,
-               %GenMCP.Entities.ListToolsResult{_meta: nil, nextCursor: nil, tools: tools}}, _} =
-               Suite.handle_request(%Entities.ListToolsRequest{}, chan_info(), state)
+              {:result, %GenMCP.MCP.ListToolsResult{_meta: nil, nextCursor: nil, tools: tools}},
+              _} =
+               Suite.handle_request(%MCP.ListToolsRequest{}, chan_info(), state)
 
       assert [
-               %GenMCP.Entities.Tool{
+               %GenMCP.MCP.Tool{
                  name: "Tool1",
                  title: "Tool 1 title",
                  description: "Tool 1 descr",
@@ -207,7 +207,7 @@ defmodule GenMCP.SuiteTest do
                  inputSchema: %{"type" => "object"},
                  outputSchema: %{"type" => "object"}
                },
-               %GenMCP.Entities.Tool{
+               %GenMCP.MCP.Tool{
                  inputSchema: %{"type" => "object"},
                  name: "Tool2"
                }
@@ -219,10 +219,10 @@ defmodule GenMCP.SuiteTest do
     test "unknown tool" do
       state = init_session()
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 2,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "SomeTool",
           arguments: %{}
         }
@@ -241,10 +241,10 @@ defmodule GenMCP.SuiteTest do
       |> expect(:call, fn req, chan, arg ->
         # The whole request is given
 
-        assert %GenMCP.Entities.CallToolRequest{
+        assert %GenMCP.MCP.CallToolRequest{
                  id: 2,
                  method: "tools/call",
-                 params: %GenMCP.Entities.CallToolRequestParams{
+                 params: %GenMCP.MCP.CallToolRequestParams{
                    _meta: nil,
                    arguments: %{"some" => "arg"},
                    name: "ExistingTool"
@@ -255,15 +255,15 @@ defmodule GenMCP.SuiteTest do
         assert %GenMCP.Mux.Channel{} = chan
         assert :some_tool_arg = arg
         # we can return a cast value
-        {:result, Server.call_tool_result(text: "hello"), chan}
+        {:result, MCP.call_tool_result(text: "hello"), chan}
       end)
 
       state = init_session(tools: [{ToolMock, :some_tool_arg}])
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 2,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "ExistingTool",
           arguments: %{"some" => "arg"}
         }
@@ -272,7 +272,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(tool_call_req, chan_info(), state)
 
-      assert %GenMCP.Entities.CallToolResult{
+      assert %GenMCP.MCP.CallToolResult{
                _meta: nil,
                content: [%{type: :text, text: "hello"}],
                isError: nil,
@@ -289,10 +289,10 @@ defmodule GenMCP.SuiteTest do
 
       state = init_session(tools: [{ToolMock, :validated_tool}])
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 4,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "ValidatedTool",
           arguments: %{"invalid" => "args"}
         }
@@ -315,10 +315,10 @@ defmodule GenMCP.SuiteTest do
 
       state = init_session(tools: [{ToolMock, :error_tool}])
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 5,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "ErrorTool",
           arguments: %{}
         }
@@ -350,9 +350,9 @@ defmodule GenMCP.SuiteTest do
       state = init_session([resources: [{ResourceRepoMock, :repo1}]], init_assigns)
 
       assert {:reply, {:result, result}, _} =
-               Suite.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%MCP.ListResourcesRequest{}, chan_info(), state)
 
-      assert %Entities.ListResourcesResult{resources: resources, nextCursor: _} = result
+      assert %MCP.ListResourcesResult{resources: resources, nextCursor: _} = result
       assert length(resources) == 2
 
       assert [
@@ -387,9 +387,9 @@ defmodule GenMCP.SuiteTest do
 
       # First page
       assert {:reply, {:result, result1}, _} =
-               Suite.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%MCP.ListResourcesRequest{}, chan_info(), state)
 
-      assert %Entities.ListResourcesResult{
+      assert %MCP.ListResourcesResult{
                resources: [%{name: "Page 1"}],
                nextCursor: pagination
              } = result1
@@ -397,14 +397,14 @@ defmodule GenMCP.SuiteTest do
       # Second page
       assert {:reply, {:result, result2}, _} =
                Suite.handle_request(
-                 %Entities.ListResourcesRequest{
-                   params: %Entities.ListResourcesRequestParams{cursor: pagination}
+                 %MCP.ListResourcesRequest{
+                   params: %MCP.ListResourcesRequestParams{cursor: pagination}
                  },
                  chan_info(),
                  state
                )
 
-      assert %Entities.ListResourcesResult{
+      assert %MCP.ListResourcesResult{
                resources: [%{name: "Page 2"}],
                nextCursor: nil
              } = result2
@@ -425,9 +425,9 @@ defmodule GenMCP.SuiteTest do
         )
 
       assert {:reply, {:result, result}, _} =
-               Suite.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%MCP.ListResourcesRequest{}, chan_info(), state)
 
-      assert %Entities.ListResourcesResult{resources: [], nextCursor: nil} = result
+      assert %MCP.ListResourcesResult{resources: [], nextCursor: nil} = result
     end
 
     test "lists resources from multiple repositories" do
@@ -454,9 +454,9 @@ defmodule GenMCP.SuiteTest do
 
       # First request returns repo1's resources with a cursor to continue to repo2
       assert {:reply, {:result, result1}, _} =
-               Suite.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%MCP.ListResourcesRequest{}, chan_info(), state)
 
-      assert %Entities.ListResourcesResult{resources: resources1, nextCursor: cursor} = result1
+      assert %MCP.ListResourcesResult{resources: resources1, nextCursor: cursor} = result1
       assert length(resources1) == 2
       assert Enum.any?(resources1, &(&1.name == "Local README"))
       assert Enum.any?(resources1, &(&1.name == "Local license"))
@@ -465,14 +465,14 @@ defmodule GenMCP.SuiteTest do
       # Second request with cursor returns repo2's resources
       assert {:reply, {:result, result2}, _} =
                Suite.handle_request(
-                 %Entities.ListResourcesRequest{
-                   params: %Entities.ListResourcesRequestParams{cursor: cursor}
+                 %MCP.ListResourcesRequest{
+                   params: %MCP.ListResourcesRequestParams{cursor: cursor}
                  },
                  chan_info(),
                  state
                )
 
-      assert %Entities.ListResourcesResult{resources: resources2, nextCursor: nil} = result2
+      assert %MCP.ListResourcesResult{resources: resources2, nextCursor: nil} = result2
       assert length(resources2) == 1
       assert Enum.any?(resources2, &(&1.name == "API"))
     end
@@ -504,9 +504,9 @@ defmodule GenMCP.SuiteTest do
 
       # First call should skip the empty repos and return resources from repo3
       assert {:reply, {:result, result}, _} =
-               Suite.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%MCP.ListResourcesRequest{}, chan_info(), state)
 
-      assert %Entities.ListResourcesResult{resources: resources, nextCursor: nil} = result
+      assert %MCP.ListResourcesResult{resources: resources, nextCursor: nil} = result
       assert length(resources) == 2
       assert Enum.any?(resources, &(&1.name == "File 1"))
       assert Enum.any?(resources, &(&1.name == "File 2"))
@@ -543,9 +543,9 @@ defmodule GenMCP.SuiteTest do
 
       # First call should skip repo1 and return repo2's resource with cursor
       assert {:reply, {:result, result1}, _} =
-               Suite.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%MCP.ListResourcesRequest{}, chan_info(), state)
 
-      assert %Entities.ListResourcesResult{
+      assert %MCP.ListResourcesResult{
                resources: [%{name: "API"}],
                nextCursor: cursor
              } = result1
@@ -555,14 +555,14 @@ defmodule GenMCP.SuiteTest do
       # Second call should use repo2's cursor, get empty result, skip to repo3
       assert {:reply, {:result, result2}, _} =
                Suite.handle_request(
-                 %Entities.ListResourcesRequest{
-                   params: %Entities.ListResourcesRequestParams{cursor: cursor}
+                 %MCP.ListResourcesRequest{
+                   params: %MCP.ListResourcesRequestParams{cursor: cursor}
                  },
                  chan_info(),
                  state
                )
 
-      assert %Entities.ListResourcesResult{
+      assert %MCP.ListResourcesResult{
                resources: [%{name: "Data"}],
                nextCursor: nil
              } = result2
@@ -579,9 +579,9 @@ defmodule GenMCP.SuiteTest do
 
       # First request succeeds and returns a valid cursor
       assert {:reply, {:result, result1}, _} =
-               Suite.handle_request(%Entities.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%MCP.ListResourcesRequest{}, chan_info(), state)
 
-      assert %Entities.ListResourcesResult{
+      assert %MCP.ListResourcesResult{
                resources: [%{name: "Page 1"}],
                nextCursor: cursor
              } = result1
@@ -589,8 +589,8 @@ defmodule GenMCP.SuiteTest do
       assert cursor != nil
 
       # Client sends an invalid/tampered pagination token
-      invalid_request = %Entities.ListResourcesRequest{
-        params: %Entities.ListResourcesRequestParams{cursor: "invalid-token-from-client"}
+      invalid_request = %MCP.ListResourcesRequest{
+        params: %MCP.ListResourcesRequestParams{cursor: "invalid-token-from-client"}
       }
 
       assert {:reply, {:error, error}, _} =
@@ -607,7 +607,7 @@ defmodule GenMCP.SuiteTest do
       |> stub(:prefix, fn :repo1 -> "file:///" end)
       |> expect(:read, fn "file:///readme.txt", _channel, :repo1 ->
         {:ok,
-         Server.read_resource_result(
+         MCP.read_resource_result(
            uri: "file:///readme.txt",
            text: "# Welcome\n\nThis is the readme."
          )}
@@ -615,8 +615,8 @@ defmodule GenMCP.SuiteTest do
 
       state = init_session(resources: [{ResourceRepoMock, :repo1}])
 
-      request = %Entities.ReadResourceRequest{
-        params: %Entities.ReadResourceRequestParams{
+      request = %MCP.ReadResourceRequest{
+        params: %MCP.ReadResourceRequestParams{
           uri: "file:///readme.txt"
         }
       }
@@ -624,8 +624,8 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(request, chan_info(), state)
 
-      assert %Entities.ReadResourceResult{contents: contents} = result
-      assert [%Entities.TextResourceContents{uri: "file:///readme.txt", text: text}] = contents
+      assert %MCP.ReadResourceResult{contents: contents} = result
+      assert [%MCP.TextResourceContents{uri: "file:///readme.txt", text: text}] = contents
       assert text == "# Welcome\n\nThis is the readme."
     end
 
@@ -634,7 +634,7 @@ defmodule GenMCP.SuiteTest do
       |> stub(:prefix, fn :repo1 -> "file:///" end)
       |> expect(:read, fn "file:///index.html", _channel, :repo1 ->
         {:ok,
-         Server.read_resource_result(
+         MCP.read_resource_result(
            uri: "file:///index.html",
            text: "<p>Hello</p>",
            mime_type: "text/html"
@@ -643,15 +643,15 @@ defmodule GenMCP.SuiteTest do
 
       state = init_session(resources: [{ResourceRepoMock, :repo1}])
 
-      request = %Entities.ReadResourceRequest{
-        params: %Entities.ReadResourceRequestParams{uri: "file:///index.html"}
+      request = %MCP.ReadResourceRequest{
+        params: %MCP.ReadResourceRequestParams{uri: "file:///index.html"}
       }
 
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(request, chan_info(), state)
 
-      assert %Entities.ReadResourceResult{contents: [content]} = result
-      assert %Entities.TextResourceContents{mimeType: "text/html", text: "<p>Hello</p>"} = content
+      assert %MCP.ReadResourceResult{contents: [content]} = result
+      assert %MCP.TextResourceContents{mimeType: "text/html", text: "<p>Hello</p>"} = content
     end
 
     test "reads a blob resource" do
@@ -661,7 +661,7 @@ defmodule GenMCP.SuiteTest do
       |> stub(:prefix, fn :repo1 -> "file:///" end)
       |> expect(:read, fn "file:///data.bin", _channel, :repo1 ->
         {:ok,
-         Server.read_resource_result(
+         MCP.read_resource_result(
            uri: "file:///data.bin",
            blob: blob_data,
            mime_type: "application/octet-stream"
@@ -670,16 +670,16 @@ defmodule GenMCP.SuiteTest do
 
       state = init_session(resources: [{ResourceRepoMock, :repo1}])
 
-      request = %Entities.ReadResourceRequest{
-        params: %Entities.ReadResourceRequestParams{uri: "file:///data.bin"}
+      request = %MCP.ReadResourceRequest{
+        params: %MCP.ReadResourceRequestParams{uri: "file:///data.bin"}
       }
 
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(request, chan_info(), state)
 
-      assert %Entities.ReadResourceResult{contents: [content]} = result
+      assert %MCP.ReadResourceResult{contents: [content]} = result
 
-      assert %Entities.BlobResourceContents{
+      assert %MCP.BlobResourceContents{
                blob: ^blob_data,
                mimeType: "application/octet-stream"
              } = content
@@ -694,8 +694,8 @@ defmodule GenMCP.SuiteTest do
 
       state = init_session(resources: [{ResourceRepoMock, :repo1}])
 
-      request = %Entities.ReadResourceRequest{
-        params: %Entities.ReadResourceRequestParams{uri: "file:///missing.txt"}
+      request = %MCP.ReadResourceRequest{
+        params: %MCP.ReadResourceRequestParams{uri: "file:///missing.txt"}
       }
 
       assert {:reply, {:error, {:resource_not_found, "file:///missing.txt"}} = err, _} =
@@ -714,8 +714,8 @@ defmodule GenMCP.SuiteTest do
 
       state = init_session(resources: [{ResourceRepoMock, :repo1}])
 
-      request = %Entities.ReadResourceRequest{
-        params: %Entities.ReadResourceRequestParams{uri: "file:///invalid.txt"}
+      request = %MCP.ReadResourceRequest{
+        params: %MCP.ReadResourceRequestParams{uri: "file:///invalid.txt"}
       }
 
       assert {:reply, {:error, "Invalid file format"} = err, _} =
@@ -732,7 +732,7 @@ defmodule GenMCP.SuiteTest do
       end)
       |> expect(:read, fn "http://example.com/resource", _channel, :repo2 ->
         {:ok,
-         Server.read_resource_result(
+         MCP.read_resource_result(
            uri: "http://example.com/resource",
            text: "Remote resource"
          )}
@@ -741,15 +741,15 @@ defmodule GenMCP.SuiteTest do
       state =
         init_session(resources: [{ResourceRepoMock, :repo1}, {ResourceRepoMock, :repo2}])
 
-      request = %Entities.ReadResourceRequest{
-        params: %Entities.ReadResourceRequestParams{uri: "http://example.com/resource"}
+      request = %MCP.ReadResourceRequest{
+        params: %MCP.ReadResourceRequestParams{uri: "http://example.com/resource"}
       }
 
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(request, chan_info(), state)
 
-      assert %Entities.ReadResourceResult{contents: [content]} = result
-      assert %Entities.TextResourceContents{text: "Remote resource"} = content
+      assert %MCP.ReadResourceResult{contents: [content]} = result
+      assert %MCP.TextResourceContents{text: "Remote resource"} = content
     end
 
     test "returns error when no repository matches URI prefix" do
@@ -757,8 +757,8 @@ defmodule GenMCP.SuiteTest do
 
       state = init_session(resources: [{ResourceRepoMock, :repo1}])
 
-      request = %Entities.ReadResourceRequest{
-        params: %Entities.ReadResourceRequestParams{uri: "ftp://example.com/file"}
+      request = %MCP.ReadResourceRequest{
+        params: %MCP.ReadResourceRequestParams{uri: "ftp://example.com/file"}
       }
 
       assert {:reply, {:error, {:resource_not_found, "ftp://example.com/file"}} = err, _} =
@@ -772,21 +772,21 @@ defmodule GenMCP.SuiteTest do
       ResourceRepoMock
       |> stub(:prefix, fn [] -> "file:///" end)
       |> expect(:read, fn "file:///readme.txt", _channel, [] ->
-        {:ok, Server.read_resource_result(uri: "file:///readme.txt", text: "Hello")}
+        {:ok, MCP.read_resource_result(uri: "file:///readme.txt", text: "Hello")}
       end)
 
       # Pass module directly (will be expanded to {Module, []})
       state = init_session(resources: [ResourceRepoMock])
 
-      request = %Entities.ReadResourceRequest{
-        params: %Entities.ReadResourceRequestParams{uri: "file:///readme.txt"}
+      request = %MCP.ReadResourceRequest{
+        params: %MCP.ReadResourceRequestParams{uri: "file:///readme.txt"}
       }
 
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(request, chan_info(), state)
 
-      assert %Entities.ReadResourceResult{
-               contents: [%Entities.TextResourceContents{text: "Hello"}]
+      assert %MCP.ReadResourceResult{
+               contents: [%MCP.TextResourceContents{text: "Hello"}]
              } =
                result
     end
@@ -808,15 +808,15 @@ defmodule GenMCP.SuiteTest do
       end)
       # Private path should route to first repo
       |> expect(:read, fn "file:///private/secret.txt", _channel, :private_repo ->
-        {:ok, Server.read_resource_result(uri: "file:///private/secret.txt", text: "Secret")}
+        {:ok, MCP.read_resource_result(uri: "file:///private/secret.txt", text: "Secret")}
       end)
       # General path (without private) should route to second repo
       |> expect(:read, fn "file:///readme.txt", _channel, :general_repo ->
-        {:ok, Server.read_resource_result(uri: "file:///readme.txt", text: "General")}
+        {:ok, MCP.read_resource_result(uri: "file:///readme.txt", text: "General")}
       end)
       # Trash path should ALSO route to second repo (not third) because it matches first
       |> expect(:read, fn "file:///trash/deleted.txt", _channel, :general_repo ->
-        {:ok, Server.read_resource_result(uri: "file:///trash/deleted.txt", text: "Deleted")}
+        {:ok, MCP.read_resource_result(uri: "file:///trash/deleted.txt", text: "Deleted")}
       end)
 
       state =
@@ -829,39 +829,39 @@ defmodule GenMCP.SuiteTest do
         )
 
       # Request 1: Private path routes to private repo
-      request1 = %Entities.ReadResourceRequest{
-        params: %Entities.ReadResourceRequestParams{uri: "file:///private/secret.txt"}
+      request1 = %MCP.ReadResourceRequest{
+        params: %MCP.ReadResourceRequestParams{uri: "file:///private/secret.txt"}
       }
 
       assert {:reply, {:result, result1}, _} =
                Suite.handle_request(request1, chan_info(), state)
 
-      assert %Entities.ReadResourceResult{
-               contents: [%Entities.TextResourceContents{text: "Secret"}]
+      assert %MCP.ReadResourceResult{
+               contents: [%MCP.TextResourceContents{text: "Secret"}]
              } = result1
 
       # Request 2: General path routes to general repo
-      request2 = %Entities.ReadResourceRequest{
-        params: %Entities.ReadResourceRequestParams{uri: "file:///readme.txt"}
+      request2 = %MCP.ReadResourceRequest{
+        params: %MCP.ReadResourceRequestParams{uri: "file:///readme.txt"}
       }
 
       assert {:reply, {:result, result2}, _} =
                Suite.handle_request(request2, chan_info(), state)
 
-      assert %Entities.ReadResourceResult{
-               contents: [%Entities.TextResourceContents{text: "General"}]
+      assert %MCP.ReadResourceResult{
+               contents: [%MCP.TextResourceContents{text: "General"}]
              } = result2
 
       # Request 3: Trash path ALSO routes to general repo (first match wins)
-      request3 = %Entities.ReadResourceRequest{
-        params: %Entities.ReadResourceRequestParams{uri: "file:///trash/deleted.txt"}
+      request3 = %MCP.ReadResourceRequest{
+        params: %MCP.ReadResourceRequestParams{uri: "file:///trash/deleted.txt"}
       }
 
       assert {:reply, {:result, result3}, _} =
                Suite.handle_request(request3, chan_info(), state)
 
-      assert %Entities.ReadResourceResult{
-               contents: [%Entities.TextResourceContents{text: "Deleted"}]
+      assert %MCP.ReadResourceResult{
+               contents: [%MCP.TextResourceContents{text: "Deleted"}]
              } = result3
     end
   end
@@ -879,7 +879,7 @@ defmodule GenMCP.SuiteTest do
       end)
       |> expect(:read, fn %{"path" => ["config", "app.json"]}, _channel, :repo1 ->
         {:ok,
-         Server.read_resource_result(
+         MCP.read_resource_result(
            uri: "file:///config/app.json",
            text: ~s({"port": 3000}),
            mime_type: "application/json"
@@ -888,16 +888,16 @@ defmodule GenMCP.SuiteTest do
 
       state = init_session(resources: [{ResourceRepoMockTpl, :repo1}])
 
-      request = %Entities.ReadResourceRequest{
-        params: %Entities.ReadResourceRequestParams{uri: "file:///config/app.json"}
+      request = %MCP.ReadResourceRequest{
+        params: %MCP.ReadResourceRequestParams{uri: "file:///config/app.json"}
       }
 
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(request, chan_info(), state)
 
-      assert %Entities.ReadResourceResult{contents: [content]} = result
+      assert %MCP.ReadResourceResult{contents: [content]} = result
 
-      assert %Entities.TextResourceContents{
+      assert %MCP.TextResourceContents{
                text: ~s({"port": 3000}),
                mimeType: "application/json"
              } = content
@@ -917,8 +917,8 @@ defmodule GenMCP.SuiteTest do
 
       state = init_session(resources: [{ResourceRepoMockTpl, :repo1}])
 
-      request = %Entities.ReadResourceRequest{
-        params: %Entities.ReadResourceRequestParams{uri: "file:///otherprefix"}
+      request = %MCP.ReadResourceRequest{
+        params: %MCP.ReadResourceRequestParams{uri: "file:///otherprefix"}
       }
 
       assert {:reply, {:error, "expected uri matching" <> _} = err, _} =
@@ -957,21 +957,21 @@ defmodule GenMCP.SuiteTest do
 
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(
-                 %Entities.ListResourceTemplatesRequest{},
+                 %MCP.ListResourceTemplatesRequest{},
                  chan_info(),
                  state
                )
 
-      assert %Entities.ListResourceTemplatesResult{resourceTemplates: templates} = result
+      assert %MCP.ListResourceTemplatesResult{resourceTemplates: templates} = result
 
       assert [
-               %Entities.ResourceTemplate{
+               %MCP.ResourceTemplate{
                  uriTemplate: "file:///{path}",
                  name: "FileTemplate",
                  description: "A file resource",
                  mimeType: "text/plain"
                },
-               %Entities.ResourceTemplate{
+               %MCP.ResourceTemplate{
                  uriTemplate: "http://localhost/api/{endpoint}",
                  name: "APITemplate",
                  title: "API Endpoint"
@@ -1002,15 +1002,15 @@ defmodule GenMCP.SuiteTest do
 
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(
-                 %Entities.ListResourceTemplatesRequest{},
+                 %MCP.ListResourceTemplatesRequest{},
                  chan_info(),
                  state
                )
 
-      assert %Entities.ListResourceTemplatesResult{resourceTemplates: templates} = result
+      assert %MCP.ListResourceTemplatesResult{resourceTemplates: templates} = result
 
       assert [
-               %Entities.ResourceTemplate{
+               %MCP.ResourceTemplate{
                  uriTemplate: "http://localhost/{path}",
                  name: "HTTPTemplate"
                }
@@ -1030,12 +1030,12 @@ defmodule GenMCP.SuiteTest do
 
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(
-                 %Entities.ListResourceTemplatesRequest{},
+                 %MCP.ListResourceTemplatesRequest{},
                  chan_info(),
                  state
                )
 
-      assert %Entities.ListResourceTemplatesResult{resourceTemplates: []} = result
+      assert %MCP.ListResourceTemplatesResult{resourceTemplates: []} = result
     end
   end
 
@@ -1065,12 +1065,12 @@ defmodule GenMCP.SuiteTest do
 
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(
-                 %Entities.ListPromptsRequest{},
+                 %MCP.ListPromptsRequest{},
                  chan_info(),
                  state
                )
 
-      assert %Entities.ListPromptsResult{
+      assert %MCP.ListPromptsResult{
                prompts: ^prompts,
                nextCursor: nil
              } = result
@@ -1099,12 +1099,12 @@ defmodule GenMCP.SuiteTest do
       # First page
       assert {:reply, {:result, result1}, _} =
                Suite.handle_request(
-                 %Entities.ListPromptsRequest{},
+                 %MCP.ListPromptsRequest{},
                  chan_info(),
                  state
                )
 
-      assert %Entities.ListPromptsResult{
+      assert %MCP.ListPromptsResult{
                prompts: ^page1,
                nextCursor: cursor1
              } = result1
@@ -1114,12 +1114,12 @@ defmodule GenMCP.SuiteTest do
       # Second page
       assert {:reply, {:result, result2}, _} =
                Suite.handle_request(
-                 %Entities.ListPromptsRequest{params: %{cursor: cursor1}},
+                 %MCP.ListPromptsRequest{params: %{cursor: cursor1}},
                  chan_info(),
                  state
                )
 
-      assert %Entities.ListPromptsResult{
+      assert %MCP.ListPromptsResult{
                prompts: ^page2,
                nextCursor: nil
              } = result2
@@ -1148,12 +1148,12 @@ defmodule GenMCP.SuiteTest do
       # First request
       assert {:reply, {:result, result1}, _} =
                Suite.handle_request(
-                 %Entities.ListPromptsRequest{},
+                 %MCP.ListPromptsRequest{},
                  chan_info(),
                  state
                )
 
-      assert %Entities.ListPromptsResult{
+      assert %MCP.ListPromptsResult{
                prompts: [%{name: "prompt1"}],
                nextCursor: cursor1
              } = result1
@@ -1161,12 +1161,12 @@ defmodule GenMCP.SuiteTest do
       # Second request
       assert {:reply, {:result, result2}, _} =
                Suite.handle_request(
-                 %Entities.ListPromptsRequest{params: %{cursor: cursor1}},
+                 %MCP.ListPromptsRequest{params: %{cursor: cursor1}},
                  chan_info(),
                  state
                )
 
-      assert %Entities.ListPromptsResult{
+      assert %MCP.ListPromptsResult{
                prompts: [%{name: "prompt2"}],
                nextCursor: cursor2
              } = result2
@@ -1174,12 +1174,12 @@ defmodule GenMCP.SuiteTest do
       # Third request
       assert {:reply, {:result, result3}, _} =
                Suite.handle_request(
-                 %Entities.ListPromptsRequest{params: %{cursor: cursor2}},
+                 %MCP.ListPromptsRequest{params: %{cursor: cursor2}},
                  chan_info(),
                  state
                )
 
-      assert %Entities.ListPromptsResult{
+      assert %MCP.ListPromptsResult{
                prompts: [%{name: "prompt3"}],
                nextCursor: nil
              } = result3
@@ -1192,7 +1192,7 @@ defmodule GenMCP.SuiteTest do
 
       assert {:reply, {:error, :invalid_cursor}, _} =
                Suite.handle_request(
-                 %Entities.ListPromptsRequest{params: %{cursor: "invalid_token"}},
+                 %MCP.ListPromptsRequest{params: %{cursor: "invalid_token"}},
                  chan_info(),
                  state
                )
@@ -1206,12 +1206,12 @@ defmodule GenMCP.SuiteTest do
 
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(
-                 %Entities.ListPromptsRequest{},
+                 %MCP.ListPromptsRequest{},
                  chan_info(),
                  state
                )
 
-      assert %Entities.ListPromptsResult{
+      assert %MCP.ListPromptsResult{
                prompts: [],
                nextCursor: nil
              } = result
@@ -1220,12 +1220,12 @@ defmodule GenMCP.SuiteTest do
 
   describe "getting prompts" do
     test "gets prompt without arguments" do
-      result = %Entities.GetPromptResult{
+      result = %MCP.GetPromptResult{
         description: "A greeting",
         messages: [
-          %Entities.PromptMessage{
+          %MCP.PromptMessage{
             role: :user,
-            content: %Entities.TextContent{type: :text, text: "Hello!"}
+            content: %MCP.TextContent{type: :text, text: "Hello!"}
           }
         ]
       }
@@ -1241,7 +1241,7 @@ defmodule GenMCP.SuiteTest do
 
       assert {:reply, {:result, ^result}, _} =
                Suite.handle_request(
-                 %Entities.GetPromptRequest{
+                 %MCP.GetPromptRequest{
                    params: %{name: "greeting"}
                  },
                  chan_info(),
@@ -1250,11 +1250,11 @@ defmodule GenMCP.SuiteTest do
     end
 
     test "gets prompt with valid arguments" do
-      result = %Entities.GetPromptResult{
+      result = %MCP.GetPromptResult{
         messages: [
-          %Entities.PromptMessage{
+          %MCP.PromptMessage{
             role: :user,
-            content: %Entities.TextContent{type: :text, text: "Analyze: test.csv"}
+            content: %MCP.TextContent{type: :text, text: "Analyze: test.csv"}
           }
         ]
       }
@@ -1270,7 +1270,7 @@ defmodule GenMCP.SuiteTest do
 
       assert {:reply, {:result, ^result}, _} =
                Suite.handle_request(
-                 %Entities.GetPromptRequest{
+                 %MCP.GetPromptRequest{
                    params: %{
                      name: "analysis",
                      arguments: %{"dataset" => "test.csv"}
@@ -1290,7 +1290,7 @@ defmodule GenMCP.SuiteTest do
 
       assert {:reply, {:error, {:prompt_not_found, "unknown"}}, _} =
                Suite.handle_request(
-                 %Entities.GetPromptRequest{
+                 %MCP.GetPromptRequest{
                    params: %{name: "unknown"}
                  },
                  chan_info(),
@@ -1319,7 +1319,7 @@ defmodule GenMCP.SuiteTest do
 
       assert {:reply, {:error, "Missing required argument: dataset"}, _} =
                Suite.handle_request(
-                 %Entities.GetPromptRequest{
+                 %MCP.GetPromptRequest{
                    params: %{name: "analysis"}
                  },
                  chan_info(),
@@ -1330,7 +1330,7 @@ defmodule GenMCP.SuiteTest do
     end
 
     test "searches across multiple repos" do
-      result = %Entities.GetPromptResult{
+      result = %MCP.GetPromptResult{
         messages: []
       }
 
@@ -1351,7 +1351,7 @@ defmodule GenMCP.SuiteTest do
 
       assert {:reply, {:result, ^result}, _} =
                Suite.handle_request(
-                 %Entities.GetPromptRequest{
+                 %MCP.GetPromptRequest{
                    params: %{name: "prompt2"}
                  },
                  chan_info(),

@@ -1,7 +1,7 @@
 # credo:disable-for-this-file Credo.Check.Readability.LargeNumbers
 
 defmodule GenMCP.SuiteAsyncTest do
-  alias GenMCP.Entities
+  alias GenMCP.MCP
   alias GenMCP.Mux.Channel
   alias GenMCP.Server
   alias GenMCP.Suite
@@ -26,10 +26,10 @@ defmodule GenMCP.SuiteAsyncTest do
   defp init_session(server_opts, init_assigns \\ %{}) do
     assert {:ok, state} = Suite.init("some-session-id", Keyword.merge(@server_info, server_opts))
 
-    init_req = %Entities.InitializeRequest{
+    init_req = %MCP.InitializeRequest{
       id: "setup-init-1",
       method: "initialize",
-      params: %Entities.InitializeRequestParams{
+      params: %MCP.InitializeRequestParams{
         capabilities: %{},
         clientInfo: %{name: "test", version: "1.0.0"},
         protocolVersion: "2025-06-18"
@@ -39,7 +39,7 @@ defmodule GenMCP.SuiteAsyncTest do
     assert {:reply, {:result, _result}, %{status: :server_initialized} = state} =
              Suite.handle_request(init_req, chan_info(init_assigns), state)
 
-    client_init_notif = %Entities.InitializedNotification{
+    client_init_notif = %MCP.InitializedNotification{
       method: "notifications/initialized",
       params: %{}
     }
@@ -64,15 +64,15 @@ defmodule GenMCP.SuiteAsyncTest do
         {:async, {:my_tag, ref}, chan}
       end)
       |> expect(:continue, fn {:my_tag, {:ok, {:success, 42}}}, chan, _arg ->
-        {:result, Server.call_tool_result(text: "Result: 42"), chan}
+        {:result, MCP.call_tool_result(text: "Result: 42"), chan}
       end)
 
       state = init_session(tools: [{ToolMock, :async_tool}])
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "AsyncTool",
           arguments: %{}
         }
@@ -89,7 +89,7 @@ defmodule GenMCP.SuiteAsyncTest do
       # and the result should be delivered to the client process
       assert_receive {:"$gen_mcp", :result, result}
 
-      assert %Entities.CallToolResult{content: [%{type: :text, text: "Result: 42"}]} = result
+      assert %MCP.CallToolResult{content: [%{type: :text, text: "Result: 42"}]} = result
     end
 
     test "tool returns async with Task struct instead of ref" do
@@ -110,15 +110,15 @@ defmodule GenMCP.SuiteAsyncTest do
         {:async, {:calculation_tag, task}, chan}
       end)
       |> expect(:continue, fn {:calculation_tag, {:ok, {:computed, 100}}}, chan, _arg ->
-        {:result, Server.call_tool_result(text: "Computed: 100"), chan}
+        {:result, MCP.call_tool_result(text: "Computed: 100"), chan}
       end)
 
       state = init_session(tools: [{ToolMock, :async_task_tool}])
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "AsyncTaskTool",
           arguments: %{}
         }
@@ -141,7 +141,7 @@ defmodule GenMCP.SuiteAsyncTest do
       # The server demonitored the task
       assert false == Process.demonitor(ref, [:info])
 
-      assert %Entities.CallToolResult{content: [%Entities.TextContent{text: "Computed: 100"}]} =
+      assert %MCP.CallToolResult{content: [%MCP.TextContent{text: "Computed: 100"}]} =
                result
     end
   end
@@ -167,15 +167,15 @@ defmodule GenMCP.SuiteAsyncTest do
         {:async, {:supervised_tag, task}, chan}
       end)
       |> expect(:continue, fn {:supervised_tag, {:ok, {:supervised_result, 200}}}, chan, _arg ->
-        {:result, Server.call_tool_result(text: "Supervised: 200"), chan}
+        {:result, MCP.call_tool_result(text: "Supervised: 200"), chan}
       end)
 
       state = init_session(tools: [{ToolMock, :supervised_tool}])
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "SupervisedTool",
           arguments: %{}
         }
@@ -192,8 +192,8 @@ defmodule GenMCP.SuiteAsyncTest do
       # Assert result is delivered to client
       assert_receive {:"$gen_mcp", :result, result}
 
-      assert %Entities.CallToolResult{
-               content: [%Entities.TextContent{text: "Supervised: 200"}]
+      assert %MCP.CallToolResult{
+               content: [%MCP.TextContent{text: "Supervised: 200"}]
              } = result
     end
 
@@ -216,15 +216,15 @@ defmodule GenMCP.SuiteAsyncTest do
         {:async, {:down_tag, task}, chan}
       end)
       |> expect(:continue, fn {:down_tag, {:ok, :completed}}, chan, _arg ->
-        {:result, Server.call_tool_result(text: "Completed"), chan}
+        {:result, MCP.call_tool_result(text: "Completed"), chan}
       end)
 
       state = init_session(tools: [{ToolMock, :down_test_tool}])
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "DownTestTool",
           arguments: %{}
         }
@@ -250,7 +250,7 @@ defmodule GenMCP.SuiteAsyncTest do
       # Assert result is delivered to client
       assert_receive {:"$gen_mcp", :result, result}
 
-      assert %Entities.CallToolResult{content: [%Entities.TextContent{text: "Completed"}]} =
+      assert %MCP.CallToolResult{content: [%MCP.TextContent{text: "Completed"}]} =
                result
     end
   end
@@ -277,15 +277,15 @@ defmodule GenMCP.SuiteAsyncTest do
         {:async, {:failing_tag, task}, chan}
       end)
       |> expect(:continue, fn {:failing_tag, {:error, :intentional_failure}}, chan, _arg ->
-        {:result, Server.call_tool_result(text: "Handled failure", is_error: true), chan}
+        {:result, MCP.call_tool_result(text: "Handled failure", is_error: true), chan}
       end)
 
       state = init_session(tools: [{ToolMock, :failing_tool}])
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "FailingTool",
           arguments: %{}
         }
@@ -303,8 +303,8 @@ defmodule GenMCP.SuiteAsyncTest do
       # Assert result is delivered to client
       assert_receive {:"$gen_mcp", :result, result}
 
-      assert %Entities.CallToolResult{
-               content: [%Entities.TextContent{text: "Handled failure"}],
+      assert %MCP.CallToolResult{
+               content: [%MCP.TextContent{text: "Handled failure"}],
                isError: true
              } = result
     end
@@ -326,15 +326,15 @@ defmodule GenMCP.SuiteAsyncTest do
                                    {:error, {:exception, %RuntimeError{}, _stacktrace}}},
                                   chan,
                                   _arg ->
-            {:result, Server.call_tool_result(text: "Caught exception"), chan}
+            {:result, MCP.call_tool_result(text: "Caught exception"), chan}
           end)
 
           state = init_session(tools: [{ToolMock, :error_tool}])
 
-          tool_call_req = %Entities.CallToolRequest{
+          tool_call_req = %MCP.CallToolRequest{
             id: 1001,
             method: "tools/call",
-            params: %Entities.CallToolRequestParams{
+            params: %MCP.CallToolRequestParams{
               name: "ErrorTool",
               arguments: %{}
             }
@@ -363,10 +363,10 @@ defmodule GenMCP.SuiteAsyncTest do
 
       state = init_session(tools: [{ToolMock, :error_continue_tool}])
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "ErrorContinueTool",
           arguments: %{}
         }
@@ -400,15 +400,15 @@ defmodule GenMCP.SuiteAsyncTest do
         {:async, {:stale_tag, ref}, chan}
       end)
       |> expect(:continue, 1, fn {:stale_tag, {:ok, :first_result}}, chan, _arg ->
-        {:result, Server.call_tool_result(text: "First result"), chan}
+        {:result, MCP.call_tool_result(text: "First result"), chan}
       end)
 
       state = init_session(tools: [{ToolMock, :stale_tool}])
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "StaleTool",
           arguments: %{}
         }
@@ -422,7 +422,7 @@ defmodule GenMCP.SuiteAsyncTest do
       # Assert result is delivered to client
       assert_receive {:"$gen_mcp", :result, result}
 
-      assert %Entities.CallToolResult{content: [%Entities.TextContent{text: "First result"}]} =
+      assert %MCP.CallToolResult{content: [%MCP.TextContent{text: "First result"}]} =
                result
 
       # Now send a stale message with the same ref Server should ignore it and
@@ -454,15 +454,15 @@ defmodule GenMCP.SuiteAsyncTest do
         {:async, {:chain_step2, ref2}, chan}
       end)
       |> expect(:continue, fn {:chain_step2, {:ok, :step2_complete}}, chan, _arg ->
-        {:result, Server.call_tool_result(text: "Chain complete"), chan}
+        {:result, MCP.call_tool_result(text: "Chain complete"), chan}
       end)
 
       state = init_session(tools: [{ToolMock, :chain_tool}])
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "ChainTool",
           arguments: %{}
         }
@@ -481,8 +481,8 @@ defmodule GenMCP.SuiteAsyncTest do
       # Assert final result is delivered to client
       assert_receive {:"$gen_mcp", :result, result}
 
-      assert %Entities.CallToolResult{
-               content: [%Entities.TextContent{text: "Chain complete"}]
+      assert %MCP.CallToolResult{
+               content: [%MCP.TextContent{text: "Chain complete"}]
              } = result
     end
 
@@ -513,15 +513,15 @@ defmodule GenMCP.SuiteAsyncTest do
       end)
       |> expect(:continue, fn {:chain_err_step2, {:error, :step2_failure}}, chan, _arg ->
         # Tool handles the error and returns a result
-        {:result, Server.call_tool_result(text: "Recovered from step2 failure"), chan}
+        {:result, MCP.call_tool_result(text: "Recovered from step2 failure"), chan}
       end)
 
       state = init_session(tools: [{ToolMock, :chain_error_tool}])
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "ChainErrorTool",
           arguments: %{}
         }
@@ -544,8 +544,8 @@ defmodule GenMCP.SuiteAsyncTest do
       # Assert result is delivered to client (tool recovered from error)
       assert_receive {:"$gen_mcp", :result, result}
 
-      assert %Entities.CallToolResult{
-               content: [%Entities.TextContent{text: "Recovered from step2 failure"}]
+      assert %MCP.CallToolResult{
+               content: [%MCP.TextContent{text: "Recovered from step2 failure"}]
              } = result
     end
 
@@ -568,15 +568,15 @@ defmodule GenMCP.SuiteAsyncTest do
         {:async, {:rapid_tag, ref}, chan}
       end)
       |> expect(:continue, fn {:rapid_tag, {:ok, :instant_result}}, chan, _arg ->
-        {:result, Server.call_tool_result(text: "Rapid result"), chan}
+        {:result, MCP.call_tool_result(text: "Rapid result"), chan}
       end)
 
       state = init_session(tools: [{ToolMock, :rapid_tool}])
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "RapidTool",
           arguments: %{}
         }
@@ -593,7 +593,7 @@ defmodule GenMCP.SuiteAsyncTest do
       # Assert result is delivered to client
       assert_receive {:"$gen_mcp", :result, result}
 
-      assert %Entities.CallToolResult{content: [%Entities.TextContent{text: "Rapid result"}]} =
+      assert %MCP.CallToolResult{content: [%MCP.TextContent{text: "Rapid result"}]} =
                result
     end
   end
@@ -618,10 +618,10 @@ defmodule GenMCP.SuiteAsyncTest do
       end)
       |> expect(:continue, 2, fn
         {:tag_a, {:ok, :result_a}}, chan, :tool_a ->
-          {:result, Server.call_tool_result(text: "Result from A"), chan}
+          {:result, MCP.call_tool_result(text: "Result from A"), chan}
 
         {:tag_b, {:ok, :result_b}}, chan, :tool_b ->
-          {:result, Server.call_tool_result(text: "Result from B"), chan}
+          {:result, MCP.call_tool_result(text: "Result from B"), chan}
       end)
 
       state = init_session(tools: [{ToolMock, :tool_a}, {ToolMock, :tool_b}])
@@ -645,10 +645,10 @@ defmodule GenMCP.SuiteAsyncTest do
 
       # Delivering both requests using those channel info
 
-      req_a = %Entities.CallToolRequest{
+      req_a = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "ToolA",
           arguments: %{}
         }
@@ -656,10 +656,10 @@ defmodule GenMCP.SuiteAsyncTest do
 
       assert {:reply, :stream, state} = Suite.handle_request(req_a, chan_info_a, state)
 
-      req_b = %Entities.CallToolRequest{
+      req_b = %MCP.CallToolRequest{
         id: 1002,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "ToolB",
           arguments: %{}
         }
@@ -691,16 +691,16 @@ defmodule GenMCP.SuiteAsyncTest do
       end)
       |> expect(:continue, 2, fn
         {:some_tag, {:ok, {:callname, callname}}}, chan, _ ->
-          {:result, Server.call_tool_result(text: "Result from #{callname}"), chan}
+          {:result, MCP.call_tool_result(text: "Result from #{callname}"), chan}
       end)
 
       state = init_session(tools: [{ToolMock, :tool_a}, {ToolMock, :tool_b}])
 
       # Call tool A
-      req_a = %Entities.CallToolRequest{
+      req_a = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "SomeTool",
           arguments: %{"callname" => "A"}
         }
@@ -710,10 +710,10 @@ defmodule GenMCP.SuiteAsyncTest do
                Suite.handle_request(req_a, chan_info(), state)
 
       # Call tool B
-      req_b = %Entities.CallToolRequest{
+      req_b = %MCP.CallToolRequest{
         id: 1002,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "SomeTool",
           arguments: %{"callname" => "B"}
         }
@@ -733,14 +733,14 @@ defmodule GenMCP.SuiteAsyncTest do
       # Assert both results are delivered to client
       assert_receive {:"$gen_mcp", :result, result_b}
 
-      assert %Entities.CallToolResult{
-               content: [%Entities.TextContent{text: "Result from B"}]
+      assert %MCP.CallToolResult{
+               content: [%MCP.TextContent{text: "Result from B"}]
              } = result_b
 
       assert_receive {:"$gen_mcp", :result, result_a}
 
-      assert %Entities.CallToolResult{
-               content: [%Entities.TextContent{text: "Result from A"}]
+      assert %MCP.CallToolResult{
+               content: [%MCP.TextContent{text: "Result from A"}]
              } = result_a
     end
 
@@ -777,10 +777,10 @@ defmodule GenMCP.SuiteAsyncTest do
 
       state = init_session(tools: [{ToolMock, :disconnect_tool}])
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "DisconnectTool",
           arguments: %{}
         }
@@ -818,10 +818,10 @@ defmodule GenMCP.SuiteAsyncTest do
       state = init_session(tools: [{ToolMock, :tool_one}, {ToolMock, :tool_two}])
 
       # Call tool one
-      req_one = %Entities.CallToolRequest{
+      req_one = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "SomeTool",
           arguments: %{}
         }
@@ -831,10 +831,10 @@ defmodule GenMCP.SuiteAsyncTest do
                Suite.handle_request(req_one, chan_info(), state)
 
       # Call tool two - should raise error about duplicate reference
-      req_two = %Entities.CallToolRequest{
+      req_two = %MCP.CallToolRequest{
         id: 1002,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "SomeTool",
           arguments: %{}
         }
@@ -862,10 +862,10 @@ defmodule GenMCP.SuiteAsyncTest do
 
       # 1st tool call
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "AssignsTool",
           arguments: {}
         }
@@ -917,7 +917,7 @@ defmodule GenMCP.SuiteAsyncTest do
                    shared_assign: "from_continue_step1"
                  } = chan.assigns
 
-          {:result, Server.call_tool_result(text: "Assigns verified"), chan}
+          {:result, MCP.call_tool_result(text: "Assigns verified"), chan}
       end)
 
       # Initial call
@@ -932,8 +932,8 @@ defmodule GenMCP.SuiteAsyncTest do
 
       # Assert final result is delivered to client
       assert_receive {:"$gen_mcp", :result,
-                      %Entities.CallToolResult{
-                        content: [%Entities.TextContent{text: "Assigns verified"}]
+                      %MCP.CallToolResult{
+                        content: [%MCP.TextContent{text: "Assigns verified"}]
                       }}
     end
   end
@@ -953,10 +953,10 @@ defmodule GenMCP.SuiteAsyncTest do
 
       state = init_session(tools: [{ToolMock, :bad_tool}])
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "BadTool",
           arguments: %{}
         }
@@ -986,10 +986,10 @@ defmodule GenMCP.SuiteAsyncTest do
 
       state = init_session(tools: [{ToolMock, :bad_continue_tool}])
 
-      tool_call_req = %Entities.CallToolRequest{
+      tool_call_req = %MCP.CallToolRequest{
         id: 1001,
         method: "tools/call",
-        params: %Entities.CallToolRequestParams{
+        params: %MCP.CallToolRequestParams{
           name: "BadContinueTool",
           arguments: %{}
         }
