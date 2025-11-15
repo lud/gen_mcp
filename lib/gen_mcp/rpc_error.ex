@@ -65,6 +65,18 @@ defmodule GenMCP.RpcError do
     }
   end
 
+  defcasterror {:invalid_params, errmsg} when is_binary(errmsg), @rpc_invalid_params, 400 do
+    %{
+      message: errmsg
+    }
+  end
+
+  defcasterror {:invalid_params, _}, @rpc_invalid_params, 400 do
+    %{
+      message: "Invalid Parameters"
+    }
+  end
+
   defcasterror :already_initialized, @rpc_invalid_params, 400 do
     %{
       message: "Session is already initialized"

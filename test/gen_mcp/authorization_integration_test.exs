@@ -1,6 +1,5 @@
 defmodule GenMCP.AuthorizationIntegrationTest do
   alias GenMCP.MCP
-  alias GenMCP.Server
   alias GenMCP.Support.ServerMock
   import GenMCP.Test.Client
   import Mox

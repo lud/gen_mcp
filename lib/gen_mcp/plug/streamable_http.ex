@@ -11,6 +11,18 @@ defmodule GenMCP.Transport.StreamableHttp do
   require Logger
   use Plug.Router, copy_opts_to_assign: :gen_mcp_streamable_http_opts
 
+  @moduledoc """
+  Handles incoming MCP requests.
+
+  On initialize requests, as session is started with all the options.
+
+  Important: Session timeout defaults to
+  #{GenMCP.Mux.Session.default_session_timeout_minutes()} minutes, which is
+  short. MCP clients will receive 404 errors if they do not interact with the
+  session during that timespan. Use the `:session_timeout` option to increase
+  that timeout (in milliseconds).
+  """
+
   # -- Plug API ---------------------------------------------------------------
 
   plug :match
@@ -305,18 +317,10 @@ defmodule GenMCP.Transport.StreamableHttp do
   end
 
   defp json_encode(payload, pretty? \\ false) do
-    normal =
-      JSV.Helpers.Traverse.prewalk(payload, fn
-        {:struct, v} -> MapExt.from_struct_no_nils(v)
-        other -> elem(other, 1)
-      end)
-
     if pretty? do
-      Codec.format_to_iodata!(normal)
+      Codec.format_to_iodata!(payload)
     else
-      Codec.encode_to_iodata!(normal)
+      Codec.encode_to_iodata!(payload)
     end
   end
 end
-
-IO.warn("move this to Transport namespace instead of Plug")

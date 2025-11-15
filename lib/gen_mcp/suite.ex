@@ -1,7 +1,6 @@
 defmodule GenMCP.Suite do
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
-  alias GenMCP.Server
   alias GenMCP.Suite.PromptRepo
   alias GenMCP.Suite.ResourceRepo
   alias GenMCP.Suite.Tool

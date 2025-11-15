@@ -1,5 +1,6 @@
 defmodule GenMCP.Suite.PromptRepo do
   alias GenMCP.MCP
+  alias GenMCP.Mux.Channel
 
   @type prompt_repo :: module | {module, arg} | prompt_repo_descriptor
   @type prompt_repo_descriptor :: %{
@@ -25,15 +26,13 @@ defmodule GenMCP.Suite.PromptRepo do
 
   @callback prefix(arg) :: String.t()
 
-  @callback list(pagination_token :: String.t() | nil, GenMCP.Mux.Channel.t(), arg) ::
+  @callback list(pagination_token :: String.t() | nil, Channel.t(), arg) ::
               {[prompt_item], next_cursor :: term | nil}
 
-  @callback get(
-              name :: String.t(),
-              arguments :: %{binary => term},
-              GenMCP.Mux.Channel.t(),
-              arg
-            ) ::
+  @doc """
+  Returns the prompt result with contents. Arguments are not automatically validated.
+  """
+  @callback get(name :: String.t(), arguments :: %{binary => term}, Channel.t(), arg) ::
               {:ok, MCP.GetPromptResult.t()} | {:error, :not_found | String.t()}
 
   @spec expand(prompt_repo) :: prompt_repo_descriptor

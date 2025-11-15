@@ -1,5 +1,5 @@
 defmodule GenMCP.Test.Tools.ErlangHasher do
-  alias GenMCP.Server
+  alias GenMCP.MCP
 
   use GenMCP.Suite.Tool,
     name: "ErlangHasher",

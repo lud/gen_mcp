@@ -1,3 +1,5 @@
+# credo:disable-for-this-file Credo.Check.Readability.LargeNumbers
+
 defmodule GenMCP.Suite.ToolTest do
   alias GenMCP.MCP
   alias GenMCP.Suite.Tool
@@ -523,6 +525,41 @@ defmodule GenMCP.Suite.ToolTest do
                },
                title: nil
              } == Tool.describe(RawOutputSchema)
+    end
+  end
+
+  describe "encoding errors" do
+    test "invalid params errors" do
+      # Custom message
+
+      assert {400, %{code: -32602, message: "some string"}} =
+               check_error({:invalid_params, "some string"})
+
+      # JSV Validation
+
+      jsv_root = JSV.build!(%{type: :integer})
+      {:error, jsv_err} = JSV.validate("not_an_int", jsv_root)
+
+      assert {400,
+              %{
+                code: -32602,
+                data: %{
+                  valid: false,
+                  details: [
+                    %{
+                      errors: [%{message: "value is not of type integer"}],
+                      valid: false
+                    }
+                  ]
+                },
+                message: "Invalid Parameters"
+              }} = check_error({:invalid_params, jsv_err})
+
+      # Any term
+      #
+      # Testing with a pid, we do not return the data
+      assert {400, %{code: -32602, message: "Invalid Parameters"}} ==
+               check_error({:invalid_params, self()})
     end
   end
 end

@@ -86,11 +86,13 @@ defmodule GenMCP.Suite.Tool do
   Processes a tool call request and returns the result.
 
   The `request` contains the full call information including parameters and
-  arguments to validate against the input schema.
+  arguments to validate against the input schema. The arguments are not
+  validated automatically, this is the role of the optional
+  `c:validate_request/2` callback.
 
-  The `channel` provides access to the client connection and authorization context
-  via `channel.assigns`. It can be used to send progress notifications to the HTTP
-  connection that delivered the request.
+  The `channel` provides access to the client connection and authorization
+  context via `channel.assigns`. It can be used to send progress notifications
+  to the HTTP connection that delivered the request.
 
   The callback can return a result tuple, request a server response, or indicate
   async processing.
@@ -262,11 +264,6 @@ defmodule GenMCP.Suite.Tool do
     end)
   end
 
-  IO.warn("""
-  @todo document that the arguments are not validated by default, only if validate_request is implemented
-  @todo accept an invalid_params response
-  """)
-
   @doc """
   This is a thin wrapper around the tool `c:call/3` callback that also performs
   input validation.
@@ -296,8 +293,6 @@ defmodule GenMCP.Suite.Tool do
       {:ok, req}
     end
   end
-
-  IO.warn("test that rpc error can encode {:invalid_parameters, reason} with invalid params code")
 
   defp invalid_params(_req, reason, channel) do
     {:error, {:invalid_params, reason}, channel}

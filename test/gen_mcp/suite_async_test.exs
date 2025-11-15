@@ -3,7 +3,6 @@
 defmodule GenMCP.SuiteAsyncTest do
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
-  alias GenMCP.Server
   alias GenMCP.Suite
   alias GenMCP.Support.ToolMock
   import Mox

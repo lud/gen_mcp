@@ -1,7 +1,6 @@
 defmodule GenMCP.Server do
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
-  alias GenMCP.Suite.Tool
 
   require(Elixir.GenMCP.MCP.ModMap).require_all()
 

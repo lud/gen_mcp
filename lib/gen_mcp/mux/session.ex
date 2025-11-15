@@ -16,13 +16,19 @@ defmodule GenMCP.Mux.Session do
     defstruct @enforce_keys
   end
 
+  def default_session_timeout_minutes do
+    2
+  end
+
   IO.warn("@todo document session timeout default to 1 minute and also refreshed on handle info")
   IO.warn("@todo test init failure")
   @impl true
   def init(opts) do
     {server, opts} = Keyword.pop(opts, :server, GenMCP.Suite)
     session_id = Keyword.fetch!(opts, :session_id)
-    session_timeout = Keyword.get(opts, :session_timeout, :timer.minutes(1))
+
+    session_timeout =
+      Keyword.get(opts, :session_timeout, :timer.minutes(default_session_timeout_minutes()))
 
     self_opts = [session_timeout: session_timeout]
 
@@ -88,7 +94,7 @@ defmodule GenMCP.Mux.Session do
   end
 
   @impl true
-  def handle_info({:timeout, tref, :session_timeout} = msg, state) do
+  def handle_info({:timeout, tref, :session_timeout}, state) do
     case state.session_timeout_ref do
       ^tref ->
         Logger.info("session #{state.session_id} terminating (client timeout)")

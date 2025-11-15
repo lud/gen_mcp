@@ -5,7 +5,6 @@ defmodule GenMCP.StreamableHttpTest do
   alias GenMCP.ConnCase
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
-  alias GenMCP.Server
   alias GenMCP.Support.ServerMock
   alias GenMCP.Support.ToolMock
   import ConnCase

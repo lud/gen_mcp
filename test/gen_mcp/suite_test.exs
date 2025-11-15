@@ -2,7 +2,6 @@
 
 defmodule GenMCP.SuiteTest do
   alias GenMCP.MCP
-  alias GenMCP.Server
   alias GenMCP.Suite
   alias GenMCP.Support.PromptRepoMock
   alias GenMCP.Support.ResourceRepoMock

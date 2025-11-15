@@ -1,6 +1,5 @@
 defmodule GenMCP.MCP do
   alias GenMCP.MCP
-  alias GenMCP.Mux.Channel
   alias GenMCP.Suite.Tool
 
   def intialize_result(opts) do

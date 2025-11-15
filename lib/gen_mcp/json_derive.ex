@@ -1,29 +1,30 @@
 defmodule GenMCP.JsonDerive do
   @moduledoc false
+  alias JSV.Helpers.MapExt
 
   defmacro auto do
     quote do
+      @before_compile unquote(__MODULE__)
+    end
+  end
+
+  defmacro __before_compile__(_env) do
+    quote do
       if Code.ensure_loaded?(JSON.Encoder) do
-        @derive JSON.Encoder
+        defimpl JSON.Encoder do
+          def encode(v, encoder) do
+            encoder.(MapExt.from_struct_no_nils(v))
+          end
+        end
       end
 
       if Code.ensure_loaded?(Jason.Encoder) do
-        @derive Jason.Encoder
+        defimpl Jason.Encoder do
+          def encode(v, opts) do
+            Jason.Encode.map(MapExt.from_struct_no_nils(v), opts)
+          end
+        end
       end
     end
   end
 end
-
-IO.warn("""
-@todo use a macro to define JSON normalizers like this, instead of deriving
-
-JsonDerive.spec(some_field: spec, some_other: spec)
-
-Spec is:
-
-* true - keep the field as-is
-* :not_nil - keep if not nil
-* {:sub, [sub_field: spec, sub_other: spec]} - apply to sub fields
-* [...] - apply in order. [:not_nil, {:sub, _}]
-
-""")
