@@ -10,4 +10,8 @@ defmodule GenMCP.Test.Helpers do
   def check_error(reason) do
     GenMCP.RpcError.cast_error(reason)
   end
+
+  def build_channel(assigns \\ %{}) do
+    %GenMCP.Mux.Channel{client: self(), progress_token: nil, assigns: assigns}
+  end
 end

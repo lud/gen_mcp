@@ -10,7 +10,7 @@ defmodule GenMCP.McpJestTest do
     assert {_, 0} =
              System.cmd(
                "npx",
-               ~w(mcp-jest --transport streamable-http --url #{url()} --tools Calculator),
+               ~w(mcp-jest --transport streamable-http --url #{url()} --tools ErlangHasher),
                into: IO.stream()
              )
   end

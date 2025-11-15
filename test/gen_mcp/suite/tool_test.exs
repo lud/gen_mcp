@@ -1,6 +1,7 @@
 defmodule GenMCP.Suite.ToolTest do
   alias GenMCP.Entities
   alias GenMCP.Suite.Tool
+  import GenMCP.Test.Helpers
   use ExUnit.Case, async: true
 
   defmacro env_mod do
@@ -13,10 +14,6 @@ defmodule GenMCP.Suite.ToolTest do
     |> Macro.camelize()
     |> List.wrap()
     |> Module.concat()
-  end
-
-  defp build_channel do
-    %GenMCP.Mux.Channel{client: self(), progress_token: nil, assigns: %{}}
   end
 
   describe "with using macro" do

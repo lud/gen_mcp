@@ -1,8 +1,8 @@
 defmodule GenMCP.Mux.SessionTest do
-  alias GenMCP.Server
-  alias GenMCP.Mux
-  alias GenMCP.Support.ServerMock
   alias GenMCP.Entities
+  alias GenMCP.Mux
+  alias GenMCP.Server
+  alias GenMCP.Support.ServerMock
   import Mox
   import GenMCP.Test.Helpers
   use ExUnit.Case

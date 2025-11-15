@@ -2,8 +2,8 @@
 
 defmodule GenMCP.StreamableHttpTest do
   alias GenMCP.Cluster.NodeSync
-  alias GenMCP.Entities
   alias GenMCP.ConnCase
+  alias GenMCP.Entities
   alias GenMCP.Mux.Channel
   alias GenMCP.Server
   alias GenMCP.Support.ServerMock

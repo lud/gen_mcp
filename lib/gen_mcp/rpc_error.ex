@@ -58,6 +58,13 @@ defmodule GenMCP.RpcError do
     }
   end
 
+  defcasterror {:invalid_params, %JSV.ValidationError{} = e}, @rpc_invalid_params, 400 do
+    %{
+      data: JSV.normalize_error(e),
+      message: "Invalid Parameters"
+    }
+  end
+
   defcasterror :already_initialized, @rpc_invalid_params, 400 do
     %{
       message: "Session is already initialized"
