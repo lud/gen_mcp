@@ -6,7 +6,6 @@ defmodule GenMCP.Transport.StreamableHttp do
   alias GenMCP.RpcError
   alias GenMCP.Validator
   alias JSV.Codec
-  alias JSV.Helpers.MapExt
   import Plug.Conn
   require Logger
   use Plug.Router, copy_opts_to_assign: :gen_mcp_streamable_http_opts
@@ -107,23 +106,10 @@ defmodule GenMCP.Transport.StreamableHttp do
     end
   end
 
-  IO.warn("""
-  @todo we should pass the initialize request in the start_session arguments,
-  so if the protocol version is not supported or another incompatibility error,
-  we can just return an error from Session.init or even start_link and not
-  bother starting the server at all.
-
-  The supervisor will restart the session with the request. For now session is
-  :temporary so we do not care because DynamicSupervisor.mfa_for_restart (defp)
-  discards the start_link arguments when it registers the child.
-
-  # TODO add a test to validate that this is always true.
-  """)
-
   defp dispatch_req(conn, msg_id, %InitializeRequest{} = req, opts) do
     with {:ok, session_id} <- Mux.start_session(opts),
-         {:result, %InitializeResult{} = result} <-
-           Mux.request(session_id, req, channel_info(conn, req, session_id, opts)) do
+         chan_info = channel_info(conn, req, session_id, opts),
+         {:result, %InitializeResult{} = result} <- Mux.request(session_id, req, chan_info) do
       conn
       |> with_session_id(session_id)
       |> send_result_response(200, msg_id, result)

@@ -34,8 +34,34 @@ defmodule GenMCP.Suite do
 
   IO.warn("@todo initialize tools after extensions so we get channel assigns to select tools")
 
+  @provider_type [default: [], type: {:list, {:or, [:atom, :mod_arg, :map]}}]
+  @init_opts_schema NimbleOptions.new!(
+                      server_name: [required: true, type: :string],
+                      server_version: [required: true, type: :string],
+                      server_title: [type: :string],
+                      tools: @provider_type,
+                      resources: @provider_type,
+                      prompts: @provider_type
+                    )
+
   @impl true
   def init(session_id, opts) do
+    # The transport will forward all options to the session, which forwards
+    # everything to the server.
+    #
+    # To validate with nimble options we need to keep only the known options
+
+    opts_schema = @init_opts_schema
+    keep_keys = Keyword.keys(opts_schema.schema)
+    opts = Keyword.take(opts, keep_keys)
+
+    case NimbleOptions.validate(opts, @init_opts_schema) do
+      {:ok, valid_opts} -> do_init(session_id, valid_opts)
+      {:error, _} = err -> err
+    end
+  end
+
+  defp do_init(session_id, opts) do
     # For tools and resources we keep a list of names/prefixes to preserve the
     # original order given in the options. This is especially useful for
     # resources where prefixes can overlap.
@@ -97,13 +123,13 @@ defmodule GenMCP.Suite do
         {:reply, {:result, init_result}, state}
 
       {:error, reason} = err ->
-        {:stop, reason, err, state}
+        {:stop, {:shutdown, {:init_failure, reason}}, err, state}
     end
   end
 
   def handle_request(%MCP.InitializeRequest{} = _req, _chan_info, state) do
     reason = :already_initialized
-    {:stop, reason, {:error, reason}, state}
+    {:stop, {:shutdown, {:init_failure, reason}}, {:error, reason}, state}
   end
 
   # Handling requests requires having handled the first initialization request.

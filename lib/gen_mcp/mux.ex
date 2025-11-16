@@ -8,10 +8,6 @@ defmodule GenMCP.Mux do
 
   def start_session(opts) do
     session_id = NodeSync.gen_session_id()
-    start_session(session_id, opts)
-  end
-
-  defp start_session(session_id, opts) do
     name = {:via, Registry, {registry(), session_id}}
     opts = Keyword.merge(opts, name: name, session_id: session_id)
 
@@ -21,7 +17,7 @@ defmodule GenMCP.Mux do
 
       {:error, reason} ->
         Logger.error("Could not start MCP session: #{inspect(reason)}")
-        {:error, {:session_start_failed, reason}}
+        {:error, reason}
     end
   end
 

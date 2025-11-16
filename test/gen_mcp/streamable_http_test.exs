@@ -83,8 +83,8 @@ defmodule GenMCP.StreamableHttpTest do
       # test pid.
       assert {:channel, GenMCP.Transport.StreamableHttp, pid, assigns} = chan_info
       assert is_pid(pid)
-      assert 1 = map_size(assigns)
       assert %{gen_mcp_session_id: _} = assigns
+      assert 1 = map_size(assigns)
 
       init_result =
         MCP.intialize_result(

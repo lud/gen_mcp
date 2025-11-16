@@ -6,7 +6,7 @@ defmodule GenMCP.Server do
 
   @type state :: term
 
-  @callback init(session_id :: String.t(), term) :: {:ok, state}
+  @callback init(session_id :: String.t(), term) :: {:ok, state} | {:stop, term}
 
   @type request :: MCP.InitializeRequest.t()
   @type result :: MCP.InitializeResult.t()

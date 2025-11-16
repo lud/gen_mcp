@@ -135,7 +135,7 @@ defmodule GenMCP.RpcError do
     }
   end
 
-  defcasterror {:session_start_failed, _reason}, @rpc_internal_error, 500 do
+  defcasterror {:mcp_server_init_failure, _reason}, @rpc_internal_error, 500 do
     %{
       message: "Session Start Error"
     }

@@ -73,6 +73,10 @@ defmodule GenMCP.SuiteTest do
              } = result
     end
 
+    test "stops the session if initialization request somehow is invalid" do
+      assert {:error, _} = Suite.init("some-session-id", [])
+    end
+
     test "handles initialize request and reject tool call request without initialization" do
       {:ok, state} = Suite.init("some-session-id", @server_info)
 
@@ -139,7 +143,8 @@ defmodule GenMCP.SuiteTest do
       }
 
       # Should return an error with :stop tuple since we're already initialized
-      assert {:stop, :already_initialized, {:error, :already_initialized} = err, _} =
+      assert {:stop, {:shutdown, {:init_failure, :already_initialized}},
+              {:error, :already_initialized} = err, _} =
                Suite.handle_request(init_req, chan_info(), state)
 
       assert {400, %{code: -32602, message: "Session is already initialized"}} = check_error(err)
@@ -159,7 +164,8 @@ defmodule GenMCP.SuiteTest do
       }
 
       # Should return an error with :stop tuple for invalid protocol version
-      assert {:stop, reason, {:error, {:unsupported_protocol, "2024-01-01"} = reason}, _} =
+      assert {:stop, {:shutdown, {:init_failure, reason}},
+              {:error, {:unsupported_protocol, "2024-01-01"} = reason}, _} =
                Suite.handle_request(init_req, chan_info(), state)
 
       assert {400,

@@ -42,8 +42,8 @@ defmodule GenMCP.MixProject do
       {:phoenix, ">= 1.7.0"},
       {:jsv, "~> 0.11"},
       {:abnf_parsec, "~> 2.0"},
-      # {:texture, ">= 0.3.0"},
-      {:texture, path: "../texture", override: true},
+      {:texture, ">= 0.3.2"},
+      {:nimble_options, "~> 1.1"},
 
       # Resources
       mcp_schemas(),
@@ -60,7 +60,8 @@ defmodule GenMCP.MixProject do
       {:ex_check, ">= 0.16.0", only: [:dev, :test], runtime: false},
       {:ex_doc, ">= 0.38.2", only: [:dev, :test], runtime: false},
       {:mix_audit, ">= 2.1.5", only: [:dev, :test], runtime: false},
-      {:sobelow, ">= 0.14.0", only: [:dev, :test], runtime: false}
+      {:sobelow, ">= 0.14.0", only: [:dev, :test], runtime: false},
+      {:nvir, "~> 0.13.4", only: [:dev, :test]}
     ]
   end
 

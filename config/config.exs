@@ -22,7 +22,7 @@ config :logger, level: log_level
 
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
-  metadata: [:node]
+  metadata: [:node, :file, :line]
 
 config :phoenix, :logger, true
 

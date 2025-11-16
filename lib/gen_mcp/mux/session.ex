@@ -2,6 +2,11 @@ defmodule GenMCP.Mux.Session do
   @moduledoc false
 
   require Logger
+
+  # All session and mcp opts are given in the child spec from the transport
+  # plug. It is not kept in memory by the supervisor as long as the session has
+  # restart: :temporary. If we want to use another restart strategy we must
+  # change the boot setup to avoid keeping to much in memory.
   use GenServer, restart: :temporary
 
   @gen_opts ~w(name timeout debug spawn_opt hibernate_after)a
@@ -20,7 +25,6 @@ defmodule GenMCP.Mux.Session do
     2
   end
 
-  IO.warn("@todo document session timeout default to 1 minute and also refreshed on handle info")
   IO.warn("@todo test init failure")
   @impl true
   def init(opts) do
@@ -48,6 +52,12 @@ defmodule GenMCP.Mux.Session do
            session_timeout_ref: start_session_timeout(session_timeout),
            opts: self_opts
          }}
+
+      {:stop, reason} ->
+        {:stop, {:mcp_server_init_failure, reason}}
+
+      other ->
+        exit({:bad_return_value, other})
     end
   end
 
