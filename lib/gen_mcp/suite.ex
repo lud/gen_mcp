@@ -14,7 +14,7 @@ defmodule GenMCP.Suite do
   defmodule State do
     # We keep tools both as a list and as a map
     @enforce_keys [
-      :init_assigns,
+      :default_assigns,
       :prompt_prefixes,
       :prompt_repos,
       :resource_prefixes,
@@ -31,6 +31,27 @@ defmodule GenMCP.Suite do
   end
 
   Record.defrecordp(:tracker, id: nil, tool_name: nil, channel: nil, tag: nil)
+
+  # TODO we need a new behaviour to handle listChanged notifications.
+  #
+  # * behaviour Suite.SessionController
+  # * when the client listens from a GET request, we start a stream and keep the
+  #   channel
+  # * unknown messages from handle_info are given to the session controller with
+  #   that channel.
+  # * handle_info messages should be delivered even if there is no GET stream,
+  #   but the channel would be a special channel struct that just ignores
+  #   notifications given to it.
+  # * the session controller callback should return a {:noreply, channel} or
+  #   {:stop, reason, channel} tuple.
+  # * assigns from that returned channel would replace the default_assigns
+  #   (which are still overriden by copied conn assigns)
+  # * to not have those assigns overriden by the :assigns option of the
+  #   transport plug, that option must not be used by the plug anymore, and just
+  #   forwared to the server implementation. The server would initialize with
+  #   that as the default assigns (+ gen_mcp_session_id)
+  # * the session controller can send notifications to the channel like list
+  #   changed (for tools, resources, etc), resource updated, etc.
 
   IO.warn("@todo initialize tools after extensions so we get channel assigns to select tools")
 
@@ -105,7 +126,7 @@ defmodule GenMCP.Suite do
        prompt_repos: prompt_repos,
        token_key: random_string(64),
        trackers: empty_trackers(),
-       init_assigns: %{}
+       default_assigns: %{}
      }}
   end
 
@@ -120,7 +141,7 @@ defmodule GenMCP.Suite do
             server_info: MCP.server_info(name: "Mock Server", version: "foo", title: "stuff")
           )
 
-        state = %{state | status: :server_initialized, init_assigns: elem(chan_info, 3)}
+        state = %{state | status: :server_initialized, default_assigns: elem(chan_info, 3)}
         {:reply, {:result, init_result}, state}
 
       {:error, reason} = err ->
@@ -421,7 +442,7 @@ defmodule GenMCP.Suite do
   end
 
   defp build_channel(chan_info, req, state) do
-    Channel.from_client(chan_info, req, state.init_assigns)
+    Channel.from_client(chan_info, req, state.default_assigns)
   end
 
   defp random_string(len) do
