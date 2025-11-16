@@ -63,8 +63,6 @@ defmodule GenMCP.Suite do
   # * the session controller should send the resources updated notifications
   #   itself.
 
-  IO.warn("@todo initialize tools after extensions so we get channel assigns to select tools")
-
   @provider_type [default: [], type: {:list, {:or, [:atom, :mod_arg, :map]}}]
   @init_opts_schema NimbleOptions.new!(
                       server_name: [required: true, type: :string],

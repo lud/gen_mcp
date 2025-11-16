@@ -52,8 +52,6 @@ defmodule GenMCP.Mux do
     end
   end
 
-  IO.warn("todo proper 404 response for session not found")
-
   def lookup_pid(session_id) when is_binary(session_id) do
     case NodeSync.node_of(session_id) do
       {:ok, n} when n == node() ->
