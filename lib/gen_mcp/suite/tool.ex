@@ -215,7 +215,7 @@ defmodule GenMCP.Suite.Tool do
   Transforms `module` and `{module, arg}` into a tool descriptor.
   """
   @spec expand(tool) :: tool_descriptor
-  def expand(%{name: _} = tool) do
+  def expand(%{name: _, mod: _, arg: _} = tool) do
     tool
   end
 

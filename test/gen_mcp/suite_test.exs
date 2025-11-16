@@ -3,6 +3,7 @@
 defmodule GenMCP.SuiteTest do
   alias GenMCP.MCP
   alias GenMCP.Suite
+  alias GenMCP.Support.ExtensionMock
   alias GenMCP.Support.PromptRepoMock
   alias GenMCP.Support.ResourceRepoMock
   alias GenMCP.Support.ResourceRepoMockTpl
@@ -30,21 +31,27 @@ defmodule GenMCP.SuiteTest do
       id: "setup-init-1",
       method: "initialize",
       params: %MCP.InitializeRequestParams{
-        capabilities: %{},
+        capabilities: %MCP.ClientCapabilities{elicitation: %{"foo" => "bar"}},
         clientInfo: %{name: "test", version: "1.0.0"},
         protocolVersion: "2025-06-18"
       }
     }
 
-    assert {:reply, {:result, _result}, %{status: :server_initialized} = state} =
-             Suite.handle_request(init_req, chan_info(init_assigns), state)
+    assert {:reply, {:result, _result},
+            %{
+              client_capabilities: %{
+                __init: %MCP.ClientCapabilities{elicitation: %{"foo" => "bar"}}
+              }
+            } = state} = Suite.handle_request(init_req, chan_info(init_assigns), state)
 
     client_init_notif = %MCP.InitializedNotification{
       method: "notifications/initialized",
       params: %{}
     }
 
-    assert {:noreply, %{status: :client_initialized} = state} =
+    assert {:noreply,
+            %{client_capabilities: %MCP.ClientCapabilities{elicitation: %{"foo" => "bar"}}} =
+              state} =
              Suite.handle_notification(client_init_notif, state)
 
     state
@@ -58,13 +65,13 @@ defmodule GenMCP.SuiteTest do
         id: 1,
         method: "initialize",
         params: %MCP.InitializeRequestParams{
-          capabilities: %{},
+          capabilities: %MCP.ClientCapabilities{},
           clientInfo: %{name: "test", version: "1.0.0"},
           protocolVersion: "2025-06-18"
         }
       }
 
-      assert {:reply, {:result, result}, %{status: :server_initialized}} =
+      assert {:reply, {:result, result}, _state} =
                Suite.handle_request(init_eq, chan_info(), state)
 
       assert %MCP.InitializeResult{
@@ -89,7 +96,7 @@ defmodule GenMCP.SuiteTest do
         }
       }
 
-      assert {:error, :not_initialized, %{status: :starting}} =
+      assert {:error, :not_initialized, _} =
                Suite.handle_request(req, chan_info(), state)
 
       assert {400, %{code: -32603, message: "Server not initialized"}} =
@@ -106,13 +113,13 @@ defmodule GenMCP.SuiteTest do
         id: 1,
         method: "initialize",
         params: %MCP.InitializeRequestParams{
-          capabilities: %{},
+          capabilities: %MCP.ClientCapabilities{},
           clientInfo: %{name: "test", version: "1.0.0"},
           protocolVersion: "2025-06-18"
         }
       }
 
-      assert {:reply, {:result, _result}, %{status: :server_initialized} = state} =
+      assert {:reply, {:result, _result}, state} =
                Suite.handle_request(init_req, chan_info(), state)
 
       tool_call_req = %MCP.CallToolRequest{
@@ -124,7 +131,7 @@ defmodule GenMCP.SuiteTest do
         }
       }
 
-      assert {:reply, {:error, {:unknown_tool, "SomeTool"}}, %{status: :server_initialized}} =
+      assert {:reply, {:error, {:unknown_tool, "SomeTool"}}, _state} =
                Suite.handle_request(tool_call_req, chan_info(), state)
     end
 
@@ -136,7 +143,7 @@ defmodule GenMCP.SuiteTest do
         id: "setup-init-2",
         method: "initialize",
         params: %MCP.InitializeRequestParams{
-          capabilities: %{},
+          capabilities: %MCP.ClientCapabilities{},
           clientInfo: %{name: "test", version: "1.0.0"},
           protocolVersion: "2025-06-18"
         }
@@ -157,7 +164,7 @@ defmodule GenMCP.SuiteTest do
         id: 1,
         method: "initialize",
         params: %MCP.InitializeRequestParams{
-          capabilities: %{},
+          capabilities: %MCP.ClientCapabilities{},
           clientInfo: %{name: "test", version: "1.0.0"},
           protocolVersion: "2024-01-01"
         }
@@ -1364,8 +1371,210 @@ defmodule GenMCP.SuiteTest do
                )
     end
   end
-end
 
-IO.warn("""
-Todo test that channel info + assigns is given to repo,prompts and tool callbacks
-""")
+  describe "extension ordering" do
+    test "lists tools with direct tool first, then extension tools in order" do
+      ToolMock
+      |> stub(:info, fn
+        #
+        :name, :direct_tool -> "DirectTool"
+        :description, :direct_tool -> "A direct tool"
+        :title, :direct_tool -> nil
+        :annotations, :direct_tool -> nil
+        #
+        :name, :ext1_tool -> "Ext1Tool"
+        :description, :ext1_tool -> "Tool from extension 1"
+        :title, :ext1_tool -> nil
+        :annotations, :ext1_tool -> nil
+        #
+        :name, :ext2_tool -> "Ext2Tool"
+        :description, :ext2_tool -> "Tool from extension 2"
+        :title, :ext2_tool -> nil
+        :annotations, :ext2_tool -> nil
+      end)
+      |> stub(:input_schema, fn _ -> %{type: :object} end)
+      |> stub(:output_schema, fn _ -> nil end)
+
+      ExtensionMock
+      |> stub(:tools, fn
+        _channel, :ext1 -> [{ToolMock, :ext1_tool}]
+        _channel, :ext2 -> [{ToolMock, :ext2_tool}]
+      end)
+      |> stub(:resources, fn _channel, _ -> [] end)
+      |> stub(:prompts, fn _channel, _ -> [] end)
+
+      state =
+        init_session(
+          tools: [{ToolMock, :direct_tool}],
+          extensions: [{ExtensionMock, :ext1}, {ExtensionMock, :ext2}]
+        )
+
+      assert {:reply, {:result, %MCP.ListToolsResult{tools: tools}}, _} =
+               Suite.handle_request(
+                 %MCP.ListToolsRequest{},
+                 chan_info(),
+                 state
+               )
+
+      # Tool order is respected, self extension is first
+
+      assert [
+               %{name: "DirectTool"},
+               %{name: "Ext1Tool"},
+               %{name: "Ext2Tool"}
+             ] = tools
+    end
+
+    test "lists resources with direct repo first, then extension repos in order with pagination" do
+      ResourceRepoMock
+      |> stub(:prefix, fn
+        :direct_repo -> "file:///"
+        :ext1_repo1 -> "http://ext1-1/"
+        :ext1_repo2 -> "http://ext1-2/"
+        :ext2_repo -> "http://ext2/"
+      end)
+      |> expect(:list, fn nil, _channel, :direct_repo ->
+        {[%{uri: "file:///direct.txt", name: "Direct Resource"}], nil}
+      end)
+      |> expect(:list, fn nil, _channel, :ext1_repo1 ->
+        {[%{uri: "http://ext1-1/resource1.txt", name: "Ext1 Repo1 Resource 1"}], :go_page_2}
+      end)
+      |> expect(:list, fn :go_page_2, _channel, :ext1_repo1 ->
+        {[
+           %{uri: "http://ext1-1/resource2.txt", name: "Ext1 Repo1 Resource 2"},
+           %{uri: "http://ext1-1/resource3.txt", name: "Ext1 Repo1 Resource 3"}
+         ], nil}
+      end)
+      |> expect(:list, fn nil, _channel, :ext1_repo2 ->
+        {[%{uri: "http://ext1-2/resource.txt", name: "Ext1 Repo2 Resource"}], nil}
+      end)
+      |> expect(:list, fn nil, _channel, :ext2_repo ->
+        {[%{uri: "http://ext2/resource.txt", name: "Ext2 Resource"}], nil}
+      end)
+
+      ExtensionMock
+      |> stub(:tools, fn _channel, _ -> [] end)
+      |> stub(:resources, fn
+        _channel, :ext1 -> [{ResourceRepoMock, :ext1_repo1}, {ResourceRepoMock, :ext1_repo2}]
+        _channel, :ext2 -> [{ResourceRepoMock, :ext2_repo}]
+      end)
+      |> stub(:prompts, fn _channel, _ -> [] end)
+
+      state =
+        init_session(
+          resources: [{ResourceRepoMock, :direct_repo}],
+          extensions: [{ExtensionMock, :ext1}, {ExtensionMock, :ext2}]
+        )
+
+      # fetch all pages
+      req = fn cursor ->
+        %MCP.ListResourcesRequest{params: %MCP.ListResourcesRequestParams{cursor: cursor}}
+      end
+
+      assert {:reply, {:result, %{resources: page1, nextCursor: cursor}}, state} =
+               Suite.handle_request(req.(nil), chan_info(), state)
+
+      assert {:reply, {:result, %{resources: page2, nextCursor: cursor}}, state} =
+               Suite.handle_request(req.(cursor), chan_info(), state)
+
+      assert {:reply, {:result, %{resources: page3, nextCursor: cursor}}, state} =
+               Suite.handle_request(req.(cursor), chan_info(), state)
+
+      assert {:reply, {:result, %{resources: page4, nextCursor: cursor}}, state} =
+               Suite.handle_request(req.(cursor), chan_info(), state)
+
+      assert {:reply, {:result, %{resources: page5, nextCursor: _cursor}}, _state} =
+               Suite.handle_request(req.(cursor), chan_info(), state)
+
+      # should be in order. Actually we already know it because mocks
+      # expectations are ordered.
+
+      assert [%{name: "Direct Resource", uri: "file:///direct.txt"}] = page1
+      assert [%{name: "Ext1 Repo1 Resource 1", uri: "http://ext1-1/resource1.txt"}] = page2
+
+      assert [
+               %{name: "Ext1 Repo1 Resource 2", uri: "http://ext1-1/resource2.txt"},
+               %{name: "Ext1 Repo1 Resource 3", uri: "http://ext1-1/resource3.txt"}
+             ] = page3
+
+      assert [%{name: "Ext1 Repo2 Resource", uri: "http://ext1-2/resource.txt"}] = page4
+      assert [%{name: "Ext2 Resource", uri: "http://ext2/resource.txt"}] = page5
+    end
+
+    test "lists prompts with direct repo first, then extension repos in order with pagination" do
+      PromptRepoMock
+      |> stub(:prefix, fn
+        :direct_repo -> "direct_"
+        :ext1_repo1 -> "ext1_1_"
+        :ext1_repo2 -> "ext1_2_"
+        :ext2_repo -> "ext2_"
+      end)
+      |> expect(:list, fn nil, _channel, :direct_repo ->
+        {[%{name: "direct_prompt", description: "Direct Prompt"}], nil}
+      end)
+      |> expect(:list, fn nil, _channel, :ext1_repo1 ->
+        {[%{name: "ext1_1_prompt_1", description: "Ext1 Repo1 Prompt 1"}], :go_page_2}
+      end)
+      |> expect(:list, fn :go_page_2, _channel, :ext1_repo1 ->
+        {[
+           %{name: "ext1_1_prompt_2", description: "Ext1 Repo1 Prompt 2"},
+           %{name: "ext1_1_prompt_3", description: "Ext1 Repo1 Prompt 3"}
+         ], nil}
+      end)
+      |> expect(:list, fn nil, _channel, :ext1_repo2 ->
+        {[%{name: "ext1_2_prompt", description: "Ext1 Repo2 Prompt"}], nil}
+      end)
+      |> expect(:list, fn nil, _channel, :ext2_repo ->
+        {[%{name: "ext2_prompt", description: "Ext2 Prompt"}], nil}
+      end)
+
+      ExtensionMock
+      |> stub(:tools, fn _channel, _ -> [] end)
+      |> stub(:resources, fn _channel, _ -> [] end)
+      |> stub(:prompts, fn
+        _channel, :ext1 -> [{PromptRepoMock, :ext1_repo1}, {PromptRepoMock, :ext1_repo2}]
+        _channel, :ext2 -> [{PromptRepoMock, :ext2_repo}]
+      end)
+
+      state =
+        init_session(
+          prompts: [{PromptRepoMock, :direct_repo}],
+          extensions: [{ExtensionMock, :ext1}, {ExtensionMock, :ext2}]
+        )
+
+      # fetch all pages
+      req = fn cursor ->
+        %MCP.ListPromptsRequest{params: %MCP.ListPromptsRequestParams{cursor: cursor}}
+      end
+
+      assert {:reply, {:result, %{prompts: page1, nextCursor: cursor}}, state} =
+               Suite.handle_request(req.(nil), chan_info(), state)
+
+      assert {:reply, {:result, %{prompts: page2, nextCursor: cursor}}, state} =
+               Suite.handle_request(req.(cursor), chan_info(), state)
+
+      assert {:reply, {:result, %{prompts: page3, nextCursor: cursor}}, state} =
+               Suite.handle_request(req.(cursor), chan_info(), state)
+
+      assert {:reply, {:result, %{prompts: page4, nextCursor: cursor}}, state} =
+               Suite.handle_request(req.(cursor), chan_info(), state)
+
+      assert {:reply, {:result, %{prompts: page5, nextCursor: _cursor}}, _state} =
+               Suite.handle_request(req.(cursor), chan_info(), state)
+
+      # should be in order. Actually we already know it because mocks
+      # expectations are ordered.
+
+      assert [%{name: "direct_prompt", description: "Direct Prompt"}] = page1
+      assert [%{name: "ext1_1_prompt_1", description: "Ext1 Repo1 Prompt 1"}] = page2
+
+      assert [
+               %{name: "ext1_1_prompt_2", description: "Ext1 Repo1 Prompt 2"},
+               %{name: "ext1_1_prompt_3", description: "Ext1 Repo1 Prompt 3"}
+             ] = page3
+
+      assert [%{name: "ext1_2_prompt", description: "Ext1 Repo2 Prompt"}] = page4
+      assert [%{name: "ext2_prompt", description: "Ext2 Prompt"}] = page5
+    end
+  end
+end

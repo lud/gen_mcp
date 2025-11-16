@@ -29,13 +29,13 @@ defmodule GenMCP.SuiteAsyncTest do
       id: "setup-init-1",
       method: "initialize",
       params: %MCP.InitializeRequestParams{
-        capabilities: %{},
+        capabilities: %MCP.ClientCapabilities{},
         clientInfo: %{name: "test", version: "1.0.0"},
         protocolVersion: "2025-06-18"
       }
     }
 
-    assert {:reply, {:result, _result}, %{status: :server_initialized} = state} =
+    assert {:reply, {:result, _result}, state} =
              Suite.handle_request(init_req, chan_info(init_assigns), state)
 
     client_init_notif = %MCP.InitializedNotification{
@@ -43,7 +43,7 @@ defmodule GenMCP.SuiteAsyncTest do
       params: %{}
     }
 
-    assert {:noreply, %{status: :client_initialized} = state} =
+    assert {:noreply, _state} =
              Suite.handle_notification(client_init_notif, state)
 
     state

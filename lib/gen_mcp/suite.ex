@@ -1,4 +1,5 @@
 defmodule GenMCP.Suite do
+  alias GenMCP.Suite.Extension
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
   alias GenMCP.Suite.PromptRepo
@@ -14,14 +15,15 @@ defmodule GenMCP.Suite do
   defmodule State do
     # We keep tools both as a list and as a map
     @enforce_keys [
+      :client_capabilities,
       :default_assigns,
+      :extensions,
       :prompt_prefixes,
       :prompt_repos,
       :resource_prefixes,
       :resource_repos,
       :server_info,
       :session_id,
-      :status,
       :token_key,
       :tool_names,
       :tools_map,
@@ -42,16 +44,24 @@ defmodule GenMCP.Suite do
   # * handle_info messages should be delivered even if there is no GET stream,
   #   but the channel would be a special channel struct that just ignores
   #   notifications given to it.
-  # * the session controller callback should return a {:noreply, channel} or
-  #   {:stop, reason, channel} tuple.
+  # * the session controller callback should return a {:noreply, channel},
+  #   {:noreply, channel, actions} or {:stop, reason, channel} tuple. Actions
+  #   are for refreshing tools/repos.
   # * assigns from that returned channel would replace the default_assigns
-  #   (which are still overriden by copied conn assigns)
+  #   (which are still overriden by copied conn assigns). Currently the the
+  #   default_assigns are taken from the initialize request. We should call a
+  #   on_initialize callback on the session controller instead.
   # * to not have those assigns overriden by the :assigns option of the
   #   transport plug, that option must not be used by the plug anymore, and just
   #   forwared to the server implementation. The server would initialize with
   #   that as the default assigns (+ gen_mcp_session_id)
-  # * the session controller can send notifications to the channel like list
-  #   changed (for tools, resources, etc), resource updated, etc.
+  # * the session controller SHOULD NOT send notifications to the channel for
+  #   list changedlike list changed (for tools, resources, etc), but rather
+  #   return actions such as [:refresh_tools, :refresh_all]. This would make the
+  #   Suite server recompute extensions to get new tools/repos lists and send
+  #   the notification itself.
+  # * the session controller should send the resources updated notifications
+  #   itself.
 
   IO.warn("@todo initialize tools after extensions so we get channel assigns to select tools")
 
@@ -62,7 +72,8 @@ defmodule GenMCP.Suite do
                       server_title: [type: :string],
                       tools: @provider_type,
                       resources: @provider_type,
-                      prompts: @provider_type
+                      prompts: @provider_type,
+                      extensions: @provider_type
                     )
 
   @impl true
@@ -77,75 +88,30 @@ defmodule GenMCP.Suite do
     opts = Keyword.take(opts, keep_keys)
 
     case NimbleOptions.validate(opts, @init_opts_schema) do
-      {:ok, valid_opts} -> do_init(session_id, valid_opts)
+      {:ok, valid_opts} -> {:ok, {:__init__, session_id, valid_opts}}
       {:error, _} = err -> err
     end
   end
 
-  defp do_init(session_id, opts) do
-    # For tools and resources we keep a list of names/prefixes to preserve the
-    # original order given in the options. This is especially useful for
-    # resources where prefixes can overlap.
-    #
-    # TODO document that order matters for resources.
-
-    tools =
-      opts
-      |> Keyword.get(:tools, [])
-      |> Enum.map(&Tool.expand/1)
-
-    tool_names = Enum.map(tools, & &1.name)
-    tools_map = Map.new(tools, fn %{name: name} = tool -> {name, tool} end)
-
-    resources =
-      opts
-      |> Keyword.get(:resources, [])
-      |> Enum.map(&ResourceRepo.expand/1)
-
-    resource_prefixes = Enum.map(resources, & &1.prefix)
-    resource_repos = Map.new(resources, fn %{prefix: prefix} = repo -> {prefix, repo} end)
-
-    prompts =
-      opts
-      |> Keyword.get(:prompts, [])
-      |> Enum.map(&PromptRepo.expand/1)
-
-    prompt_prefixes = Enum.map(prompts, & &1.prefix)
-    prompt_repos = Map.new(prompts, fn %{prefix: prefix} = repo -> {prefix, repo} end)
-
-    {:ok,
-     %State{
-       session_id: session_id,
-       status: :starting,
-       server_info: build_server_info(opts),
-       tool_names: tool_names,
-       tools_map: tools_map,
-       resource_prefixes: resource_prefixes,
-       resource_repos: resource_repos,
-       prompt_prefixes: prompt_prefixes,
-       prompt_repos: prompt_repos,
-       token_key: random_string(64),
-       trackers: empty_trackers(),
-       default_assigns: %{}
-     }}
-  end
-
   # IO warn return capabilities depending on map sizes
   @impl true
-  def handle_request(%MCP.InitializeRequest{} = req, chan_info, %{status: :starting} = state) do
-    case check_protocol_version(req) do
-      :ok ->
-        init_result =
-          MCP.intialize_result(
-            capabilities: MCP.capabilities(tools: true, resources: true, prompts: true),
-            server_info: MCP.server_info(name: "Mock Server", version: "foo", title: "stuff")
-          )
+  def handle_request(
+        %MCP.InitializeRequest{} = req,
+        chan_info,
+        {:__init__, session_id, opts} = init_state
+      ) do
+    with :ok <- check_protocol_version(req),
+         {:ok, state} <- initialize(req, chan_info, session_id, opts) do
+      init_result =
+        MCP.intialize_result(
+          capabilities: MCP.capabilities(tools: true, resources: true, prompts: true),
+          server_info: MCP.server_info(name: "Mock Server", version: "foo", title: "stuff")
+        )
 
-        state = %{state | status: :server_initialized, default_assigns: elem(chan_info, 3)}
-        {:reply, {:result, init_result}, state}
-
+      {:reply, {:result, init_result}, state}
+    else
       {:error, reason} = err ->
-        {:stop, {:shutdown, {:init_failure, reason}}, err, state}
+        {:stop, {:shutdown, {:init_failure, reason}}, err, init_state}
     end
   end
 
@@ -169,7 +135,7 @@ defmodule GenMCP.Suite do
   # Also, this is much more simple as we do not have to deal with http requests
   # delays changing order of delivery and do not have to buffer requests until
   # the client notification is received.
-  def handle_request(_req, _, %{status: status} = state) when status in [:starting] do
+  def handle_request(_req, _, {:__init__, _, _} = state) do
     {:error, :not_initialized, state}
   end
 
@@ -337,7 +303,13 @@ defmodule GenMCP.Suite do
 
   @impl true
   def handle_notification(%MCP.InitializedNotification{}, state) do
-    {:noreply, %{state | status: :client_initialized}}
+    capabilities =
+      case state.client_capabilities do
+        %{__init: real_capas} -> real_capas
+        already_swapped -> already_swapped
+      end
+
+    {:noreply, %{state | client_capabilities: capabilities}}
   end
 
   @impl true
@@ -425,6 +397,108 @@ defmodule GenMCP.Suite do
 
         {:ok, state}
     end
+  end
+
+  defp initialize(init_req, chan_info, session_id, opts) do
+    # For tools and resources we keep a list of names/prefixes to preserve the
+    # original order given in the options. This is especially useful for
+    # resources where prefixes can overlap.
+    #
+    # TODO document that order matters for resources.
+
+    %{
+      params: %{
+        # Client capabilities must not be enabled before we receive the client
+        # initialized notification. We keep them under an __init key and swap the
+        # result when we get that notification. We do not provide a struct because.
+        #
+        # Client capabilities are not used yet anyway.
+        capabilities: %MCP.ClientCapabilities{} = real_client_capabilities
+      }
+    } = init_req
+
+    client_capabilities = %{__init: real_client_capabilities}
+
+    # For now we keep assigns from the initialize request. This is bad since
+    # they are nothing special. We should implement the SessionController stuff.
+    default_assigns = elem(chan_info, 3)
+
+    self_extension =
+      opts
+      |> Keyword.take([:tools, :resources, :prompts])
+      |> __MODULE__.SelfExtension.new()
+
+    extensions = Keyword.get(opts, :extensions, [])
+
+    extensions = [self_extension | extensions]
+    extensions = Enum.map(extensions, &Extension.expand/1)
+
+    state = %State{
+      session_id: session_id,
+      client_capabilities: client_capabilities,
+      extensions: extensions,
+      server_info: build_server_info(opts),
+      token_key: random_string(64),
+      trackers: empty_trackers(),
+      default_assigns: default_assigns,
+
+      # Empty before first extensions call
+
+      tool_names: [],
+      tools_map: %{},
+      resource_prefixes: [],
+      resource_repos: %{},
+      prompt_prefixes: [],
+      prompt_repos: %{}
+    }
+
+    ext_channel = build_channel(chan_info, init_req, state)
+    state = refresh_extensions(state, ext_channel, :all)
+
+    {:ok, state}
+  end
+
+  defp refresh_extensions(state, channel, :all) do
+    state
+    |> refresh_extensions(channel, :tools)
+    |> refresh_extensions(channel, :resources)
+    |> refresh_extensions(channel, :prompts)
+  end
+
+  defp refresh_extensions(state, channel, :tools) do
+    tools =
+      state.extensions
+      |> Enum.flat_map(&Extension.tools(&1, channel))
+      |> Enum.map(&Tool.expand/1)
+
+    tool_names = Enum.map(tools, & &1.name)
+    tools_map = Map.new(tools, fn %{name: name} = tool -> {name, tool} end)
+
+    %{state | tool_names: tool_names, tools_map: tools_map}
+  end
+
+  defp refresh_extensions(state, channel, :resources) do
+    resources =
+      state.extensions
+      |> Enum.flat_map(&Extension.resources(&1, channel))
+      |> Enum.map(&ResourceRepo.expand/1)
+
+    resource_prefixes = Enum.map(resources, & &1.prefix)
+    resource_repos = Map.new(resources, fn %{prefix: prefix} = repo -> {prefix, repo} end)
+
+    %{state | resource_prefixes: resource_prefixes, resource_repos: resource_repos}
+  end
+
+  defp refresh_extensions(state, channel, :prompts) do
+    prompts =
+      state.extensions
+      |> Enum.flat_map(&Extension.prompts(&1, channel))
+      |> Enum.map(&PromptRepo.expand/1)
+
+    prompt_prefixes = Enum.map(prompts, & &1.prefix)
+    prompt_repos = Map.new(prompts, fn %{prefix: prefix} = repo -> {prefix, repo} end)
+
+    %{state | prompt_prefixes: prompt_prefixes, prompt_repos: prompt_repos}
   end
 
   defp build_server_info(init_opts) do

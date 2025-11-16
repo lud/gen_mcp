@@ -147,7 +147,7 @@ defmodule GenMCP.MCP do
     {[content_block(elem)], {structured_content, error_or_nil?}}
   end
 
-  defp flat_map_reduce_tool_result(other, {structured_content, error_or_nil?}) do
+  defp flat_map_reduce_tool_result(other, _) do
     raise ArgumentError, "unsupported tool result content definition: #{inspect(other)}"
   end
 
