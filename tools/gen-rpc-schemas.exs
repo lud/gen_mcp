@@ -169,7 +169,7 @@ defmodule Generator do
         []
 
       :AudioContent ->
-        :skip
+        [set_default_resource_type: true]
 
       :BaseMetadata ->
         :skip
@@ -205,7 +205,7 @@ defmodule Generator do
         :skip
 
       :ContentBlock ->
-        :skip
+        []
 
       :CreateMessageRequest ->
         :skip
@@ -223,7 +223,7 @@ defmodule Generator do
         :skip
 
       :EmbeddedResource ->
-        :skip
+        [set_default_resource_type: true]
 
       :EmptyResult ->
         :skip
@@ -235,7 +235,7 @@ defmodule Generator do
         []
 
       :ImageContent ->
-        :skip
+        [set_default_resource_type: true]
 
       :Implementation ->
         []
@@ -313,10 +313,10 @@ defmodule Generator do
         []
 
       :Prompt ->
-        :skip
+        []
 
       :PromptArgument ->
-        :skip
+        []
 
       :PromptListChangedNotification ->
         :skip
@@ -337,13 +337,13 @@ defmodule Generator do
         []
 
       :Resource ->
-        :skip
+        []
 
       :ResourceContents ->
         :skip
 
       :ResourceLink ->
-        :skip
+        [set_default_resource_type: true]
 
       :ResourceListChangedNotification ->
         :skip
@@ -358,7 +358,7 @@ defmodule Generator do
         :skip
 
       :Result ->
-        :skip
+        []
 
       :Role ->
         []
@@ -388,7 +388,7 @@ defmodule Generator do
         :skip
 
       :TextContent ->
-        []
+        [set_default_resource_type: true]
 
       :TextResourceContents ->
         []
@@ -397,7 +397,7 @@ defmodule Generator do
         []
 
       :ToolAnnotations ->
-        :skip
+        []
 
       :ToolListChangedNotification ->
         :skip
@@ -420,6 +420,10 @@ defmodule Generator do
     true == Keyword.get(module_config(name), :set_default_method)
   end
 
+  defp set_default_resource_type?(name) do
+    true == Keyword.get(module_config(name), :set_default_resource_type)
+  end
+
   defp filter_schemas(defs) do
     Enum.reject(defs, fn {name, _} ->
       skip_definition?(name)
@@ -432,7 +436,8 @@ defmodule Generator do
         schema
         |> enforce_id(name)
         |> enforce_request_meta(name)
-        |> enforce_method(name)
+        |> method_const_as_default(name)
+        |> resource_type_as_default(name)
 
       {name, schema}
     end)
@@ -597,7 +602,7 @@ defmodule Generator do
     end
   end
 
-  defp enforce_method(schema, name) do
+  defp method_const_as_default(schema, name) do
     if set_default_method?(name) do
       # This is done so we do not have to specify the method when creating a struct
       schema =
@@ -605,11 +610,32 @@ defmodule Generator do
           Map.put(subschema, :default, method)
         end)
 
-      # As we set is as default we will not require it anymorel
+      # As we set is as default we will not require it anymore
       schema =
         update_in(schema.required, fn required ->
           true = "method" in required
           required -- ["method"]
+        end)
+
+      schema
+    else
+      schema
+    end
+  end
+
+  defp resource_type_as_default(schema, name) do
+    if set_default_resource_type?(name) do
+      # This is done so we do not have to specify the type when creating a struct
+      schema =
+        update_in(schema.properties.type, fn %{const: type} = subschema ->
+          Map.put(subschema, :default, type)
+        end)
+
+      # As we set is as default we will not require it anymore
+      schema =
+        update_in(schema.required, fn required ->
+          true = "type" in required
+          required -- ["type"]
         end)
 
       schema

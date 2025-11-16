@@ -1294,14 +1294,14 @@ defmodule GenMCP.StreamableHttpTest do
     test "delete session terminates the session" do
       session_id = init_session()
 
-      assert is_pid(GenMCP.Mux.whereis(session_id))
+      ref = Process.monitor(GenMCP.Mux.whereis(session_id))
 
       session_id
       |> client()
       |> Req.delete!()
       |> expect_status(204)
 
-      assert nil == GenMCP.Mux.whereis(session_id)
+      assert_receive {:DOWN, ^ref, :process, _, {:shutdown, :mcp_stop}}
     end
 
     test "delete unknown session is 404" do

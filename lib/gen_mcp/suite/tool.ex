@@ -23,7 +23,8 @@ defmodule GenMCP.Suite.Tool do
   @type tag :: term
   @type call_result ::
           {:result, result, Channel.t()}
-          | {:request, {tag, term}, Channel.t()}
+          # TODO allow elicitation/sampling request
+          # | {:request, {tag, term}, Channel.t()}
           | {:async, {tag, reference() | Task.t()}, Channel.t()}
           | {:error, String.t(), Channel.t()}
 

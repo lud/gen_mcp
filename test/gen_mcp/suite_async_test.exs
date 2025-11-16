@@ -88,7 +88,7 @@ defmodule GenMCP.SuiteAsyncTest do
       # and the result should be delivered to the client process
       assert_receive {:"$gen_mcp", :result, result}
 
-      assert %MCP.CallToolResult{content: [%{type: :text, text: "Result: 42"}]} = result
+      assert %MCP.CallToolResult{content: [%{type: "text", text: "Result: 42"}]} = result
     end
 
     test "tool returns async with Task struct instead of ref" do
@@ -276,7 +276,7 @@ defmodule GenMCP.SuiteAsyncTest do
         {:async, {:failing_tag, task}, chan}
       end)
       |> expect(:continue, fn {:failing_tag, {:error, :intentional_failure}}, chan, _arg ->
-        {:result, MCP.call_tool_result(text: "Handled failure", is_error: true), chan}
+        {:result, MCP.call_tool_result(text: "Handled failure", error: true), chan}
       end)
 
       state = init_session(tools: [{ToolMock, :failing_tool}])

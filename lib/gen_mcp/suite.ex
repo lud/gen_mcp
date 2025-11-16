@@ -109,13 +109,14 @@ defmodule GenMCP.Suite do
      }}
   end
 
+  # IO warn return capabilities depending on map sizes
   @impl true
   def handle_request(%MCP.InitializeRequest{} = req, chan_info, %{status: :starting} = state) do
     case check_protocol_version(req) do
       :ok ->
         init_result =
           MCP.intialize_result(
-            capabilities: MCP.capabilities(tools: true, resources: true),
+            capabilities: MCP.capabilities(tools: true, resources: true, prompts: true),
             server_info: MCP.server_info(name: "Mock Server", version: "foo", title: "stuff")
           )
 

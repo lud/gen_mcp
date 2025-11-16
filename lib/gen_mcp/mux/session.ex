@@ -25,7 +25,6 @@ defmodule GenMCP.Mux.Session do
     2
   end
 
-  IO.warn("@todo test init failure")
   @impl true
   def init(opts) do
     {server, opts} = Keyword.pop(opts, :server, GenMCP.Suite)

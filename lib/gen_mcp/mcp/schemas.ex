@@ -42,15 +42,19 @@ defmodule GenMCP.MCP.ModMap do
       "$schema": "http://json-schema.org/draft-07/schema#",
       definitions: %{
         "Annotations" => GenMCP.MCP.Annotations,
+        "AudioContent" => GenMCP.MCP.AudioContent,
         "BlobResourceContents" => GenMCP.MCP.BlobResourceContents,
         "BooleanSchema" => GenMCP.MCP.BooleanSchema,
         "CallToolRequest" => GenMCP.MCP.CallToolRequest,
         "CallToolRequestParams" => GenMCP.MCP.CallToolRequestParams,
         "CallToolResult" => GenMCP.MCP.CallToolResult,
         "ClientCapabilities" => GenMCP.MCP.ClientCapabilities,
+        "ContentBlock" => GenMCP.MCP.ContentBlock,
+        "EmbeddedResource" => GenMCP.MCP.EmbeddedResource,
         "GetPromptRequest" => GenMCP.MCP.GetPromptRequest,
         "GetPromptRequestParams" => GenMCP.MCP.GetPromptRequestParams,
         "GetPromptResult" => GenMCP.MCP.GetPromptResult,
+        "ImageContent" => GenMCP.MCP.ImageContent,
         "Implementation" => GenMCP.MCP.Implementation,
         "InitializeRequest" => GenMCP.MCP.InitializeRequest,
         "InitializeRequestParams" => GenMCP.MCP.InitializeRequestParams,
@@ -71,18 +75,24 @@ defmodule GenMCP.MCP.ModMap do
         "PingRequest" => GenMCP.MCP.PingRequest,
         "ProgressNotification" => GenMCP.MCP.ProgressNotification,
         "ProgressToken" => GenMCP.MCP.ProgressToken,
+        "Prompt" => GenMCP.MCP.Prompt,
+        "PromptArgument" => GenMCP.MCP.PromptArgument,
         "PromptMessage" => GenMCP.MCP.PromptMessage,
         "ReadResourceRequest" => GenMCP.MCP.ReadResourceRequest,
         "ReadResourceRequestParams" => GenMCP.MCP.ReadResourceRequestParams,
         "ReadResourceResult" => GenMCP.MCP.ReadResourceResult,
         "RequestId" => GenMCP.MCP.RequestId,
+        "Resource" => GenMCP.MCP.Resource,
+        "ResourceLink" => GenMCP.MCP.ResourceLink,
         "ResourceTemplate" => GenMCP.MCP.ResourceTemplate,
+        "Result" => GenMCP.MCP.Result,
         "Role" => GenMCP.MCP.Role,
         "ServerCapabilities" => GenMCP.MCP.ServerCapabilities,
         "SubscribeRequest" => GenMCP.MCP.SubscribeRequest,
         "TextContent" => GenMCP.MCP.TextContent,
         "TextResourceContents" => GenMCP.MCP.TextResourceContents,
         "Tool" => GenMCP.MCP.Tool,
+        "ToolAnnotations" => GenMCP.MCP.ToolAnnotations,
         "UnsubscribeRequest" => GenMCP.MCP.UnsubscribeRequest
       }
     }
@@ -135,6 +145,33 @@ defmodule GenMCP.MCP.Annotations do
       }
     },
     title: "Annotations",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.AudioContent do
+  use JSV.Schema
+  JsonDerive.auto()
+
+  defschema %{
+    description: "Audio provided to or from an LLM.",
+    properties: %{
+      _meta: GenMCP.MCP.Meta,
+      annotations: GenMCP.MCP.Annotations,
+      data: string_of("byte", description: "The base64-encoded audio data."),
+      mimeType:
+        string(
+          description: ~SD"""
+          The MIME type of the audio. Different providers may support different
+          audio types.
+          """
+        ),
+      type: const("audio", default: "audio")
+    },
+    required: [:data, :mimeType],
+    title: "AudioContent",
     type: "object"
   }
 
@@ -332,6 +369,50 @@ defmodule GenMCP.MCP.ClientCapabilities do
   @type t :: %__MODULE__{}
 end
 
+defmodule GenMCP.MCP.ContentBlock do
+  use JSV.Schema
+
+  def json_schema do
+    %{
+      anyOf: [
+        GenMCP.MCP.TextContent,
+        GenMCP.MCP.ImageContent,
+        GenMCP.MCP.AudioContent,
+        GenMCP.MCP.ResourceLink,
+        GenMCP.MCP.EmbeddedResource
+      ]
+    }
+  end
+end
+
+defmodule GenMCP.MCP.EmbeddedResource do
+  use JSV.Schema
+  JsonDerive.auto()
+
+  defschema %{
+    description: ~SD"""
+    The contents of a resource, embedded into a prompt or tool call
+    result.
+
+    It is up to the client how best to render embedded resources for the
+    benefit of the LLM and/or the user.
+    """,
+    properties: %{
+      _meta: GenMCP.MCP.Meta,
+      annotations: GenMCP.MCP.Annotations,
+      resource: %{
+        anyOf: [GenMCP.MCP.TextResourceContents, GenMCP.MCP.BlobResourceContents]
+      },
+      type: const("resource", default: "resource")
+    },
+    required: [:resource],
+    title: "EmbeddedResource",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
 defmodule GenMCP.MCP.GetPromptRequest do
   use JSV.Schema
   JsonDerive.auto()
@@ -390,6 +471,33 @@ defmodule GenMCP.MCP.GetPromptResult do
     },
     required: [:messages],
     title: "GetPromptResult",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.ImageContent do
+  use JSV.Schema
+  JsonDerive.auto()
+
+  defschema %{
+    description: "An image provided to or from an LLM.",
+    properties: %{
+      _meta: GenMCP.MCP.Meta,
+      annotations: GenMCP.MCP.Annotations,
+      data: string_of("byte", description: "The base64-encoded image data."),
+      mimeType:
+        string(
+          description: ~SD"""
+          The MIME type of the image. Different providers may support different
+          image types.
+          """
+        ),
+      type: const("image", default: "image")
+    },
+    required: [:data, :mimeType],
+    title: "ImageContent",
     type: "object"
   }
 
@@ -959,6 +1067,94 @@ defmodule GenMCP.MCP.ProgressToken do
   end
 end
 
+defmodule GenMCP.MCP.Prompt do
+  use JSV.Schema
+  JsonDerive.auto()
+
+  defschema %{
+    description: ~SD"""
+    A prompt or prompt template that the server offers.
+    """,
+    properties: %{
+      _meta: GenMCP.MCP.Meta,
+      arguments: %{
+        description: ~SD"""
+        A list of arguments to use for templating the prompt.
+        """,
+        items: GenMCP.MCP.PromptArgument,
+        type: "array"
+      },
+      description:
+        string(
+          description: ~SD"""
+          An optional description of what this prompt provides
+          """
+        ),
+      name:
+        string(
+          description: ~SD"""
+          Intended for programmatic or logical use, but used as a display name
+          in past specs or fallback (if title isn't present).
+          """
+        ),
+      title:
+        string(
+          description: ~SD"""
+          Intended for UI and end-user contexts — optimized to be human-readable
+          and easily understood, even by those unfamiliar with domain-specific
+          terminology.
+
+          If not provided, the name should be used for display (except for Tool,
+          where `annotations.title` should be given precedence over using
+          `name`, if present).
+          """
+        )
+    },
+    required: [:name],
+    title: "Prompt",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.PromptArgument do
+  use JSV.Schema
+  JsonDerive.auto()
+
+  defschema %{
+    description: "Describes an argument that a prompt can accept.",
+    properties: %{
+      description: string(description: "A human-readable description of the argument."),
+      name:
+        string(
+          description: ~SD"""
+          Intended for programmatic or logical use, but used as a display name
+          in past specs or fallback (if title isn't present).
+          """
+        ),
+      required: boolean(description: "Whether this argument must be provided."),
+      title:
+        string(
+          description: ~SD"""
+          Intended for UI and end-user contexts — optimized to be human-readable
+          and easily understood, even by those unfamiliar with domain-specific
+          terminology.
+
+          If not provided, the name should be used for display (except for Tool,
+          where `annotations.title` should be given precedence over using
+          `name`, if present).
+          """
+        )
+    },
+    required: [:name],
+    title: "PromptArgument",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
 defmodule GenMCP.MCP.PromptMessage do
   use JSV.Schema
   JsonDerive.auto()
@@ -1057,6 +1253,131 @@ defmodule GenMCP.MCP.RequestId do
   end
 end
 
+defmodule GenMCP.MCP.Resource do
+  use JSV.Schema
+  JsonDerive.auto()
+
+  defschema %{
+    description: ~SD"""
+    A known resource that the server is capable of reading.
+    """,
+    properties: %{
+      _meta: GenMCP.MCP.Meta,
+      annotations: GenMCP.MCP.Annotations,
+      description:
+        string(
+          description: ~SD"""
+          A description of what this resource represents.
+
+          This can be used by clients to improve the LLM's understanding of
+          available resources. It can be thought of like a "hint" to the model.
+          """
+        ),
+      mimeType: string(description: "The MIME type of this resource, if known."),
+      name:
+        string(
+          description: ~SD"""
+          Intended for programmatic or logical use, but used as a display name
+          in past specs or fallback (if title isn't present).
+          """
+        ),
+      size:
+        integer(
+          description: ~SD"""
+          The size of the raw resource content, in bytes (i.e., before base64
+          encoding or any tokenization), if known.
+
+          This can be used by Hosts to display file sizes and estimate context
+          window usage.
+          """
+        ),
+      title:
+        string(
+          description: ~SD"""
+          Intended for UI and end-user contexts — optimized to be human-readable
+          and easily understood, even by those unfamiliar with domain-specific
+          terminology.
+
+          If not provided, the name should be used for display (except for Tool,
+          where `annotations.title` should be given precedence over using
+          `name`, if present).
+          """
+        ),
+      uri: uri(description: "The URI of this resource.")
+    },
+    required: [:name, :uri],
+    title: "Resource",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.ResourceLink do
+  use JSV.Schema
+  JsonDerive.auto()
+
+  defschema %{
+    description: ~SD"""
+    A resource that the server is capable of reading, included in a prompt
+    or tool call result.
+
+    Note: resource links returned by tools are not guaranteed to appear in
+    the results of `resources/list` requests.
+    """,
+    properties: %{
+      _meta: GenMCP.MCP.Meta,
+      annotations: GenMCP.MCP.Annotations,
+      description:
+        string(
+          description: ~SD"""
+          A description of what this resource represents.
+
+          This can be used by clients to improve the LLM's understanding of
+          available resources. It can be thought of like a "hint" to the model.
+          """
+        ),
+      mimeType: string(description: "The MIME type of this resource, if known."),
+      name:
+        string(
+          description: ~SD"""
+          Intended for programmatic or logical use, but used as a display name
+          in past specs or fallback (if title isn't present).
+          """
+        ),
+      size:
+        integer(
+          description: ~SD"""
+          The size of the raw resource content, in bytes (i.e., before base64
+          encoding or any tokenization), if known.
+
+          This can be used by Hosts to display file sizes and estimate context
+          window usage.
+          """
+        ),
+      title:
+        string(
+          description: ~SD"""
+          Intended for UI and end-user contexts — optimized to be human-readable
+          and easily understood, even by those unfamiliar with domain-specific
+          terminology.
+
+          If not provided, the name should be used for display (except for Tool,
+          where `annotations.title` should be given precedence over using
+          `name`, if present).
+          """
+        ),
+      type: const("resource_link", default: "resource_link"),
+      uri: uri(description: "The URI of this resource.")
+    },
+    required: [:name, :uri],
+    title: "ResourceLink",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
 defmodule GenMCP.MCP.ResourceTemplate do
   use JSV.Schema
   JsonDerive.auto()
@@ -1114,6 +1435,20 @@ defmodule GenMCP.MCP.ResourceTemplate do
     },
     required: [:name, :uriTemplate],
     title: "ResourceTemplate",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.Result do
+  use JSV.Schema
+  JsonDerive.auto()
+
+  defschema %{
+    additionalProperties: %{},
+    properties: %{_meta: GenMCP.MCP.Meta},
+    title: "Result",
     type: "object"
   }
 
@@ -1266,9 +1601,9 @@ defmodule GenMCP.MCP.TextContent do
       _meta: GenMCP.MCP.Meta,
       annotations: GenMCP.MCP.Annotations,
       text: string(description: "The text content of the message."),
-      type: const("text")
+      type: const("text", default: "text")
     },
-    required: [:text, :type],
+    required: [:text],
     title: "TextContent",
     type: "object"
   }
@@ -1380,6 +1715,72 @@ defmodule GenMCP.MCP.Tool do
     },
     required: [:inputSchema, :name],
     title: "Tool",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.ToolAnnotations do
+  use JSV.Schema
+  JsonDerive.auto()
+
+  defschema %{
+    description: ~SD"""
+    Additional properties describing a Tool to clients.
+
+    NOTE: all properties in ToolAnnotations are **hints**. They are not
+    guaranteed to provide a faithful description of tool behavior
+    (including descriptive properties like `title`).
+
+    Clients should never make tool use decisions based on ToolAnnotations
+    received from untrusted servers.
+    """,
+    properties: %{
+      destructiveHint:
+        boolean(
+          description: ~SD"""
+          If true, the tool may perform destructive updates to its environment.
+          If false, the tool performs only additive updates.
+
+          (This property is meaningful only when `readOnlyHint == false`)
+
+          Default: true
+          """
+        ),
+      idempotentHint:
+        boolean(
+          description: ~SD"""
+          If true, calling the tool repeatedly with the same arguments will have
+          no additional effect on the its environment.
+
+          (This property is meaningful only when `readOnlyHint == false`)
+
+          Default: false
+          """
+        ),
+      openWorldHint:
+        boolean(
+          description: ~SD"""
+          If true, this tool may interact with an "open world" of external
+          entities. If false, the tool's domain of interaction is closed. For
+          example, the world of a web search tool is open, whereas that of a
+          memory tool is not.
+
+          Default: true
+          """
+        ),
+      readOnlyHint:
+        boolean(
+          description: ~SD"""
+          If true, the tool does not modify its environment.
+
+          Default: false
+          """
+        ),
+      title: string(description: "A human-readable title for the tool.")
+    },
+    title: "ToolAnnotations",
     type: "object"
   }
 
