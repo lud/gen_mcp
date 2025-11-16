@@ -126,6 +126,19 @@ defmodule GenMCP.Suite.PromptRepoTest do
                PromptRepo.get_prompt(repo, "test", %{}, channel)
     end
 
+    test "can return invalid params" do
+      repo = %{mod: PromptRepoMock, arg: []}
+
+      expect(PromptRepoMock, :get, fn "test", %{}, _channel, [] ->
+        {:error, {:invalid_params, "some message"}}
+      end)
+
+      channel = build_channel()
+
+      assert {:error, {:invalid_params, "some message"}} =
+               PromptRepo.get_prompt(repo, "test", %{}, channel)
+    end
+
     test "exits on invalid return value" do
       repo = %{mod: PromptRepoMock, arg: []}
 

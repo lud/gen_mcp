@@ -30,7 +30,8 @@ defmodule GenMCP.Suite.PromptRepo do
               {[prompt_item], next_cursor :: term | nil}
 
   @doc """
-  Returns the prompt result with contents. Arguments are not automatically validated.
+  Returns the prompt result with contents. Arguments are not automatically
+  validated.
   """
   @callback get(name :: String.t(), arguments :: %{binary => term}, Channel.t(), arg) ::
               {:ok, MCP.GetPromptResult.t()} | {:error, :not_found | String.t()}
@@ -61,22 +62,12 @@ defmodule GenMCP.Suite.PromptRepo do
     descriptor
   end
 
-  IO.warn("""
-  @todo offer a helper that validates arguments given a map of arguments and a
-  list of ::prompt_argument
-
-  """)
-
-  IO.warn("""
-  @todo document that the arguments are not validated by default
-  @todo accept an invalid_params response
-  """)
-
   def get_prompt(repo, name, arguments, channel) do
     case repo.mod.get(name, arguments, channel, repo.arg) do
       {:ok, %MCP.GetPromptResult{}} = ok -> ok
       {:error, :not_found} -> {:error, {:prompt_not_found, name}}
       {:error, message} when is_binary(message) -> {:error, message}
+      {:error, {:invalid_params, _reason}} = err -> err
       other -> exit({:bad_return_value, other})
     end
   end

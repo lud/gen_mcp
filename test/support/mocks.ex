@@ -2,12 +2,11 @@ alias GenMCP.Suite.Extension
 alias GenMCP.Suite.PromptRepo
 alias GenMCP.Suite.ResourceRepo
 alias GenMCP.Suite.Tool
-alias GenMCP.Server
 
 #
 # -- Server -------------------------------------------------------------------
 
-Mox.defmock(GenMCP.Support.ServerMock, for: Server)
+Mox.defmock(GenMCP.Support.ServerMock, for: GenMCP)
 
 #
 # -- Extensions ---------------------------------------------------------------

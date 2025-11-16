@@ -8,7 +8,7 @@ defmodule GenMCP.Suite do
   require Logger
   require Record
 
-  @behaviour GenMCP.Server
+  @behaviour GenMCP
 
   @supported_protocol_versions GenMCP.supported_protocol_versions()
 

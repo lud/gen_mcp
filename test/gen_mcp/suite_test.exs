@@ -343,6 +343,31 @@ defmodule GenMCP.SuiteTest do
       assert {500, %{code: -32603, message: "Something went wrong in the tool"}} =
                check_error(err)
     end
+
+    test "tool returns {:invalid_params, _} string from call callback" do
+      ToolMock
+      |> stub(:info, fn :name, :error_tool -> "ErrorTool" end)
+      |> expect(:call, fn _req, chan, _arg ->
+        {:error, {:invalid_params, :foo}, chan}
+      end)
+
+      state = init_session(tools: [{ToolMock, :error_tool}])
+
+      tool_call_req = %MCP.CallToolRequest{
+        id: 5,
+        method: "tools/call",
+        params: %MCP.CallToolRequestParams{
+          name: "ErrorTool",
+          arguments: %{}
+        }
+      }
+
+      assert {:reply, {:error, {:invalid_params, :foo}} = err, _} =
+               Suite.handle_request(tool_call_req, chan_info(), state)
+
+      assert {400, %{code: -32602, message: "Invalid Parameters"}} =
+               check_error(err)
+    end
   end
 
   describe "listing resources" do
@@ -1314,12 +1339,6 @@ defmodule GenMCP.SuiteTest do
                check_error({:prompt_not_found, "unknown"})
     end
 
-    IO.warn("@todo implement required params error and expect HTTP error 400")
-
-    IO.warn(
-      "@todo test we can return invalid params from the call as well, to skip validate_request"
-    )
-
     test "returns error for validation failure" do
       PromptRepoMock
       |> expect(:prefix, fn :repo1 -> "analysis" end)
@@ -1330,6 +1349,27 @@ defmodule GenMCP.SuiteTest do
       state = init_session(prompts: [{PromptRepoMock, :repo1}])
 
       assert {:reply, {:error, "Missing required argument: dataset"}, _} =
+               Suite.handle_request(
+                 %MCP.GetPromptRequest{
+                   params: %{name: "analysis"}
+                 },
+                 chan_info(),
+                 state
+               )
+
+      assert {500, %{code: -32603}} = check_error("Missing required argument: dataset")
+    end
+
+    test "returns :invalid_params from call" do
+      PromptRepoMock
+      |> expect(:prefix, fn :repo1 -> "analysis" end)
+      |> expect(:get, fn "analysis", _, _channel, :repo1 ->
+        {:error, {:invalid_params, :foo}}
+      end)
+
+      state = init_session(prompts: [{PromptRepoMock, :repo1}])
+
+      assert {:reply, {:error, {:invalid_params, :foo}}, _} =
                Suite.handle_request(
                  %MCP.GetPromptRequest{
                    params: %{name: "analysis"}
