@@ -102,7 +102,7 @@ defmodule GenMCP.Suite do
          {:ok, state} <- initialize(req, chan_info, session_id, opts) do
       init_result =
         MCP.intialize_result(
-          capabilities: MCP.capabilities(tools: true, resources: true, prompts: true),
+          capabilities: MCP.capabilities(capabilities(state)),
           server_info: MCP.server_info(name: "Mock Server", version: "foo", title: "stuff")
         )
 
@@ -464,6 +464,14 @@ defmodule GenMCP.Suite do
     state = refresh_extensions(state, ext_channel, :all)
 
     {:ok, state}
+  end
+
+  defp capabilities(state) do
+    [
+      tools: map_size(state.tools_map) > 0,
+      prompts: map_size(state.prompt_repos) > 0,
+      resources: map_size(state.resource_repos) > 0
+    ]
   end
 
   defp refresh_extensions(state, channel, :all) do

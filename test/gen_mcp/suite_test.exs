@@ -19,11 +19,6 @@ defmodule GenMCP.SuiteTest do
     server_version: "0"
   ]
 
-  IO.warn("""
-  @todo we should test that capabilities for tools/resources/prompts are only
-  defined when there is at least one tool/repo
-  """)
-
   defp init_session(server_opts \\ [], init_assigns \\ %{}) do
     assert {:ok, state} = Suite.init("some-session-id", Keyword.merge(@server_info, server_opts))
 
@@ -55,6 +50,285 @@ defmodule GenMCP.SuiteTest do
              Suite.handle_notification(client_init_notif, state)
 
     state
+  end
+
+  describe "server capabilities based on enabled components" do
+    test "declares no capabilities when no tools, resources, or prompts configured" do
+      {:ok, state} = Suite.init("some-session-id", @server_info)
+
+      init_req = %MCP.InitializeRequest{
+        id: 1,
+        method: "initialize",
+        params: %MCP.InitializeRequestParams{
+          capabilities: %MCP.ClientCapabilities{},
+          clientInfo: %{name: "test", version: "1.0.0"},
+          protocolVersion: "2025-06-18"
+        }
+      }
+
+      assert {:reply, {:result, result}, _state} =
+               Suite.handle_request(init_req, chan_info(), state)
+
+      assert %MCP.InitializeResult{
+               capabilities: %MCP.ServerCapabilities{
+                 tools: nil,
+                 resources: nil,
+                 prompts: nil
+               }
+             } = result
+    end
+
+    test "declares tools capability when at least one tool in :tools option" do
+      ToolMock
+      |> stub(:info, fn :name, :test_tool -> "TestTool" end)
+      |> stub(:input_schema, fn _ -> %{type: :object} end)
+
+      {:ok, state} =
+        Suite.init(
+          "some-session-id",
+          Keyword.merge(@server_info, tools: [{ToolMock, :test_tool}])
+        )
+
+      init_req = %MCP.InitializeRequest{
+        id: 1,
+        method: "initialize",
+        params: %MCP.InitializeRequestParams{
+          capabilities: %MCP.ClientCapabilities{},
+          clientInfo: %{name: "test", version: "1.0.0"},
+          protocolVersion: "2025-06-18"
+        }
+      }
+
+      assert {:reply, {:result, result}, _state} =
+               Suite.handle_request(init_req, chan_info(), state)
+
+      assert %MCP.InitializeResult{
+               capabilities: %MCP.ServerCapabilities{
+                 tools: %{},
+                 resources: nil,
+                 prompts: nil
+               }
+             } = result
+    end
+
+    test "declares tools capability when at least one tool provided by extension" do
+      ToolMock
+      |> stub(:info, fn :name, :ext_tool -> "ExtTool" end)
+      |> stub(:input_schema, fn _ -> %{type: :object} end)
+
+      ExtensionMock
+      |> stub(:tools, fn _channel, :test_ext -> [{ToolMock, :ext_tool}] end)
+      |> stub(:resources, fn _channel, :test_ext -> [] end)
+      |> stub(:prompts, fn _channel, :test_ext -> [] end)
+
+      {:ok, state} =
+        Suite.init(
+          "some-session-id",
+          Keyword.merge(@server_info, extensions: [{ExtensionMock, :test_ext}])
+        )
+
+      init_req = %MCP.InitializeRequest{
+        id: 1,
+        method: "initialize",
+        params: %MCP.InitializeRequestParams{
+          capabilities: %MCP.ClientCapabilities{},
+          clientInfo: %{name: "test", version: "1.0.0"},
+          protocolVersion: "2025-06-18"
+        }
+      }
+
+      assert {:reply, {:result, result}, _state} =
+               Suite.handle_request(init_req, chan_info(), state)
+
+      assert %MCP.InitializeResult{
+               capabilities: %MCP.ServerCapabilities{
+                 tools: %{},
+                 resources: nil,
+                 prompts: nil
+               }
+             } = result
+    end
+
+    test "declares resources capability when at least one resource repo in :resources option" do
+      ResourceRepoMock
+      |> stub(:prefix, fn :test_repo -> "file:///" end)
+
+      {:ok, state} =
+        Suite.init(
+          "some-session-id",
+          Keyword.merge(@server_info, resources: [{ResourceRepoMock, :test_repo}])
+        )
+
+      init_req = %MCP.InitializeRequest{
+        id: 1,
+        method: "initialize",
+        params: %MCP.InitializeRequestParams{
+          capabilities: %MCP.ClientCapabilities{},
+          clientInfo: %{name: "test", version: "1.0.0"},
+          protocolVersion: "2025-06-18"
+        }
+      }
+
+      assert {:reply, {:result, result}, _state} =
+               Suite.handle_request(init_req, chan_info(), state)
+
+      assert %MCP.InitializeResult{
+               capabilities: %MCP.ServerCapabilities{
+                 tools: nil,
+                 resources: %{},
+                 prompts: nil
+               }
+             } = result
+    end
+
+    test "declares resources capability when at least one resource repo provided by extension" do
+      ResourceRepoMock
+      |> stub(:prefix, fn :ext_repo -> "file:///" end)
+
+      ExtensionMock
+      |> stub(:tools, fn _channel, :test_ext -> [] end)
+      |> stub(:resources, fn _channel, :test_ext -> [{ResourceRepoMock, :ext_repo}] end)
+      |> stub(:prompts, fn _channel, :test_ext -> [] end)
+
+      {:ok, state} =
+        Suite.init(
+          "some-session-id",
+          Keyword.merge(@server_info, extensions: [{ExtensionMock, :test_ext}])
+        )
+
+      init_req = %MCP.InitializeRequest{
+        id: 1,
+        method: "initialize",
+        params: %MCP.InitializeRequestParams{
+          capabilities: %MCP.ClientCapabilities{},
+          clientInfo: %{name: "test", version: "1.0.0"},
+          protocolVersion: "2025-06-18"
+        }
+      }
+
+      assert {:reply, {:result, result}, _state} =
+               Suite.handle_request(init_req, chan_info(), state)
+
+      assert %MCP.InitializeResult{
+               capabilities: %MCP.ServerCapabilities{
+                 tools: nil,
+                 resources: %{},
+                 prompts: nil
+               }
+             } = result
+    end
+
+    test "declares prompts capability when at least one prompt repo in :prompts option" do
+      PromptRepoMock
+      |> stub(:prefix, fn :test_repo -> "test_" end)
+
+      {:ok, state} =
+        Suite.init(
+          "some-session-id",
+          Keyword.merge(@server_info, prompts: [{PromptRepoMock, :test_repo}])
+        )
+
+      init_req = %MCP.InitializeRequest{
+        id: 1,
+        method: "initialize",
+        params: %MCP.InitializeRequestParams{
+          capabilities: %MCP.ClientCapabilities{},
+          clientInfo: %{name: "test", version: "1.0.0"},
+          protocolVersion: "2025-06-18"
+        }
+      }
+
+      assert {:reply, {:result, result}, _state} =
+               Suite.handle_request(init_req, chan_info(), state)
+
+      assert %MCP.InitializeResult{
+               capabilities: %MCP.ServerCapabilities{
+                 tools: nil,
+                 resources: nil,
+                 prompts: %{}
+               }
+             } = result
+    end
+
+    test "declares prompts capability when at least one prompt repo provided by extension" do
+      PromptRepoMock
+      |> stub(:prefix, fn :ext_repo -> "ext_" end)
+
+      ExtensionMock
+      |> stub(:tools, fn _channel, :test_ext -> [] end)
+      |> stub(:resources, fn _channel, :test_ext -> [] end)
+      |> stub(:prompts, fn _channel, :test_ext -> [{PromptRepoMock, :ext_repo}] end)
+
+      {:ok, state} =
+        Suite.init(
+          "some-session-id",
+          Keyword.merge(@server_info, extensions: [{ExtensionMock, :test_ext}])
+        )
+
+      init_req = %MCP.InitializeRequest{
+        id: 1,
+        method: "initialize",
+        params: %MCP.InitializeRequestParams{
+          capabilities: %MCP.ClientCapabilities{},
+          clientInfo: %{name: "test", version: "1.0.0"},
+          protocolVersion: "2025-06-18"
+        }
+      }
+
+      assert {:reply, {:result, result}, _state} =
+               Suite.handle_request(init_req, chan_info(), state)
+
+      assert %MCP.InitializeResult{
+               capabilities: %MCP.ServerCapabilities{
+                 tools: nil,
+                 resources: nil,
+                 prompts: %{}
+               }
+             } = result
+    end
+
+    test "declares all capabilities when tools, resources, and prompts all configured" do
+      ToolMock
+      |> stub(:info, fn :name, :test_tool -> "TestTool" end)
+      |> stub(:input_schema, fn _ -> %{type: :object} end)
+
+      ResourceRepoMock
+      |> stub(:prefix, fn :test_repo -> "file:///" end)
+
+      PromptRepoMock
+      |> stub(:prefix, fn :test_prompt -> "test_" end)
+
+      {:ok, state} =
+        Suite.init(
+          "some-session-id",
+          Keyword.merge(@server_info,
+            tools: [{ToolMock, :test_tool}],
+            resources: [{ResourceRepoMock, :test_repo}],
+            prompts: [{PromptRepoMock, :test_prompt}]
+          )
+        )
+
+      init_req = %MCP.InitializeRequest{
+        id: 1,
+        method: "initialize",
+        params: %MCP.InitializeRequestParams{
+          capabilities: %MCP.ClientCapabilities{},
+          clientInfo: %{name: "test", version: "1.0.0"},
+          protocolVersion: "2025-06-18"
+        }
+      }
+
+      assert {:reply, {:result, result}, _state} =
+               Suite.handle_request(init_req, chan_info(), state)
+
+      assert %MCP.InitializeResult{
+               capabilities: %MCP.ServerCapabilities{
+                 tools: %{},
+                 resources: %{},
+                 prompts: %{}
+               }
+             } = result
+    end
   end
 
   describe "handles initialization requests" do
