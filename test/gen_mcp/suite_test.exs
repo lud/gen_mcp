@@ -418,9 +418,11 @@ defmodule GenMCP.SuiteTest do
       }
 
       # Should return an error with :stop tuple since we're already initialized
-      assert {:stop, {:shutdown, {:init_failure, :already_initialized}},
-              {:error, :already_initialized} = err, _} =
+      assert {:stop, stop_reason, err, _} =
                Suite.handle_request(init_req, chan_info(), state)
+
+      assert {:shutdown, {:init_failure, :already_initialized}} = stop_reason
+      assert {:error, :already_initialized} = err
 
       assert {400, %{code: -32602, message: "Session is already initialized"}} = check_error(err)
     end
