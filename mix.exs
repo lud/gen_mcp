@@ -74,6 +74,7 @@ defmodule GenMCP.MixProject do
      ref: "2025-06-18",
      only: [:dev, :test],
      compile: false,
+     runtime: false,
      app: false}
   end
 

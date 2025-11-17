@@ -28,6 +28,7 @@ defmodule GenMCP.Cluster.NodeSyncTest do
     # Start a remote node
     {:ok, cluster} =
       LocalCluster.start_link(1,
+        applications: [:gen_mcp],
         environment: [
           gen_mcp: [
             {GenMCP.TestWeb.Endpoint, server: true, http: [port: 5003], url: [port: 5003]}
