@@ -687,6 +687,34 @@ defmodule GenMCP.StreamableHttpTest do
     assert "" = resp.body
   end
 
+  test "handles roots list changed notification without error" do
+    session_id = init_session()
+
+    expect(ServerMock, :handle_notification, fn notif, state ->
+      assert %MCP.RootsListChangedNotification{
+               method: "notifications/roots/list_changed",
+               params: %{"_meta" => %{}}
+             } = notif
+
+      {:noreply, state}
+    end)
+
+    resp =
+      session_id
+      |> client()
+      |> post_message(%{
+        jsonrpc: "2.0",
+        method: "notifications/roots/list_changed",
+        params: %{
+          _meta: %{}
+        }
+      })
+      |> expect_status(202)
+
+    # Notification should return empty body
+    assert "" = resp.body
+  end
+
   IO.warn("@todo add a test to verify that tool call isError result is properly encoded")
 
   IO.warn(

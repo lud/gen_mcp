@@ -89,6 +89,7 @@ defmodule GenMCP.MCP.ModMap do
         "ResourceTemplate" => GenMCP.MCP.ResourceTemplate,
         "Result" => GenMCP.MCP.Result,
         "Role" => GenMCP.MCP.Role,
+        "RootsListChangedNotification" => GenMCP.MCP.RootsListChangedNotification,
         "ServerCapabilities" => GenMCP.MCP.ServerCapabilities,
         "SubscribeRequest" => GenMCP.MCP.SubscribeRequest,
         "TextContent" => GenMCP.MCP.TextContent,
@@ -1516,6 +1517,33 @@ defmodule GenMCP.MCP.Role do
   def json_schema do
     string_enum_to_atom([:assistant, :user])
   end
+end
+
+defmodule GenMCP.MCP.RootsListChangedNotification do
+  use JSV.Schema
+  JsonDerive.auto()
+
+  defschema %{
+    description: ~SD"""
+    A notification from the client to the server, informing it that the
+    list of roots has changed. This notification should be sent whenever
+    the client adds, removes, or modifies any root. The server should then
+    request an updated list of roots using the ListRootsRequest.
+    """,
+    properties: %{
+      method: const("notifications/roots/list_changed"),
+      params: %{
+        additionalProperties: %{},
+        properties: %{_meta: GenMCP.MCP.Meta},
+        type: "object"
+      }
+    },
+    required: [:method],
+    title: "RootsListChangedNotification",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
 end
 
 defmodule GenMCP.MCP.ServerCapabilities do

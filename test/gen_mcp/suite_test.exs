@@ -1428,6 +1428,18 @@ defmodule GenMCP.SuiteTest do
       # Should return :noreply and not raise an error
       assert {:noreply, ^state} = Suite.handle_notification(cancelled_notif, state)
     end
+
+    test "handles roots list changed notification without error" do
+      state = init_session()
+
+      roots_changed_notif = %MCP.RootsListChangedNotification{
+        method: "notifications/roots/list_changed",
+        params: %{_meta: %{}}
+      }
+
+      # Should return :noreply and not raise an error
+      assert {:noreply, ^state} = Suite.handle_notification(roots_changed_notif, state)
+    end
   end
 
   describe "extension ordering" do

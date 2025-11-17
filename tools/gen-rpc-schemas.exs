@@ -367,7 +367,7 @@ defmodule Generator do
         :skip
 
       :RootsListChangedNotification ->
-        :skip
+        []
 
       :SamplingMessage ->
         :skip

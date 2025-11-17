@@ -22,8 +22,8 @@ defmodule GenMCP.Validator do
     notification: [
       GenMCP.MCP.CancelledNotification,
       GenMCP.MCP.InitializedNotification,
-      GenMCP.MCP.ProgressNotification
-      # GenMCP.MCP.RootsListChangedNotification
+      GenMCP.MCP.ProgressNotification,
+      GenMCP.MCP.RootsListChangedNotification
     ]
   ]
 

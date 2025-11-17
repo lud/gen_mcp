@@ -23,8 +23,8 @@ defmodule GenMCP.Test.Client do
 
     GenMCP.MCP.CancelledNotification,
     GenMCP.MCP.InitializedNotification,
-    GenMCP.MCP.ProgressNotification
-    # GenMCP.MCP.RootsListChangedNotification
+    GenMCP.MCP.ProgressNotification,
+    GenMCP.MCP.RootsListChangedNotification
   ]
   |> Enum.map(fn mod ->
     method = mod.json_schema().properties.method.const
