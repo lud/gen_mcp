@@ -441,9 +441,11 @@ defmodule GenMCP.SuiteTest do
       }
 
       # Should return an error with :stop tuple for invalid protocol version
-      assert {:stop, {:shutdown, {:init_failure, reason}},
-              {:error, {:unsupported_protocol, "2024-01-01"} = reason}, _} =
+      assert {:stop, stop_tuple, err, _} =
                Suite.handle_request(init_req, chan_info(), state)
+
+      assert {:error, {:unsupported_protocol, "2024-01-01"} = reason} = err
+      assert {:shutdown, {:init_failure, ^reason}} = stop_tuple
 
       assert {400,
               %{
