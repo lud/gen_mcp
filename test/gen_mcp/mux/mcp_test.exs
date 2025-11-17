@@ -648,8 +648,6 @@ defmodule GenMCP.MCPTest do
     end
   end
 
-  IO.warn("@todo use that helper in tests so we get used to it")
-
   describe "get_prompt_result/1" do
     test "simple text and assistant text" do
       result =

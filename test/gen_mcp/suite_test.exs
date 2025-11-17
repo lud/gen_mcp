@@ -1531,15 +1531,7 @@ defmodule GenMCP.SuiteTest do
 
   describe "getting prompts" do
     test "gets prompt without arguments" do
-      result = %MCP.GetPromptResult{
-        description: "A greeting",
-        messages: [
-          %MCP.PromptMessage{
-            role: :user,
-            content: %MCP.TextContent{type: :text, text: "Hello!"}
-          }
-        ]
-      }
+      result = MCP.get_prompt_result(description: "A greeting", text: "Hello!")
 
       PromptRepoMock
       |> expect(:prefix, fn :repo1 -> "gre" end)
@@ -1561,14 +1553,7 @@ defmodule GenMCP.SuiteTest do
     end
 
     test "gets prompt with valid arguments" do
-      result = %MCP.GetPromptResult{
-        messages: [
-          %MCP.PromptMessage{
-            role: :user,
-            content: %MCP.TextContent{type: :text, text: "Analyze: test.csv"}
-          }
-        ]
-      }
+      result = MCP.get_prompt_result(text: "Analyze: test.csv")
 
       PromptRepoMock
       |> expect(:prefix, fn :repo1 -> "an" end)
@@ -1656,9 +1641,7 @@ defmodule GenMCP.SuiteTest do
     end
 
     test "searches across multiple repos" do
-      result = %MCP.GetPromptResult{
-        messages: []
-      }
+      result = MCP.get_prompt_result([])
 
       PromptRepoMock
       |> expect(:prefix, 2, fn

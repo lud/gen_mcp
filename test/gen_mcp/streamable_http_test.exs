@@ -715,12 +715,6 @@ defmodule GenMCP.StreamableHttpTest do
     assert "" = resp.body
   end
 
-  IO.warn("@todo add a test to verify that tool call isError result is properly encoded")
-
-  IO.warn(
-    "@todo add a test to verify that tool call structuredContent result is properly encoded"
-  )
-
   describe "resource operations" do
     test "list resources with pagination" do
       session_id = init_session()
