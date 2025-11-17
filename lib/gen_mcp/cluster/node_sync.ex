@@ -10,7 +10,6 @@ defmodule GenMCP.Cluster.NodeSync do
   @group :gen_mcp_node_sync_group
   @tag __MODULE__
   @name __MODULE__
-  @node_id_bits 8
   @persistent_key __MODULE__
   @random_node_id_chars 4
   @default_register_max_attempts 10
@@ -56,7 +55,7 @@ defmodule GenMCP.Cluster.NodeSync do
 
     {node_id_gen, max_attempts} =
       case Application.fetch_env(:gen_mcp, :node_id) do
-        {:ok, <<_, __::binary>> = id} when is_binary(id) ->
+        {:ok, <<_, _::binary>> = id} when is_binary(id) ->
           {fn -> id end, 1}
 
         {:ok, :random} ->

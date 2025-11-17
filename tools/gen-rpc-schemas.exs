@@ -115,7 +115,7 @@ defmodule Generator do
 
     code = Enum.intersperse([prelude(), mod_map(defs, metaschema), modules], "\n\n")
 
-    File.write!("lib/gen_mcp/mcp/schemas.ex", code)
+    File.write!("lib/gen_mcp/mcp/entities.ex", code)
 
     {_, 0} = System.cmd("mix", ~w(format --migrate))
 
@@ -184,7 +184,7 @@ defmodule Generator do
         []
 
       :CancelledNotification ->
-        :skip
+        []
 
       :ClientCapabilities ->
         []
@@ -472,6 +472,10 @@ defmodule Generator do
     |> swap_sub_schema([:ReadResourceRequest, :properties, :params], :ReadResourceRequestParams)
     |> swap_sub_schema([:ListPromptsRequest, :properties, :params], :ListPromptsRequestParams)
     |> swap_sub_schema([:GetPromptRequest, :properties, :params], :GetPromptRequestParams)
+    |> swap_sub_schema(
+      [:CancelledNotification, :properties, :params],
+      :CancelledNotificationParams
+    )
   end
 
   def prelude do

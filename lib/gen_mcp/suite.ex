@@ -310,6 +310,12 @@ defmodule GenMCP.Suite do
     {:noreply, %{state | client_capabilities: capabilities}}
   end
 
+
+  def handle_notification(%MCP.CancelledNotification{}, state) do
+    # Cancelled notifications are currently ignored
+    {:noreply, state}
+  end
+
   @impl true
   def handle_info({task_ref, _} = msg, state) when is_reference(task_ref) do
     state =

@@ -21,7 +21,7 @@ defmodule GenMCP.Test.Client do
 
     # Notifications
 
-    # GenMCP.MCP.CancelledNotification,
+    GenMCP.MCP.CancelledNotification,
     GenMCP.MCP.InitializedNotification,
     GenMCP.MCP.ProgressNotification
     # GenMCP.MCP.RootsListChangedNotification
@@ -66,7 +66,15 @@ defmodule GenMCP.Test.Client do
   end
 
   def expect_status(resp, status) when is_integer(status) do
-    assert status == resp.status
+    if status != resp.status do
+      flunk("""
+      Expected status #{status} but got #{resp.status}
+
+      Response body:
+      #{inspect(resp.body, pretty: true, limit: :infinity)}
+      """)
+    end
+
     resp
   end
 

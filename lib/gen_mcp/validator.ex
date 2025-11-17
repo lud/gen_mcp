@@ -3,8 +3,6 @@ defmodule GenMCP.Validator do
   require GenMCP.MCP.ModMap, as: ModMap
   ModMap.require_all()
 
-  IO.warn("todo support cancellation (cancelled notification)")
-
   validable = [
     request: [
       GenMCP.MCP.InitializeRequest,
@@ -22,7 +20,7 @@ defmodule GenMCP.Validator do
       # GenMCP.MCP.CompleteRequest
     ],
     notification: [
-      # GenMCP.MCP.CancelledNotification,
+      GenMCP.MCP.CancelledNotification,
       GenMCP.MCP.InitializedNotification,
       GenMCP.MCP.ProgressNotification
       # GenMCP.MCP.RootsListChangedNotification

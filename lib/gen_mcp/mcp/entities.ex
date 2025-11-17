@@ -48,6 +48,8 @@ defmodule GenMCP.MCP.ModMap do
         "CallToolRequest" => GenMCP.MCP.CallToolRequest,
         "CallToolRequestParams" => GenMCP.MCP.CallToolRequestParams,
         "CallToolResult" => GenMCP.MCP.CallToolResult,
+        "CancelledNotification" => GenMCP.MCP.CancelledNotification,
+        "CancelledNotificationParams" => GenMCP.MCP.CancelledNotificationParams,
         "ClientCapabilities" => GenMCP.MCP.ClientCapabilities,
         "ContentBlock" => GenMCP.MCP.ContentBlock,
         "EmbeddedResource" => GenMCP.MCP.EmbeddedResource,
@@ -304,6 +306,59 @@ defmodule GenMCP.MCP.CallToolResult do
     },
     required: [:content],
     title: "CallToolResult",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.CancelledNotification do
+  use JSV.Schema
+  JsonDerive.auto()
+
+  defschema %{
+    description: ~SD"""
+    This notification can be sent by either side to indicate that it is
+    cancelling a previously-issued request.
+
+    The request SHOULD still be in-flight, but due to communication
+    latency, it is always possible that this notification MAY arrive after
+    the request has already finished.
+
+    This notification indicates that the result will be unused, so any
+    associated processing SHOULD cease.
+
+    A client MUST NOT attempt to cancel its `initialize` request.
+    """,
+    properties: %{
+      method: const("notifications/cancelled"),
+      params: GenMCP.MCP.CancelledNotificationParams
+    },
+    required: [:method, :params],
+    title: "CancelledNotification",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.CancelledNotificationParams do
+  use JSV.Schema
+  JsonDerive.auto()
+
+  defschema %{
+    properties: %{
+      reason:
+        string(
+          description: ~SD"""
+          An optional string describing the reason for the cancellation. This
+          MAY be logged or presented to the user.
+          """
+        ),
+      requestId: GenMCP.MCP.RequestId
+    },
+    required: [:requestId],
+    title: "CancelledNotificationParams",
     type: "object"
   }
 

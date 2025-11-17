@@ -1412,6 +1412,24 @@ defmodule GenMCP.SuiteTest do
     end
   end
 
+  describe "cancelled notification handling" do
+    # For now it is ignored, but can be delivered without crashing the repo
+    test "handles cancelled notification without error" do
+      state = init_session()
+
+      cancelled_notif = %MCP.CancelledNotification{
+        method: "notifications/cancelled",
+        params: %MCP.CancelledNotificationParams{
+          requestId: "some-request-id",
+          reason: "User cancelled the operation"
+        }
+      }
+
+      # Should return :noreply and not raise an error
+      assert {:noreply, ^state} = Suite.handle_notification(cancelled_notif, state)
+    end
+  end
+
   describe "extension ordering" do
     test "lists tools with direct tool first, then extension tools in order" do
       ToolMock

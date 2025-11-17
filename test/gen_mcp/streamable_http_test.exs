@@ -655,6 +655,38 @@ defmodule GenMCP.StreamableHttpTest do
            ] = chunks
   end
 
+  test "handles cancelled notification without error" do
+    session_id = init_session()
+
+    expect(ServerMock, :handle_notification, fn notif, state ->
+      assert %MCP.CancelledNotification{
+               method: "notifications/cancelled",
+               params: %MCP.CancelledNotificationParams{
+                 requestId: "request-to-cancel",
+                 reason: "User cancelled"
+               }
+             } = notif
+
+      {:noreply, state}
+    end)
+
+    resp =
+      session_id
+      |> client()
+      |> post_message(%{
+        jsonrpc: "2.0",
+        method: "notifications/cancelled",
+        params: %{
+          requestId: "request-to-cancel",
+          reason: "User cancelled"
+        }
+      })
+      |> expect_status(202)
+
+    # Notification should return empty body
+    assert "" = resp.body
+  end
+
   IO.warn("@todo add a test to verify that tool call isError result is properly encoded")
 
   IO.warn(
