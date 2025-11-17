@@ -1,10 +1,10 @@
 defmodule GenMCP.Mux.SessionTest do
-  alias GenMCP.Mux.SessionSupervisor
   alias GenMCP.MCP
   alias GenMCP.Mux
+  alias GenMCP.Mux.SessionSupervisor
   alias GenMCP.Support.ServerMock
-  import Mox
   import GenMCP.Test.Helpers
+  import Mox
   use ExUnit.Case
 
   setup [:set_mox_global, :verify_on_exit!]

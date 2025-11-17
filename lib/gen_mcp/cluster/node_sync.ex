@@ -2,7 +2,7 @@ defmodule GenMCP.Cluster.NodeSync do
   require Logger
   use GenServer
 
-  IO.warn("@todo configurable NODE_ID via app config, if nil random")
+  # TODO(doc) document configuration for static node id
 
   @gen_opts ~w(name timeout debug spawn_opt hibernate_after)a
   @scope GenMCP.Cluster.scope()
@@ -10,28 +10,27 @@ defmodule GenMCP.Cluster.NodeSync do
   @group :gen_mcp_node_sync_group
   @tag __MODULE__
   @name __MODULE__
-  @node_id_bits 16
-  @max_node_id 2 ** @node_id_bits - 1
+  @node_id_bits 8
+  @persistent_key __MODULE__
+  @random_node_id_chars 4
+  @default_register_max_attempts 10
 
   def node_id do
-    case :persistent_term.get(__MODULE__, nil) do
+    case :persistent_term.get(@persistent_key, nil) do
       nil -> raise "#{inspect(__MODULE__)} is not initialized"
       id -> id
     end
   end
 
   def gen_session_id do
-    Base.encode16(<<node_id()::@node_id_bits>>) <>
-      "-" <> Base.url_encode64(:crypto.strong_rand_bytes(18))
+    node_id() <> "-" <> Base.url_encode64(:crypto.strong_rand_bytes(18))
   end
 
   def node_of(session_id)
 
   def node_of(session_id) when is_binary(session_id) do
-    with [node_b16 | _] <- String.split(session_id, "-", parts: 2),
-         {:ok, <<node_id::@node_id_bits>>} <- Base.decode16(node_b16) do
-      GenServer.call(@name, {:get_node, node_id})
-    else
+    case String.split(session_id, "-", parts: 2) do
+      [node_id | _] -> GenServer.call(@name, {:get_node, node_id})
       _ -> :error
     end
   end
@@ -55,12 +54,28 @@ defmodule GenMCP.Cluster.NodeSync do
     Logger.metadata(node: node())
     :net_kernel.monitor_nodes(true)
 
-    case register_random_node_id() do
+    {node_id_gen, max_attempts} =
+      case Application.fetch_env(:gen_mcp, :node_id) do
+        {:ok, <<_, __::binary>> = id} when is_binary(id) ->
+          {fn -> id end, 1}
+
+        {:ok, :random} ->
+          {&random_node_id/0, @default_register_max_attempts}
+
+        :error ->
+          {&random_node_id/0, @default_register_max_attempts}
+
+        {:ok, other} ->
+          raise ArgumentError,
+                "expected config :gen_mcp/:node_id to be a string or :random, got: #{inspect(other)}"
+      end
+
+    case register_random_node_id(node_id_gen, max_attempts) do
       {:ok, node_id} ->
         {mref, group_members} = :pg.monitor(@scope, @group)
         :ok = :pg.join(@scope, @group, self())
         publish(group_members, node_id)
-        :persistent_term.put(__MODULE__, node_id)
+        :persistent_term.put(@persistent_key, node_id)
 
         state =
           %{
@@ -125,6 +140,11 @@ defmodule GenMCP.Cluster.NodeSync do
 
   def handle_info({:global_name_conflict, {@glob, name}}, state) do
     Logger.warning("duplicated node id #{name}, shutting down")
+
+    # This may impact performances, hopefully duplicate node ids only happen
+    # during boot or when rolling nodes.
+    :persistent_term.erase(@persistent_key)
+
     {:stop, :shutdown, state}
   end
 
@@ -158,25 +178,30 @@ defmodule GenMCP.Cluster.NodeSync do
     {:reply, known?, state}
   end
 
-  defp register_random_node_id(attempt \\ 0)
+  defp register_random_node_id(id_generator, max_attempts, attempt \\ 1)
 
-  defp register_random_node_id(attempt) when attempt < 10 do
-    node_id = random_node_id()
+  defp register_random_node_id(_id_generator, max_attempts, attempt)
+       when attempt > max_attempts do
+    Logger.error("Could not register node_id from #{inspect(node())}")
 
-    case :global.register_name(global_name(node_id), self(), &:global.random_notify_name/3) do
-      :yes -> {:ok, node_id}
-      :no -> register_random_node_id(attempt + 1)
-    end
-  end
-
-  defp register_random_node_id(_) do
-    Logger.error("could not find available node_id from #{inspect(node())}")
     {:error, :max_attempts}
   end
 
-  defp random_node_id do
-    # Enum.random(1..3)
-    Enum.random(0..@max_node_id)
+  defp register_random_node_id(id_generator, max_attempts, attempt) do
+    node_id = id_generator.()
+
+    case :global.register_name(global_name(node_id), self(), &:global.random_notify_name/3) do
+      :yes -> {:ok, node_id}
+      :no -> register_random_node_id(id_generator, max_attempts, attempt + 1)
+    end
+  end
+
+  @doc false
+  @random_chars Enum.concat([?a..?z, ?0..?9, ?A..?Z])
+  def random_node_id do
+    for _ <- 1..@random_node_id_chars,
+        reduce: <<>>,
+        do: (acc -> <<acc::binary, Enum.random(@random_chars)>>)
   end
 
   defp append_member([same | rest], same) do

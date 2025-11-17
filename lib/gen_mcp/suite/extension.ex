@@ -22,8 +22,8 @@ defmodule GenMCP.Suite.Extension do
 
   Extensions should not send notifications to that channel.
   """
-  alias GenMCP.Suite
   alias GenMCP.Mux.Channel
+  alias GenMCP.Suite
 
   @type extension :: module | {module, arg} | extension_descriptor
   @type extension_descriptor :: %{

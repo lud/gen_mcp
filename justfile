@@ -1,5 +1,5 @@
 run X='0':
-  PORT=500{{X}} iex --name genmcpdev-{{ X }}@127.0.0.1 -S mix run
+  GEN_MCP_NODE_ID=AA0{{X}} PORT=500{{X}} iex --name genmcpdev-{{ X }}@127.0.0.1 -S mix run
 
 gen-entities:
   rm -vf lib/gen_mcp/entities.ex
