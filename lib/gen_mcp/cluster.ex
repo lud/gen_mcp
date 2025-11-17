@@ -23,7 +23,6 @@ defmodule GenMCP.Cluster do
   def pg_child_spec do
     %{
       id: :pg,
-      module: :pg,
       start: {:pg, :start_link, [scope()]},
       type: :supervisor
     }

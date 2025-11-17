@@ -29,10 +29,14 @@ defmodule GenMCP.Suite.Tool do
           | {:error, String.t(), Channel.t()}
 
   @type request :: term
-  @type client_response ::
-          MCP.CreateMessageResult.t()
-          | MCP.ListRootsResult.t()
-          | MCP.ElicitResult.t()
+
+  @typedoc """
+  This is not supported yet
+  """
+  @type client_response :: term
+  # MCP.CreateMessageResult.t()
+  # | MCP.ListRootsResult.t()
+  # | MCP.ElicitResult.t()
 
   @type json_encodable ::
           %{optional(binary | atom | number) => json_encodable}

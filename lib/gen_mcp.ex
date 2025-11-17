@@ -1,4 +1,7 @@
 defmodule GenMCP do
+  alias GenMCP.MCP
+  alias GenMCP.Mux.Channel
+
   def supported_protocol_versions do
     ["2025-06-18"]
   end

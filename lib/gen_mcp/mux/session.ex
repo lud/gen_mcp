@@ -131,7 +131,7 @@ defmodule GenMCP.Mux.Session do
   end
 
   defp refresh_session_timeout(state) do
-    Process.cancel_timer(state.session_timeout_ref, async: true, info: false)
+    _ = Process.cancel_timer(state.session_timeout_ref, async: true, info: false)
     %{state | session_timeout_ref: start_session_timeout(state.opts[:session_timeout])}
   end
 end

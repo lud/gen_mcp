@@ -79,7 +79,7 @@ defmodule GenMCP.Test.Client do
   end
 
   def expect_session_header(resp) do
-    assert {:ok, [session_id]} = Map.fetch(resp.headers, "mcp-session-id")
+    _ = assert {:ok, [session_id]} = Map.fetch(resp.headers, "mcp-session-id")
     assert is_binary(session_id)
     session_id
   end

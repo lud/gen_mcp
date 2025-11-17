@@ -51,7 +51,7 @@ defmodule GenMCP.Cluster.NodeSync do
   @impl true
   def init(_opts) do
     Logger.metadata(node: node())
-    :net_kernel.monitor_nodes(true)
+    :ok = :net_kernel.monitor_nodes(true)
 
     {node_id_gen, max_attempts} =
       case Application.fetch_env(:gen_mcp, :node_id) do

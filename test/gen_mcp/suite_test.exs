@@ -150,8 +150,7 @@ defmodule GenMCP.SuiteTest do
     end
 
     test "declares resources capability when at least one resource repo in :resources option" do
-      ResourceRepoMock
-      |> stub(:prefix, fn :test_repo -> "file:///" end)
+      stub(ResourceRepoMock, :prefix, fn :test_repo -> "file:///" end)
 
       {:ok, state} =
         Suite.init(
@@ -182,8 +181,7 @@ defmodule GenMCP.SuiteTest do
     end
 
     test "declares resources capability when at least one resource repo provided by extension" do
-      ResourceRepoMock
-      |> stub(:prefix, fn :ext_repo -> "file:///" end)
+      stub(ResourceRepoMock, :prefix, fn :ext_repo -> "file:///" end)
 
       ExtensionMock
       |> stub(:tools, fn _channel, :test_ext -> [] end)
@@ -219,8 +217,7 @@ defmodule GenMCP.SuiteTest do
     end
 
     test "declares prompts capability when at least one prompt repo in :prompts option" do
-      PromptRepoMock
-      |> stub(:prefix, fn :test_repo -> "test_" end)
+      stub(PromptRepoMock, :prefix, fn :test_repo -> "test_" end)
 
       {:ok, state} =
         Suite.init(
@@ -251,8 +248,7 @@ defmodule GenMCP.SuiteTest do
     end
 
     test "declares prompts capability when at least one prompt repo provided by extension" do
-      PromptRepoMock
-      |> stub(:prefix, fn :ext_repo -> "ext_" end)
+      stub(PromptRepoMock, :prefix, fn :ext_repo -> "ext_" end)
 
       ExtensionMock
       |> stub(:tools, fn _channel, :test_ext -> [] end)
@@ -292,11 +288,9 @@ defmodule GenMCP.SuiteTest do
       |> stub(:info, fn :name, :test_tool -> "TestTool" end)
       |> stub(:input_schema, fn _ -> %{type: :object} end)
 
-      ResourceRepoMock
-      |> stub(:prefix, fn :test_repo -> "file:///" end)
+      stub(ResourceRepoMock, :prefix, fn :test_repo -> "file:///" end)
 
-      PromptRepoMock
-      |> stub(:prefix, fn :test_prompt -> "test_" end)
+      stub(PromptRepoMock, :prefix, fn :test_prompt -> "test_" end)
 
       {:ok, state} =
         Suite.init(

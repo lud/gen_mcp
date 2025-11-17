@@ -8,7 +8,8 @@ defmodule GenMCP.MixProject do
       app: :gen_mcp,
       version: @version,
       description:
-        "A generic MCP server behaviour, plus predefined server implementations and plugs to get started immediately.",
+        "A generic MCP server behaviour for the latest protocol version with a " <>
+          "suite of components to build tools, resources and prompts.",
       elixir: "~> 1.18",
       start_permanent: true,
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -61,7 +62,8 @@ defmodule GenMCP.MixProject do
       {:ex_doc, ">= 0.38.2", only: [:dev, :test], runtime: false},
       {:mix_audit, ">= 2.1.5", only: [:dev, :test], runtime: false},
       {:sobelow, ">= 0.14.0", only: [:dev, :test], runtime: false},
-      {:nvir, "~> 0.13.4", only: [:dev, :test]}
+      {:nvir, "~> 0.13.4", only: [:dev, :test]},
+      {:readmix, "~> 0.6", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -106,10 +108,20 @@ defmodule GenMCP.MixProject do
     ]
   end
 
+  def cli do
+    [
+      preferred_envs: [
+        dialyzer: :test
+      ]
+    ]
+  end
+
   defp dialyzer do
     [
       flags: [:unmatched_returns, :error_handling, :unknown, :extra_return],
       list_unused_filters: true,
+      plt_add_deps: :app_tree,
+      plt_add_apps: [:ex_unit],
       plt_local_path: "_build/plts"
     ]
   end

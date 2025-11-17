@@ -32,9 +32,9 @@ defmodule GenMCP.Suite.Extension do
         }
   @type arg :: term
 
-  @callback tools(Channel.t(), arg) :: [Suite.Tool.t()]
-  @callback resources(Channel.t(), arg) :: [Suite.ResourceRepo.t()]
-  @callback prompts(Channel.t(), arg) :: [Suite.PromptRepo.t()]
+  @callback tools(Channel.t(), arg) :: [Suite.Tool.tool()]
+  @callback resources(Channel.t(), arg) :: [Suite.ResourceRepo.resource_repo()]
+  @callback prompts(Channel.t(), arg) :: [Suite.PromptRepo.prompt_repo()]
 
   @spec expand(extension) :: extension_descriptor
   def expand(%{mod: _} = extension) do
