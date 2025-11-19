@@ -234,16 +234,6 @@ defmodule GenMCP.Suite.ToolTest do
               result: %{type: :string}
             }
           }
-
-        # User can optionally define output_schema/1 to access the raw schema
-        def output_schema(_arg) do
-          %{
-            type: :object,
-            properties: %{
-              result: %{type: :string}
-            }
-          }
-        end
       end
 
       # output_schema/1 callback returns the schema as-is

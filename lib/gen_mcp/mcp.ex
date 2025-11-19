@@ -1,6 +1,31 @@
 defmodule GenMCP.MCP do
+  @moduledoc """
+  Helpers for building MCP payload structs from Servers, Tools or repositories.
+
+  Each constructor normalizes various type of inputs into the MCP structs
+  expected by the wire protocol.
+  """
+
   alias GenMCP.MCP
   alias GenMCP.Suite.Tool
+
+  @type content_block_option ::
+          {:text, binary()}
+          | {:resource, %{uri: binary(), text: binary()}}
+          | {:resource, %{uri: binary(), blob: binary()}}
+          | {:link, %{name: binary(), uri: binary()}}
+          | {:image, {binary(), binary()}}
+          | {:audio, {binary(), binary()}}
+
+  @type content_block ::
+          content_block_option()
+          | MCP.TextContent.t()
+          | MCP.AudioContent.t()
+          | MCP.ImageContent.t()
+          | MCP.EmbeddedResource.t()
+          | MCP.ResourceLink.t()
+          | {:error, boolean() | binary() | nil}
+          | map()
 
   defp require_key!(keywords, key, errmsg) do
     case :lists.keyfind(key, 1, keywords) do
@@ -9,11 +34,28 @@ defmodule GenMCP.MCP do
     end
   end
 
-  defmacro cur_fun do
+  defmacrop cur_fun do
     {function, arity} = __ENV__.function
     _mfa = Exception.format_mfa(__ENV__.module, function, arity)
   end
 
+  @doc """
+  Builds a `%#{inspect(MCP.InitializeResult)}{}` for the initialize handshake.
+
+  Requires `:server_info` (usually a `%#{inspect(MCP.Implementation)}{}`) and
+  uses `:capabilities` if provided. The `protocolVersion` field is fixed to
+  "2025-06-18" to match the MCP spec supported here.
+
+  ## Example
+
+      MCP.intialize_result(
+        server_info: %#{inspect(MCP.Implementation)}{
+          name: "TestServer",
+          version: "1.0.0"
+        }
+      )
+  """
+  @spec intialize_result(keyword()) :: MCP.InitializeResult.t()
   def intialize_result(opts) do
     %MCP.InitializeResult{
       capabilities: Keyword.get(opts, :capabilities, %{}),
@@ -22,6 +64,14 @@ defmodule GenMCP.MCP do
     }
   end
 
+  @doc """
+  Normalizes capability flags/maps into `%#{inspect(MCP.ServerCapabilities)}{}`.
+
+  Passing `true` for a key yields an empty map, while maps are returned
+  unchanged and other values keep the field `nil`. This allows flexible
+  declaration of server capabilities during initialization.
+  """
+  @spec capabilities(keyword()) :: MCP.ServerCapabilities.t()
   def capabilities(opts) do
     attrs =
       Enum.flat_map(opts, fn
@@ -33,6 +83,13 @@ defmodule GenMCP.MCP do
     struct!(MCP.ServerCapabilities, attrs)
   end
 
+  @doc """
+  Builds `%#{inspect(MCP.Implementation)}{}` entries used in initialize replies.
+
+  `:name` and `:version` trigger `KeyError` when missing, while `:title` is
+  optional.
+  """
+  @spec server_info(keyword()) :: MCP.Implementation.t()
   def server_info(opts) do
     %MCP.Implementation{
       name: require_key!(opts, :name, "option :name is required by #{cur_fun()}"),
@@ -44,11 +101,20 @@ defmodule GenMCP.MCP do
   # TODO handle cursor
 
   @doc """
-  Returns a description of the given tools. Tools already described (as a
-  `#{inspect(MCP.Tool)}` struct) are included as they are in the result's
-  list of tools.
+  Builds `%#{inspect(MCP.ListToolsResult)}{}` for the tools advertised by a
+  server.
 
-  Pagination is not yet supported for tools
+  Structs already shaped as `%#{inspect(MCP.Tool)}{}` are left untouched and
+  other entries go through `GenMCP.Suite.Tool.describe/1`.
+
+  Pagination for tools is not supported yet.
+
+  ## Example
+
+      MCP.list_tools_result([
+        %#{inspect(MCP.Tool)}{name: "tool1", inputSchema: %{type: "object"}},
+        %{name: "tool2", inputSchema: %{type: "object"}}
+      ])
   """
   @spec list_tools_result([Tool.tool() | MCP.Tool.t()]) :: MCP.ListToolsResult.t()
   def list_tools_result(tools) do
@@ -61,9 +127,32 @@ defmodule GenMCP.MCP do
     }
   end
 
-  # TODO(doc): A building block for other helpers like call_tool_result/1 or
-  # get_prompt_result/1. Accepts tuples and transforms then in various MCP content
-  # entities.
+  @doc """
+  Normalizes content shortcuts into the MCP structs that tools and prompts
+  expect.
+
+  This helper is generally not used directly, but delegated to from
+  `call_tool_result/1` or `get_prompt_result/1`.
+
+  Supported shortcuts are
+  - `{:text, binary()}`,
+  - `{:resource, %{uri: binary(), text: binary()}}`,
+  - `{:resource, %{uri: binary(), blob: binary()}}`,
+  - `{:link, %{name: binary(), uri: binary()}}`,
+  - `{:image, {mime, data}}` and
+  - `{:audio, {mime, data}}`. Unsupported definitions raise
+  - `ArgumentError` to ensure content validity.
+
+  ## Example
+
+      MCP.content_block({:audio, {"audio/mp3", "base64data"}})
+  """
+  @spec content_block(content_block_option()) ::
+          MCP.TextContent.t()
+          | MCP.EmbeddedResource.t()
+          | MCP.ResourceLink.t()
+          | MCP.ImageContent.t()
+          | MCP.AudioContent.t()
   def content_block(content_opts)
 
   def content_block({:text, text}) when is_binary(text) do
@@ -97,6 +186,21 @@ defmodule GenMCP.MCP do
     raise ArgumentError, "unsupported content block definition: #{inspect(other)}"
   end
 
+  @doc """
+  Builds `%#{inspect(MCP.CallToolResult)}{}` for results returned by tool
+  implementations.
+
+  The list may contain shortcuts such as `text: "foo"`, `image: {"mime", data}`
+  or literal `%MCP.*` structs. Maps without a shortcut become
+  `structuredContent` (only one is allowed) while the `:error` option toggles
+  `isError` or converts a binary message into a text entry with the flag set to
+  `true`.
+
+  ## Example
+
+      MCP.call_tool_result(text: "Hello, world!", error: true)
+  """
+  @spec call_tool_result([content_block()]) :: MCP.CallToolResult.t()
   def call_tool_result(all_content) when is_list(all_content) do
     {content, {structured_content, error_or_nil?}} =
       Enum.flat_map_reduce(all_content, {nil, nil}, &flat_map_reduce_tool_result/2)
@@ -151,6 +255,14 @@ defmodule GenMCP.MCP do
     raise ArgumentError, "unsupported tool result content definition: #{inspect(other)}"
   end
 
+  @doc """
+  Wraps the provided `resources` list into
+  `%#{inspect(MCP.ListResourcesResult)}{}` for `ListResources` responses.
+
+  `next_cursor` arguments such as `"cursor-123"` are assigned to `nextCursor`,
+  while the caller keeps ownership of the resource entries.
+  """
+  @spec list_resources_result([term()], term() | nil) :: MCP.ListResourcesResult.t()
   def list_resources_result(resources, next_cursor) do
     %MCP.ListResourcesResult{
       resources: resources,
@@ -158,15 +270,37 @@ defmodule GenMCP.MCP do
     }
   end
 
+  @doc """
+  Wraps template entries into `%#{inspect(MCP.ListResourceTemplatesResult)}{}`
+  for resource template listings.
+
+  Templates are returned as-is so callers may pass either structs or raw maps.
+
+  Pagination is not supported for resource templates.
+  """
+  @spec list_resource_templates_result([term()]) :: MCP.ListResourceTemplatesResult.t()
   def list_resource_templates_result(templates) do
     %MCP.ListResourceTemplatesResult{
       resourceTemplates: templates
     }
   end
 
-  # TODO(doc) expects either a keyword, in that case it returns a single content
-  # in the list, using `resource_contents/1` to cast the options. Otherwise it
-  # expects a list of maps (content structs or custom maps)
+  @doc """
+  Wraps resource content helpers into `%#{inspect(MCP.ReadResourceResult)}{}`.
+
+  When given a keyword list (typically `:uri` with `:text` or `:blob`) it
+  delegates to `resource_contents/1` and includes a single-element content list.
+
+  Passing a list of maps returns those entries as the content list.
+
+  It is not possible to mix keyword style items and maps in the list, as all
+  keyword keys define the same resource content.
+
+  ## Example
+
+      MCP.read_resource_result(uri: "file:///doc.pdf", blob: "bytes")
+  """
+  @spec read_resource_result(keyword() | [map()]) :: MCP.ReadResourceResult.t()
   def read_resource_result([{k, _} | _] = opts) when is_atom(k) do
     true = Keyword.keyword?(opts)
     contents = resource_contents(opts)
@@ -180,6 +314,21 @@ defmodule GenMCP.MCP do
     %MCP.ReadResourceResult{contents: contents}
   end
 
+  @doc """
+  Builds either `%#{inspect(MCP.TextResourceContents)}{}` or `%#{inspect(MCP.BlobResourceContents)}{}` from keyword options.
+
+  Requires `:uri` and either `:text` or `:blob`. Optional `:mime_type` and `:_meta` fields are forwarded to the resulting struct. Missing both `:text` and `:blob` raises `ArgumentError`, while omitting `:uri` raises `KeyError`.
+
+  ## Example
+
+      MCP.resource_contents(
+        uri: "file:///doc.pdf",
+        mime_type: "application/pdf",
+        blob: "some-base-64"
+      )
+  """
+  @spec resource_contents(keyword()) ::
+          MCP.TextResourceContents.t() | MCP.BlobResourceContents.t()
   def resource_contents(opts) do
     uri = require_key!(opts, :uri, "option :uri is required by #{cur_fun()}")
     mime_type = Keyword.get(opts, :mime_type)
@@ -211,6 +360,12 @@ defmodule GenMCP.MCP do
     end
   end
 
+  @doc """
+  Wraps prompt entries into `%#{inspect(MCP.ListPromptsResult)}{}` for prompt listing responses.
+
+  The provided `prompts` list is returned as-is and `nextCursor` mirrors the optional cursor token passed by the caller.
+  """
+  @spec list_prompts_result([term()], term() | nil) :: MCP.ListPromptsResult.t()
   def list_prompts_result(prompts, next_cursor) do
     %MCP.ListPromptsResult{
       prompts: prompts,
@@ -218,7 +373,20 @@ defmodule GenMCP.MCP do
     }
   end
 
-  # TODO(doc): Accepts a list
+  @doc """
+  Builds `%#{inspect(MCP.GetPromptResult)}{}` from keyword helpers or explicit prompt entries.
+
+  The helpers treat `text:` and `assistant:` keywords as alternating user/assistant messages, honor an optional `description:` and convert tuples or `%#{inspect(MCP.PromptMessage)}` structs via `content_block/1`. Unsupported shapes such as `:link` or `error:` raise `ArgumentError` so the caller can fix the prompt payload.
+
+  ## Example
+
+      MCP.get_prompt_result(
+        description: "A helpful prompt",
+        assistant: "You are a an expert for some reason…",
+        text: user_input
+      )
+  """
+  @spec get_prompt_result(keyword() | [term()]) :: MCP.GetPromptResult.t()
   def get_prompt_result(opts) do
     {description, opts} =
       case List.keytake(opts, :description, 0) do

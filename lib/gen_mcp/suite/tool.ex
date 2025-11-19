@@ -1,4 +1,59 @@
 defmodule GenMCP.Suite.Tool do
+  @moduledoc """
+  Defines the behaviour for implementing MCP tools in `GenMCP.Suite`.
+
+  Tools are the primary mechanism for clients to execute operations on the
+  server. Each tool implementation provides metadata, input validation,
+  execution logic, and optional asynchronous continuation handling.
+
+  ## Implementation Patterns
+
+  Use `use GenMCP.Suite.Tool` with options to auto-generate common callbacks:
+
+      use GenMCP.Suite.Tool,
+        name: "search_files",
+        description: "Searches for files matching a pattern",
+        input_schema: %{
+          type: :object,
+          properties: %{query: %{type: :string}},
+          required: [:query]
+        }
+
+  Auto-generates `info/2`, `input_schema/1`, and `validate_request/2` with JSON
+  schema validation.
+
+  ## Synchronous Tool Example
+
+      defmodule MySearchTool do
+        use GenMCP.Suite.Tool,
+          name: "search_files",
+          input_schema: %{type: :object, properties: %{query: %{type: :string}}}
+
+        def call(req, channel, _arg) do
+          %{arguments: %{"query" => query}} = req.params
+          text = generate_text_response(query)
+          {:result, MCP.call_tool_result(text: text), channel}
+        end
+      end
+
+  ## Asynchronous Tool Example
+
+      defmodule MyAsyncTool do
+        use GenMCP.Suite.Tool,
+          name: "expensive_search",
+          input_schema: %{}
+
+        def call(req, channel, _arg) do
+          task = Task.async(fn -> perform_expensive_search(req) end)
+          {:async, {:search_task, task}, channel}
+        end
+
+        def continue({:search_task, results}, channel, _arg) do
+          {:result, MCP.call_tool_result(text: results), channel}
+        end
+      end
+  """
+
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
 
@@ -19,10 +74,9 @@ defmodule GenMCP.Suite.Tool do
   @type info_key :: :name | :title | :description | :annotations
   @type arg :: term
   @type schema :: term
-  @type result :: term
   @type tag :: term
   @type call_result ::
-          {:result, result, Channel.t()}
+          {:result, MCP.CallToolResult.t(), Channel.t()}
           # TODO allow elicitation/sampling request
           # | {:request, {tag, term}, Channel.t()}
           | {:async, {tag, reference() | Task.t()}, Channel.t()}
@@ -38,19 +92,21 @@ defmodule GenMCP.Suite.Tool do
   # | MCP.ListRootsResult.t()
   # | MCP.ElicitResult.t()
 
-  @type json_encodable ::
-          %{optional(binary | atom | number) => json_encodable}
-          | [json_encodable]
-          | number
-          | binary
-          | boolean
-          | nil
-
   @doc """
-  Returns metadata information a  bout the tool based on the requested key.
+  Returns tool metadata for the specified key.
 
-  The `key` parameter determines which metadata is retrieved (`:name`, `:title`,
-  `:description`, or `:annotations`).
+  Invoked by `describe/1` to gather tool metadata. The `:name` key must return a
+  non-empty string; all other keys may return `nil`.
+
+  With `use GenMCP.Suite.Tool` with metadata options, this callback is
+  auto-generated.
+
+  ## Examples
+
+      def info(:name, _arg), do: "search_files"
+      def info(:description, _arg), do: "Searches for files matching a pattern"
+      def info(:annotations, _arg), do: %{readOnlyHint: true}
+      def info(_, _), do: nil
   """
   @callback info(:name, arg) :: String.t()
   @callback info(:description, arg) :: nil | String.t()
@@ -58,63 +114,159 @@ defmodule GenMCP.Suite.Tool do
   @callback info(:annotations, arg) :: nil | tool_annotations
 
   @doc """
-  Returns the input schema that defines what arguments the tool accepts.
+  Returns the JSON schema defining accepted tool arguments.
 
-  The returned schema must be a valid JSON schema (or a module exporting a
-  `json_schema/0` function). It should define the expected arguments from a
-  `CallToolRequest`.
+  Sent to clients in `tools/list` responses to describe expected parameters.
+
+  Auto-generated with `use GenMCP.Suite.Tool` with an `:input_schema` option.
+
+  ## Examples
+
+      def input_schema(_arg) do
+        %{
+          type: :object,
+          properties: %{
+            query: %{type: :string},
+            limit: %{type: :integer, default: 10}
+          },
+          required: [:query]
+        }
+      end
   """
   @callback input_schema(arg) :: schema
 
   @doc """
-  Returns the output schema that defines the structure of tool results.
+  Returns the JSON schema defining tool result structure, or `nil` if
+  unspecified.
 
-  Unlike `input_schema/1`, this may return `nil` if no output schema is defined.
+  Defines the structured outputs returned by the tool if any. Entirely optional
+  and not enforced at runtime.
 
-  Structured content returned by tools must be valid against their output
-  schema.
+  Auto-generated with `use GenMCP.Suite.Tool` with an `:output_schema` option.
+
+  ## Examples
+
+      def output_schema(_arg) do
+        %{
+          type: :object,
+          properties: %{
+            files: %{type: :array, items: %{type: :string}}
+          }
+        }
+      end
   """
   @callback output_schema(arg) :: nil | schema
 
   @doc """
-  Validates the request and returns it. It can swap the arguments in the request
-  for a cast version or a completely different map/struct.
+  Validates and optionally transforms the incoming call request.
 
-  The returned request will be given to `c:call/3`.
+  Invoked before `c:call/3`. Return `{:error, reason}` to reject invalid
+  requests with an MCP invalid parameters error.
 
-  Error can be any term but will be encoded as an invalid parameters error.
+  Auto-generated with JSON schema validation when using `use GenMCP.Suite.Tool`
+  with an `:input_schema` option.
+
+  ## Examples
+
+      def validate_request(req, _arg) do
+        case req.params.arguments do
+          %{"limit" => n} when n > 0 and n <= 100 -> {:ok, req}
+          _ -> {:error, "limit must be between 1 and 100"}
+        end
+      end
   """
   @callback validate_request(MCP.CallToolRequest.t(), arg) ::
-              {:ok, MCP.CallToolRequest.t()} | {:error, String.t() | json_encodable}
+              {:ok, MCP.CallToolRequest.t()} | {:error, String.t()}
 
   @doc """
-  Processes a tool call request and returns the result.
+  Executes the tool call and returns a result, error, or async continuation.
 
-  The `request` contains the full call information including parameters and
-  arguments to validate against the input schema. The arguments are not
-  validated automatically, this is the role of the optional
-  `c:validate_request/2` callback.
+  Receives validated request parameters if `c:validate_request/2` is defined.
 
-  The `channel` provides access to the client connection and authorization
-  context via `channel.assigns`. It can be used to send progress notifications
-  to the HTTP connection that delivered the request.
+  ### Async calls
 
-  The callback can return a result tuple, request a server response, or indicate
-  async processing.
+  When returning `{:async, {tag, ref}, channel}`, the `c:continue/3` callback
+  will be invoked with `{tag, {:ok, value}}` if the server process receives a
+  `{ref, value}` message with the same `ref`.
+
+  This works automatically with tasks. It is possible to directly return the
+  task struct as in `{:async, {tag, task}, channel}`.
+
+  Note that `Task.async/1` may crash the server process, you may want to use
+  `Task.Supervisor.async_nolink/2` in which case a `:DOWN` message from the task
+  will be delivered as with the same tag as `{tag, {:error, reason}}`.
+
+  This should also work with manually monitored processes, given the monitored
+  process obtains the ref to send the `{ref, result}` value back to the calling
+  process.
+
+  ### Channel and Assigns
+
+  The channel provides access to assigns copied from the `Plug.Conn` struct and
+  can be modified via `#{inspect(Channel)}.assign/3` to keep state before
+  entering the `c:continue/3` callback.
+
+  Assigning modifies the channel, so the last updated channel must always be
+  returned from your callback.
+
+  ## Examples
+
+  Synchronous execution:
+
+      def call(req, channel, _arg) do
+        %{arguments: %{"query" => query}} = req.params
+        results = perform_search(query)
+        {:result, MCP.call_tool_result(text: Jason.encode!(results)), channel}
+      end
+
+  Asynchronous with Task:
+
+      def call(req, channel, _arg) do
+        task = Task.async(fn -> expensive_operation(req) end)
+        {:async, {:search_task, task}, channel}
+      end
+
+  Error handling:
+
+      def call(_req, channel, _arg) do
+        {:error, "Resource not available", channel}
+      end
   """
   @callback call(MCP.CallToolRequest.t(), Channel.t(), arg) :: call_result
 
   @doc """
-  Continues processing the tool request after `c:call/3` has returned a value.
+  Continues processing after async work completes.
 
-  The `key` indicates whether this is a response to a server request
-  (`{:response, tag}`) or an async result (`{:async, ref}`). The `response`
-  contains the result value, and the `channel` is associated with the original
-  client request and provides authorization context. The `arg` provides
-  implementation-specific options. This callback returns the same result types
-  as `call/3`.
+  Invoked when `c:call/3` returns `{:async, {tag, ref_or_task}, channel}` and
+  the task finishes.
+
+  The first tuple element contains the tag and the wrapped task result (either
+  `{:ok, result}` for success or `{:error, reason}` for failures with non-linked
+  tasks). Returns same result types as `c:call/3`. Can chain another async
+  operation by returning `{:async, {new_tag, new_ref}, channel}`.
+
+  ## Examples
+
+  Basic continuation:
+
+      def continue({:search_task, {:ok, results}}, channel, _arg) do
+        {:result, MCP.call_tool_result(text: Jason.encode!(results)), channel}
+      end
+
+  Error handling:
+
+      def continue({:search_task, {:error, reason}}, channel, _arg) do
+        {:error, "Search failed: \#{reason}", channel}
+      end
+
+  Chaining async operations:
+
+      def continue({:step1, {:ok, intermediate}}, channel, _arg) do
+        task = Task.async(fn -> step2(intermediate) end)
+        {:async, {:step2, task}, channel}
+      end
   """
-  @callback continue({tag, client_response | (task_result :: term)}, Channel.t(), arg) ::
+  @callback continue({tag, {:ok, term} | {:error, term}}, Channel.t(), arg) ::
               call_result
 
   @optional_callbacks validate_request: 2, continue: 3, output_schema: 1
@@ -140,6 +292,7 @@ defmodule GenMCP.Suite.Tool do
 
       unquote(def_infos(opts))
       unquote(def_validator(opts[:input_schema]))
+      unquote(def_output_schema(opts[:output_schema]))
     end
   end
 
@@ -215,8 +368,34 @@ defmodule GenMCP.Suite.Tool do
     end
   end
 
+  defp def_output_schema(nil) do
+    []
+  end
+
+  defp def_output_schema(output_opt) do
+    quote bind_quoted: [output_opt: output_opt] do
+      @impl true
+      def output_schema(_arg) do
+        unquote(Macro.escape(output_opt))
+      end
+    end
+  end
+
   @doc """
-  Transforms `module` and `{module, arg}` into a tool descriptor.
+  Transforms a tool reference into a fully qualified tool descriptor.
+
+  Accepts a bare module, `{module, arg}` tuple, or existing descriptor map. Validates that the module defines a valid tool name via `c:info/2`. Used by `GenMCP.Suite` during initialization to normalize tool configurations.
+
+  ## Examples
+
+      iex> Tool.expand(MySearchTool)
+      %{name: "search_files", mod: MySearchTool, arg: []}
+
+      iex> Tool.expand({MySearchTool, [max_results: 50]})
+      %{name: "search_files", mod: MySearchTool, arg: [max_results: 50]}
+
+      iex> Tool.expand(%{name: "search_files", mod: MySearchTool, arg: []})
+      %{name: "search_files", mod: MySearchTool, arg: []}
   """
   @spec expand(tool) :: tool_descriptor
   def expand(%{name: _, mod: _, arg: _} = tool) do
@@ -238,6 +417,24 @@ defmodule GenMCP.Suite.Tool do
     %{name: name, mod: mod, arg: arg}
   end
 
+  @doc """
+  Builds an MCP tool description suitable for `tools/list` responses.
+
+  Gathers metadata via `c:info/2` callbacks and normalizes input/output schemas to JSON schema format. Invoked by `GenMCP.Suite` when handling `ListToolsRequest`.
+
+  ## Examples
+
+      iex> Tool.describe(MySearchTool)
+      %MCP.Tool{
+        name: "search_files",
+        description: "Searches for files matching a pattern",
+        inputSchema: %{"type" => "object", "properties" => ...},
+        annotations: %{readOnlyHint: true}
+      }
+
+      iex> Tool.describe({MySearchTool, [repo_path: "/data"]})
+      %MCP.Tool{name: "search_files", ...}
+  """
   @spec describe(tool) :: MCP.Tool.t()
   def describe(tool) do
     %{mod: mod, arg: arg, name: name} = expand(tool)
@@ -270,8 +467,21 @@ defmodule GenMCP.Suite.Tool do
   end
 
   @doc """
-  This is a thin wrapper around the tool `c:call/3` callback that also performs
-  input validation.
+  Invokes the tool's `c:call/3` callback with request validation.
+
+  Performs optional validation via `c:validate_request/2` before dispatching to the tool implementation. Returns `{:error, {:invalid_params, reason}, channel}` if validation fails. Called by `GenMCP.Suite` when handling `CallToolRequest`.
+
+  ## Examples
+
+      req = %MCP.CallToolRequest{
+        params: %{name: "search_files", arguments: %{"query" => "*.ex"}}
+      }
+      Tool.call(tool_descriptor, req, channel)
+      #=> {:result, %MCP.CallToolResult{...}, channel}
+
+      # With validation error
+      Tool.call(tool_descriptor, invalid_req, channel)
+      #=> {:error, {:invalid_params, "limit must be positive"}, channel}
   """
   @spec call(tool_descriptor, MCP.CallToolRequest.t(), Channel.t()) :: call_result
   def call(tool, %MCP.CallToolRequest{} = req, channel) do
@@ -303,6 +513,20 @@ defmodule GenMCP.Suite.Tool do
     {:error, {:invalid_params, reason}, channel}
   end
 
+  @doc """
+  Dispatches continuation logic to the tool's `c:continue/3` callback.
+
+  Invoked by `GenMCP.Suite` when an async task completes. The continuation tuple contains the tag from the original `{:async, {tag, ref}, channel}` return and the wrapped task result. Task results are wrapped as `{:ok, result}` for normal completion or `{:error, reason}` for failures.
+
+  ## Examples
+
+      Tool.continue(tool_descriptor, {:search_task, {:ok, results}}, channel)
+      #=> {:result, %MCP.CallToolResult{...}, channel}
+
+      Tool.continue(tool_descriptor, {:search_task, {:error, :timeout}}, channel)
+      #=> {:error, "Search timed out", channel}
+  """
+  @spec continue(tool_descriptor, {tag, client_response | term}, Channel.t()) :: call_result
   def continue(tool, {_tag, _result} = cont, channel) do
     %{mod: mod, arg: arg} = tool
     handle_result(mod.continue(cont, channel, arg))

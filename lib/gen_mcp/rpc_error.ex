@@ -4,6 +4,8 @@ defmodule GenMCP.RpcError.Compiler do
   # RPC codes https://docs.trafficserver.apache.org/en/latest/developer-guide/jsonrpc/jsonrpc-node-errors.en.html
   # MCP specific http://mcpevals.io/blog/mcp-error-codes
 
+  @moduledoc false
+
   defmacro defcasterror(matcher, rpc_code, http_status, [{:do, payload}]) do
     {matcher, guard} =
       case matcher do

@@ -4,6 +4,8 @@ defmodule GenMCP.Mux do
   alias GenMCP.Mux.SessionSupervisor
   require Logger
 
+  @moduledoc false
+
   # -- Session Initializing ---------------------------------------------------
 
   def start_session(opts) do
