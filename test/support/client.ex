@@ -1,4 +1,6 @@
 defmodule GenMCP.Test.Client do
+  @moduledoc false
+
   import ExUnit.Assertions
 
   require(GenMCP.MCP.ModMap).require_all()

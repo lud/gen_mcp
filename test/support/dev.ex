@@ -1,4 +1,5 @@
 defmodule GenMCP.Support.Dev do
+  @moduledoc false
   def child_spec(_) do
     Supervisor.child_spec({Task, &connect_nodes/0}, id: __MODULE__)
   end

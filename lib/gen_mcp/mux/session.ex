@@ -1,5 +1,10 @@
 defmodule GenMCP.Mux.Session do
-  @moduledoc false
+  @moduledoc """
+  A GenServer based module used for processes representing an ongoing MCP
+  session.
+
+  Delegates all requests to the `GenMCP` behaviour implementations.
+  """
   use GenServer, restart: :temporary
 
   require Logger
@@ -16,6 +21,7 @@ defmodule GenMCP.Mux.Session do
   end
 
   defmodule State do
+    @moduledoc false
     @enforce_keys [:server_mod, :server_state, :session_id, :session_timeout_ref, :opts]
     defstruct @enforce_keys
   end

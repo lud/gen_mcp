@@ -25,6 +25,11 @@ defmodule GenMCP.RpcError.Compiler do
 end
 
 defmodule GenMCP.RpcError do
+  @moduledoc """
+  Helper module used to transform application errors into MCP/RPC error
+  payloads and HTTP status codes.
+  """
+
   import GenMCP.RpcError.Compiler
 
   require Logger

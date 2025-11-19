@@ -1,10 +1,10 @@
 defmodule GenMCP.Cluster.NodeSync do
+  @moduledoc false
   use GenServer
 
   require Logger
 
   # TODO(doc) document configuration for static node id
-
   @gen_opts ~w(name timeout debug spawn_opt hibernate_after)a
   @scope GenMCP.Cluster.scope()
   @glob :gen_mcp_node_sync_glob

@@ -1,4 +1,6 @@
 defmodule GenMCP.Validator do
+  @moduledoc false
+
   alias JSV.Ref
 
   require GenMCP.MCP.ModMap, as: ModMap

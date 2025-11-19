@@ -36,6 +36,7 @@ defmodule GenMCP.Suite.Extension do
   @callback resources(Channel.t(), arg) :: [Suite.ResourceRepo.resource_repo()]
   @callback prompts(Channel.t(), arg) :: [Suite.PromptRepo.prompt_repo()]
 
+  @doc false
   @spec expand(extension) :: extension_descriptor
   def expand(%{mod: _} = extension) do
     extension

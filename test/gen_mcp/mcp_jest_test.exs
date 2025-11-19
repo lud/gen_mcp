@@ -6,7 +6,7 @@ defmodule GenMCP.McpJestTest do
   end
 
   @tag :skip
-  test "execute Calculator" do
+  test "execute Erlanghasher" do
     assert {_, 0} =
              System.cmd(
                "npx",

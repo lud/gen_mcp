@@ -1,4 +1,5 @@
 defmodule GenMCP.Cluster do
+  @moduledoc false
   use Supervisor
 
   @doc false

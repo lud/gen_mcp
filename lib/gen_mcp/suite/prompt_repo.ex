@@ -36,6 +36,7 @@ defmodule GenMCP.Suite.PromptRepo do
   @callback get(name :: String.t(), arguments :: %{binary => term}, Channel.t(), arg) ::
               {:ok, MCP.GetPromptResult.t()} | {:error, :not_found | String.t()}
 
+  @doc false
   @spec expand(prompt_repo) :: prompt_repo_descriptor
   def expand(mod) when is_atom(mod) do
     expand({mod, []})

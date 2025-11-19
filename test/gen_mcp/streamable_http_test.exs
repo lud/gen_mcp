@@ -3,12 +3,10 @@
 defmodule GenMCP.StreamableHttpTest do
   use ExUnit.Case, async: false
 
-  import GenMCP.ConnCase
   import GenMCP.Test.Client
   import Mox
 
   alias GenMCP.Cluster.NodeSync
-  alias GenMCP.ConnCase
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
   alias GenMCP.Support.ServerMock
@@ -202,7 +200,8 @@ defmodule GenMCP.StreamableHttpTest do
              |> expect_status(400)
              |> body()
 
-    # same if we send non-json request (it's not parsed) (parse error should be handled differently)
+    # same if we send non-json request (it's not parsed) (parse error should be
+    # handled differently)
 
     assert %{
              "error" => %{"code" => -32_600, "message" => "Invalid RPC request"},

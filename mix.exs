@@ -18,7 +18,8 @@ defmodule GenMCP.MixProject do
       dialyzer: dialyzer(),
       aliases: aliases(),
       modkit: modkit(),
-      package: package()
+      package: package(),
+      docs: docs()
     ]
   end
 
@@ -125,6 +126,40 @@ defmodule GenMCP.MixProject do
       plt_add_deps: :app_tree,
       plt_add_apps: [:ex_unit],
       plt_local_path: "_build/plts"
+    ]
+  end
+
+  defp docs do
+    [
+      main: "GenMCP",
+      nest_modules_by_prefix: [GenMCP.MCP],
+      groups_for_modules: [
+        Core: [
+          GenMCP,
+          GenMCP.MCP,
+          GenMCP.Transport.StreamableHttp
+        ],
+        Suite: [
+          GenMCP.Suite,
+          GenMCP.Suite.Tool,
+          GenMCP.Suite.PromptRepo,
+          GenMCP.Suite.ResourceRepo,
+          GenMCP.Suite.Extension
+        ],
+        Sessions: [
+          ~r/GenMCP\.Mux\..*/
+        ],
+        Utilities: [
+          GenMCP.RpcError
+        ],
+        Protocol: [
+          ~r/GenMCP\.MCP\..*/
+        ],
+        # Should not be displayed in hexdocs
+        Dev: [
+          ~r/GenMCP\.Test/
+        ]
+      ]
     ]
   end
 end

@@ -1,4 +1,15 @@
 defmodule GenMCP.Suite do
+  @moduledoc """
+  Default MCP server implementation providing tools, resources, and prompts
+  through a composable extension system.
+
+  `GenMCP.Suite` handles protocol initialization, request routing, and manages
+  the lifecycle of tools, resource repositories, and prompt repositories.
+  Extensions can be composed via the `:extensions` option to provide
+  domain-specific functionality. The suite automatically aggregates capabilities
+  from all registered extensions and manages pagination for list operations.
+  """
+
   @behaviour GenMCP
 
   alias GenMCP.MCP
@@ -14,7 +25,8 @@ defmodule GenMCP.Suite do
   @supported_protocol_versions GenMCP.supported_protocol_versions()
 
   defmodule State do
-    # We keep tools both as a list and as a map
+    @moduledoc false
+
     @enforce_keys [
       :client_capabilities,
       :default_assigns,
@@ -92,7 +104,6 @@ defmodule GenMCP.Suite do
     end
   end
 
-  # IO warn return capabilities depending on map sizes
   @impl true
   def handle_request(
         %MCP.InitializeRequest{} = req,

@@ -1,12 +1,16 @@
 defmodule GenMCP do
+  @moduledoc """
+  The main behaviour for MCP servers.
+  """
+
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
+
+  require(Elixir.GenMCP.MCP.ModMap).require_all()
 
   def supported_protocol_versions do
     ["2025-06-18"]
   end
-
-  require(Elixir.GenMCP.MCP.ModMap).require_all()
 
   @type state :: term
 

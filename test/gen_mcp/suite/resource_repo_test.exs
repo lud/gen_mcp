@@ -11,6 +11,7 @@ defmodule GenMCP.Suite.ResourceRepoTest do
   alias GenMCP.Support.ResourceRepoMockTpl
   alias GenMCP.Support.ResourceRepoMockTplNoSkip
 
+  doctest ResourceRepo
   setup :verify_on_exit!
 
   @moduletag :resource_repo

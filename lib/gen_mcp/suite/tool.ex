@@ -382,22 +382,7 @@ defmodule GenMCP.Suite.Tool do
     end
   end
 
-  @doc """
-  Transforms a tool reference into a fully qualified tool descriptor.
-
-  Accepts a bare module, `{module, arg}` tuple, or existing descriptor map. Validates that the module defines a valid tool name via `c:info/2`. Used by `GenMCP.Suite` during initialization to normalize tool configurations.
-
-  ## Examples
-
-      iex> Tool.expand(MySearchTool)
-      %{name: "search_files", mod: MySearchTool, arg: []}
-
-      iex> Tool.expand({MySearchTool, [max_results: 50]})
-      %{name: "search_files", mod: MySearchTool, arg: [max_results: 50]}
-
-      iex> Tool.expand(%{name: "search_files", mod: MySearchTool, arg: []})
-      %{name: "search_files", mod: MySearchTool, arg: []}
-  """
+  @doc false
   @spec expand(tool) :: tool_descriptor
   def expand(%{name: _, mod: _, arg: _} = tool) do
     tool
@@ -421,7 +406,9 @@ defmodule GenMCP.Suite.Tool do
   @doc """
   Builds an MCP tool description suitable for `tools/list` responses.
 
-  Gathers metadata via `c:info/2` callbacks and normalizes input/output schemas to JSON schema format. Invoked by `GenMCP.Suite` when handling `ListToolsRequest`.
+  Gathers metadata via `c:info/2` callbacks and normalizes input/output schemas
+  to JSON schema format. Invoked by `GenMCP.Suite` when handling
+  `ListToolsRequest`.
 
   ## Examples
 
@@ -468,7 +455,10 @@ defmodule GenMCP.Suite.Tool do
   @doc """
   Invokes the tool's `c:call/3` callback with request validation.
 
-  Performs optional validation via `c:validate_request/2` before dispatching to the tool implementation. Returns `{:error, {:invalid_params, reason}, channel}` if validation fails. Called by `GenMCP.Suite` when handling `CallToolRequest`.
+  Performs optional validation via `c:validate_request/2` before dispatching to
+  the tool implementation. Returns `{:error, {:invalid_params, reason},
+  channel}` if validation fails. Called by `GenMCP.Suite` when handling
+  `CallToolRequest`.
 
   ## Examples
 
@@ -515,7 +505,10 @@ defmodule GenMCP.Suite.Tool do
   @doc """
   Dispatches continuation logic to the tool's `c:continue/3` callback.
 
-  Invoked by `GenMCP.Suite` when an async task completes. The continuation tuple contains the tag from the original `{:async, {tag, ref}, channel}` return and the wrapped task result. Task results are wrapped as `{:ok, result}` for normal completion or `{:error, reason}` for failures.
+  Invoked by `GenMCP.Suite` when an async task completes. The continuation tuple
+  contains the tag from the original `{:async, {tag, ref}, channel}` return and
+  the wrapped task result. Task results are wrapped as `{:ok, result}` for
+  normal completion or `{:error, reason}` for failures.
 
   ## Examples
 

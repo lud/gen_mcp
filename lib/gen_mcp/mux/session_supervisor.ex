@@ -1,4 +1,6 @@
 defmodule GenMCP.Mux.SessionSupervisor do
+  @moduledoc false
+
   use DynamicSupervisor
 
   alias GenMCP.Cluster.NodeSync

@@ -8,6 +8,8 @@ StreamableHttp.defplug(McpMock)
 StreamableHttp.defplug(McpReal)
 
 defmodule GenMCP.TestWeb.Router.AuthWrapper do
+  @moduledoc false
+
   # Wrapper is not actually needed since we use :runtime plug init mode but
   # otherwise stacktraces for mocks do not point to the right file.
 
