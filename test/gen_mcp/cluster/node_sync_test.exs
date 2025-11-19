@@ -1,7 +1,9 @@
 defmodule GenMCP.Cluster.NodeSyncTest do
-  alias GenMCP.Cluster.NodeSync
-  require Logger
   use ExUnit.Case, async: true
+
+  alias GenMCP.Cluster.NodeSync
+
+  require Logger
 
   doctest NodeSync
 

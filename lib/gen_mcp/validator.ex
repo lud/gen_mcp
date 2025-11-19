@@ -1,6 +1,8 @@
 defmodule GenMCP.Validator do
   alias JSV.Ref
+
   require GenMCP.MCP.ModMap, as: ModMap
+
   ModMap.require_all()
 
   validable = [

@@ -1,6 +1,4 @@
 defmodule GenMCP.Test.Tools.ErlangHasher do
-  alias GenMCP.MCP
-
   use GenMCP.Suite.Tool,
     name: "ErlangHasher",
     description:
@@ -22,6 +20,8 @@ defmodule GenMCP.Test.Tools.ErlangHasher do
       },
       required: ["subject", "range"]
     }
+
+  alias GenMCP.MCP
 
   @impl true
   def call(req, channel, _arg) do

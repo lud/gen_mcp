@@ -1,6 +1,7 @@
 defmodule GenMCP.Mux.SessionSupervisor do
-  alias GenMCP.Cluster.NodeSync
   use DynamicSupervisor
+
+  alias GenMCP.Cluster.NodeSync
 
   def name do
     {:global, {__MODULE__, NodeSync.node_id()}}

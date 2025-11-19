@@ -1,16 +1,19 @@
 # credo:disable-for-this-file Credo.Check.Readability.LargeNumbers
 
 defmodule GenMCP.SuiteTest do
+  use ExUnit.Case, async: true
+
+  import GenMCP.Test.Helpers
+  import Mox
+
   alias GenMCP.MCP
+  alias GenMCP.MCP.Tool
   alias GenMCP.Suite
   alias GenMCP.Support.ExtensionMock
   alias GenMCP.Support.PromptRepoMock
   alias GenMCP.Support.ResourceRepoMock
   alias GenMCP.Support.ResourceRepoMockTpl
   alias GenMCP.Support.ToolMock
-  import Mox
-  import GenMCP.Test.Helpers
-  use ExUnit.Case, async: true
 
   setup :verify_on_exit!
 
@@ -86,7 +89,7 @@ defmodule GenMCP.SuiteTest do
       {:ok, state} =
         Suite.init(
           "some-session-id",
-          Keyword.merge(@server_info, tools: [{ToolMock, :test_tool}])
+          Keyword.put(@server_info, :tools, [{ToolMock, :test_tool}])
         )
 
       init_req = %MCP.InitializeRequest{
@@ -124,7 +127,7 @@ defmodule GenMCP.SuiteTest do
       {:ok, state} =
         Suite.init(
           "some-session-id",
-          Keyword.merge(@server_info, extensions: [{ExtensionMock, :test_ext}])
+          Keyword.put(@server_info, :extensions, [{ExtensionMock, :test_ext}])
         )
 
       init_req = %MCP.InitializeRequest{
@@ -155,7 +158,7 @@ defmodule GenMCP.SuiteTest do
       {:ok, state} =
         Suite.init(
           "some-session-id",
-          Keyword.merge(@server_info, resources: [{ResourceRepoMock, :test_repo}])
+          Keyword.put(@server_info, :resources, [{ResourceRepoMock, :test_repo}])
         )
 
       init_req = %MCP.InitializeRequest{
@@ -191,7 +194,7 @@ defmodule GenMCP.SuiteTest do
       {:ok, state} =
         Suite.init(
           "some-session-id",
-          Keyword.merge(@server_info, extensions: [{ExtensionMock, :test_ext}])
+          Keyword.put(@server_info, :extensions, [{ExtensionMock, :test_ext}])
         )
 
       init_req = %MCP.InitializeRequest{
@@ -222,7 +225,7 @@ defmodule GenMCP.SuiteTest do
       {:ok, state} =
         Suite.init(
           "some-session-id",
-          Keyword.merge(@server_info, prompts: [{PromptRepoMock, :test_repo}])
+          Keyword.put(@server_info, :prompts, [{PromptRepoMock, :test_repo}])
         )
 
       init_req = %MCP.InitializeRequest{
@@ -258,7 +261,7 @@ defmodule GenMCP.SuiteTest do
       {:ok, state} =
         Suite.init(
           "some-session-id",
-          Keyword.merge(@server_info, extensions: [{ExtensionMock, :test_ext}])
+          Keyword.put(@server_info, :extensions, [{ExtensionMock, :test_ext}])
         )
 
       init_req = %MCP.InitializeRequest{
@@ -367,7 +370,7 @@ defmodule GenMCP.SuiteTest do
       assert {:error, :not_initialized, _} =
                Suite.handle_request(req, chan_info(), state)
 
-      assert {400, %{code: -32603, message: "Server not initialized"}} =
+      assert {400, %{code: -32_603, message: "Server not initialized"}} =
                check_error(:not_initialized)
     end
 
@@ -424,7 +427,7 @@ defmodule GenMCP.SuiteTest do
       assert {:shutdown, {:init_failure, :already_initialized}} = stop_reason
       assert {:error, :already_initialized} = err
 
-      assert {400, %{code: -32602, message: "Session is already initialized"}} = check_error(err)
+      assert {400, %{code: -32_602, message: "Session is already initialized"}} = check_error(err)
     end
 
     test "rejects initialization with invalid protocol version" do
@@ -449,7 +452,7 @@ defmodule GenMCP.SuiteTest do
 
       assert {400,
               %{
-                code: -32600,
+                code: -32_600,
                 data: %{version: "2024-01-01", supported: ["2025-06-18"]},
                 message: "Unsupported protocol version"
               }} = check_error(reason)
@@ -483,7 +486,7 @@ defmodule GenMCP.SuiteTest do
                Suite.handle_request(%MCP.ListToolsRequest{}, chan_info(), state)
 
       assert [
-               %GenMCP.MCP.Tool{
+               %Tool{
                  name: "Tool1",
                  title: "Tool 1 title",
                  description: "Tool 1 descr",
@@ -491,7 +494,7 @@ defmodule GenMCP.SuiteTest do
                  inputSchema: %{"type" => "object"},
                  outputSchema: %{"type" => "object"}
                },
-               %GenMCP.MCP.Tool{
+               %Tool{
                  inputSchema: %{"type" => "object"},
                  name: "Tool2"
                }
@@ -515,7 +518,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:error, {:unknown_tool, "SomeTool"}} = err, _} =
                Suite.handle_request(tool_call_req, chan_info(), state)
 
-      assert {400, %{code: -32602, data: %{tool: "SomeTool"}, message: "Unknown tool SomeTool"}} =
+      assert {400, %{code: -32_602, data: %{tool: "SomeTool"}, message: "Unknown tool SomeTool"}} =
                check_error(err)
     end
 
@@ -586,7 +589,7 @@ defmodule GenMCP.SuiteTest do
                Suite.handle_request(tool_call_req, chan_info(), state)
 
       assert {400,
-              %{code: -32602, data: %{valid: false, details: []}, message: "Invalid Parameters"}} =
+              %{code: -32_602, data: %{valid: false, details: []}, message: "Invalid Parameters"}} =
                check_error(err)
     end
 
@@ -612,7 +615,7 @@ defmodule GenMCP.SuiteTest do
                Suite.handle_request(tool_call_req, chan_info(), state)
 
       # Should return HTTP 500 and RPC code -32603 (internal error)
-      assert {500, %{code: -32603, message: "Something went wrong in the tool"}} =
+      assert {500, %{code: -32_603, message: "Something went wrong in the tool"}} =
                check_error(err)
     end
 
@@ -637,7 +640,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:error, {:invalid_params, :foo}} = err, _} =
                Suite.handle_request(tool_call_req, chan_info(), state)
 
-      assert {400, %{code: -32602, message: "Invalid Parameters"}} =
+      assert {400, %{code: -32_602, message: "Invalid Parameters"}} =
                check_error(err)
     end
   end
@@ -906,7 +909,7 @@ defmodule GenMCP.SuiteTest do
                Suite.handle_request(invalid_request, chan_info(), state)
 
       # Verify it returns a proper error that can be cast to RPC error
-      assert {400, %{code: -32602, message: "Invalid pagination cursor"}} = check_error(error)
+      assert {400, %{code: -32_602, message: "Invalid pagination cursor"}} = check_error(error)
     end
   end
 
@@ -1011,7 +1014,7 @@ defmodule GenMCP.SuiteTest do
                Suite.handle_request(request, chan_info(), state)
 
       # Check that it returns proper RPC error code -32002
-      assert {400, %{code: -32002}} = check_error(err)
+      assert {400, %{code: -32_002}} = check_error(err)
     end
 
     test "returns custom error message from repository" do
@@ -1030,7 +1033,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:error, "Invalid file format"} = err, _} =
                Suite.handle_request(request, chan_info(), state)
 
-      assert {500, %{code: -32603, message: "Invalid file format"}} = check_error(err)
+      assert {500, %{code: -32_603, message: "Invalid file format"}} = check_error(err)
     end
 
     test "routes to correct repository based on URI prefix" do
@@ -1074,7 +1077,7 @@ defmodule GenMCP.SuiteTest do
                Suite.handle_request(request, chan_info(), state)
 
       # Check that it returns proper RPC error code -32002
-      assert {400, %{code: -32002}} = check_error(err)
+      assert {400, %{code: -32_002}} = check_error(err)
     end
 
     test "reads resource with repository using module shorthand" do
@@ -1233,7 +1236,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:error, "expected uri matching" <> _} = err, _} =
                Suite.handle_request(request, chan_info(), state)
 
-      assert {500, %{code: -32603}} = check_error(err)
+      assert {500, %{code: -32_603}} = check_error(err)
     end
   end
 
@@ -1506,7 +1509,7 @@ defmodule GenMCP.SuiteTest do
                  state
                )
 
-      assert {400, %{code: -32602, message: "Invalid pagination cursor"}} =
+      assert {400, %{code: -32_602, message: "Invalid pagination cursor"}} =
                check_error(:invalid_cursor)
     end
 
@@ -1592,7 +1595,7 @@ defmodule GenMCP.SuiteTest do
                )
 
       assert {400,
-              %{code: -32602, data: %{name: "unknown"}, message: "Prompt not found: unknown"}} =
+              %{code: -32_602, data: %{name: "unknown"}, message: "Prompt not found: unknown"}} =
                check_error({:prompt_not_found, "unknown"})
     end
 
@@ -1614,7 +1617,7 @@ defmodule GenMCP.SuiteTest do
                  state
                )
 
-      assert {500, %{code: -32603}} = check_error("Missing required argument: dataset")
+      assert {500, %{code: -32_603}} = check_error("Missing required argument: dataset")
     end
 
     test "returns :invalid_params from call" do
@@ -1635,7 +1638,7 @@ defmodule GenMCP.SuiteTest do
                  state
                )
 
-      assert {500, %{code: -32603}} = check_error("Missing required argument: dataset")
+      assert {500, %{code: -32_603}} = check_error("Missing required argument: dataset")
     end
 
     test "searches across multiple repos" do

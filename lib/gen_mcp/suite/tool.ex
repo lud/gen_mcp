@@ -273,9 +273,10 @@ defmodule GenMCP.Suite.Tool do
 
   defmacro __using__(opts) do
     quote do
+      import GenMCP.Mux.Channel, only: [assign: 3]
+
       @gen_mcp_suite_too_opts unquote(Macro.escape(opts))
       @before_compile unquote(__MODULE__)
-      import GenMCP.Mux.Channel, only: [assign: 3]
     end
   end
 
@@ -452,8 +453,6 @@ defmodule GenMCP.Suite.Tool do
   defp output_schema(mod, arg) do
     if function_exported?(mod, :output_schema, 1) do
       mod.output_schema(arg)
-    else
-      nil
     end
   end
 

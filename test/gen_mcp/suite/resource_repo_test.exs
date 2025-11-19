@@ -1,13 +1,15 @@
 defmodule GenMCP.Suite.ResourceRepoTest do
+  use ExUnit.Case, async: true
+
+  import GenMCP.Test.Helpers
+  import Mox
+
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
   alias GenMCP.Suite.ResourceRepo
   alias GenMCP.Support.ResourceRepoMock
   alias GenMCP.Support.ResourceRepoMockTpl
   alias GenMCP.Support.ResourceRepoMockTplNoSkip
-  import GenMCP.Test.Helpers
-  import Mox
-  use ExUnit.Case, async: true
 
   setup :verify_on_exit!
 

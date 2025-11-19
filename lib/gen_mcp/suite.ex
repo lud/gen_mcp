@@ -1,14 +1,15 @@
 defmodule GenMCP.Suite do
+  @behaviour GenMCP
+
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
   alias GenMCP.Suite.Extension
   alias GenMCP.Suite.PromptRepo
   alias GenMCP.Suite.ResourceRepo
   alias GenMCP.Suite.Tool
+
   require Logger
   require Record
-
-  @behaviour GenMCP
 
   @supported_protocol_versions GenMCP.supported_protocol_versions()
 
@@ -233,7 +234,7 @@ defmodule GenMCP.Suite do
                 MCP.ResourceTemplate,
                 tpl_desc
                 |> Map.put(:uriTemplate, parsed_template.raw)
-                |> Map.drop([:__struct__])
+                |> Map.delete(:__struct__)
               )
             ]
         end
@@ -552,7 +553,7 @@ defmodule GenMCP.Suite do
   end
 
   defp decode_pagination(token, state) do
-    case verify_token(token, _max_age = :timer.hours(2), state) do
+    case verify_token(token, _max_age = to_timeout(hour: 2), state) do
       {:ok, data} -> {:ok, data}
       {:error, :expired} -> {:error, :expired_cursor}
       {:error, :invalid} -> {:error, :invalid_cursor}

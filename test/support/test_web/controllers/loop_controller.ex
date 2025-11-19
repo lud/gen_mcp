@@ -1,7 +1,7 @@
 defmodule GenMCP.TestWeb.LoopController do
-  use GenMCP.TestWeb, :controller
-
   @moduledoc false
+
+  use GenMCP.TestWeb, :controller
 
   def sse(conn, _params) do
     conn = put_resp_header(conn, "content-type", "text/event-stream")

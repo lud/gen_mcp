@@ -58,8 +58,7 @@ defmodule DescriptionWrapper do
       |> String.replace("\n\n", "--double-line-break--")
       |> String.replace("\n", " ")
       |> String.split("--double-line-break--")
-      |> Enum.map(fn line -> hardwrap_line(line, 70) end)
-      |> Enum.join("\n\n")
+      |> Enum.map_join("\n\n", fn line -> hardwrap_line(line, 70) end)
     end
 
     defp hardwrap_line(line, width) do
@@ -91,6 +90,8 @@ defmodule DescriptionWrapper do
 end
 
 defmodule Generator do
+  alias JSV.Helpers.Traverse
+
   def run do
     schema =
       "deps/modelcontextprotocol/schema/2025-06-18/schema.json"
@@ -109,8 +110,7 @@ defmodule Generator do
 
     modules =
       defs
-      |> Stream.map(&generate_module/1)
-      |> Enum.join("\n\n")
+      |> Enum.map_join("\n\n", &generate_module/1)
       |> to_string()
 
     code = Enum.intersperse([prelude(), mod_map(defs, metaschema), modules], "\n\n")
@@ -650,7 +650,7 @@ defmodule Generator do
 
   defp use_schema_api(schema) do
     schema
-    |> JSV.Helpers.Traverse.prewalk(fn
+    |> Traverse.prewalk(fn
       {:val, %{_meta: meta} = prop} ->
         generic? =
           match?(
@@ -671,7 +671,7 @@ defmodule Generator do
       other ->
         elem(other, 1)
     end)
-    |> JSV.Helpers.Traverse.postwalk(fn
+    |> Traverse.postwalk(fn
       {:val, %{description: description} = map} when is_binary(description) ->
         if String.contains?(description, "\n") || String.length(description) > 50 do
           Map.update!(map, :description, &DescriptionWrapper.of/1)
@@ -682,7 +682,7 @@ defmodule Generator do
       other ->
         elem(other, 1)
     end)
-    |> JSV.Helpers.Traverse.postwalk(fn
+    |> Traverse.postwalk(fn
       {:val, %{"$ref": "#/definitions/" <> name} = schema} ->
         case Map.drop(schema, [:description, :"$schema"]) do
           rest when map_size(rest) == 1 -> module_name(name)

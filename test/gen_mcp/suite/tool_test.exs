@@ -1,10 +1,12 @@
 # credo:disable-for-this-file Credo.Check.Readability.LargeNumbers
 
 defmodule GenMCP.Suite.ToolTest do
+  use ExUnit.Case, async: true
+
+  import GenMCP.Test.Helpers
+
   alias GenMCP.MCP
   alias GenMCP.Suite.Tool
-  import GenMCP.Test.Helpers
-  use ExUnit.Case, async: true
 
   defmacro env_mod do
     %{function: {fun, _}, line: line} = __CALLER__
@@ -522,7 +524,7 @@ defmodule GenMCP.Suite.ToolTest do
     test "invalid params errors" do
       # Custom message
 
-      assert {400, %{code: -32602, message: "some string"}} =
+      assert {400, %{code: -32_602, message: "some string"}} =
                check_error({:invalid_params, "some string"})
 
       # JSV Validation
@@ -532,7 +534,7 @@ defmodule GenMCP.Suite.ToolTest do
 
       assert {400,
               %{
-                code: -32602,
+                code: -32_602,
                 data: %{
                   valid: false,
                   details: [
@@ -548,7 +550,7 @@ defmodule GenMCP.Suite.ToolTest do
       # Any term
       #
       # Testing with a pid, we do not return the data
-      assert {400, %{code: -32602, message: "Invalid Parameters"}} ==
+      assert {400, %{code: -32_602, message: "Invalid Parameters"}} ==
                check_error({:invalid_params, self()})
     end
   end

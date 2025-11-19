@@ -1,16 +1,18 @@
 # credo:disable-for-this-file Credo.Check.Readability.LargeNumbers
 
 defmodule GenMCP.StreamableHttpTest do
+  use ExUnit.Case, async: false
+
+  import GenMCP.ConnCase
+  import GenMCP.Test.Client
+  import Mox
+
   alias GenMCP.Cluster.NodeSync
   alias GenMCP.ConnCase
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
   alias GenMCP.Support.ServerMock
   alias GenMCP.Support.ToolMock
-  import ConnCase
-  import GenMCP.Test.Client
-  import Mox
-  use ExUnit.Case, async: false
 
   setup [:set_mox_global, :verify_on_exit!]
 
@@ -45,7 +47,7 @@ defmodule GenMCP.StreamableHttpTest do
              status: 400,
              body: %{
                "error" => %{
-                 "code" => -32601,
+                 "code" => -32_601,
                  "data" => %{"method" => "some_unknownw_method"},
                  "message" => "Unknown method some_unknownw_method"
                },
@@ -192,7 +194,7 @@ defmodule GenMCP.StreamableHttpTest do
 
   test "sending non json rpc" do
     assert %{
-             "error" => %{"code" => -32600, "message" => "Invalid RPC request"},
+             "error" => %{"code" => -32_600, "message" => "Invalid RPC request"},
              "jsonrpc" => "2.0"
            } =
              client()
@@ -203,7 +205,7 @@ defmodule GenMCP.StreamableHttpTest do
     # same if we send non-json request (it's not parsed) (parse error should be handled differently)
 
     assert %{
-             "error" => %{"code" => -32600, "message" => "Invalid RPC request"},
+             "error" => %{"code" => -32_600, "message" => "Invalid RPC request"},
              "jsonrpc" => "2.0"
            } =
              client()
@@ -218,7 +220,7 @@ defmodule GenMCP.StreamableHttpTest do
              "id" => 123,
              "jsonrpc" => "2.0",
              "error" => %{
-               "code" => -32602,
+               "code" => -32_602,
                "data" => %{"details" => _, "valid" => false},
                "message" => "Invalid Parameters"
              }
@@ -355,7 +357,7 @@ defmodule GenMCP.StreamableHttpTest do
 
     assert %{
              "error" => %{
-               "code" => -32602,
+               "code" => -32_602,
                "message" => "Unknown tool swapped-tool-name",
                "data" => %{"tool" => "swapped-tool-name"}
              },
@@ -566,7 +568,7 @@ defmodule GenMCP.StreamableHttpTest do
     assert [
              %{
                "error" => %{
-                 "code" => -32603,
+                 "code" => -32_603,
                  "message" => "Something went wrong in async operation"
                },
                "id" => 457,
@@ -646,7 +648,7 @@ defmodule GenMCP.StreamableHttpTest do
              },
              %{
                "error" => %{
-                 "code" => -32603,
+                 "code" => -32_603,
                  "message" => "Failed at step 3"
                },
                "id" => 458,
@@ -847,7 +849,7 @@ defmodule GenMCP.StreamableHttpTest do
 
       assert %{
                "error" => %{
-                 "code" => -32603,
+                 "code" => -32_603,
                  "message" => "Invalid pagination cursor"
                },
                "id" => 202,
@@ -930,7 +932,7 @@ defmodule GenMCP.StreamableHttpTest do
 
       assert %{
                "error" => %{
-                 "code" => -32002,
+                 "code" => -32_002,
                  "message" => message,
                  "data" => %{"uri" => "file:///missing.txt"}
                },
@@ -972,7 +974,7 @@ defmodule GenMCP.StreamableHttpTest do
 
       assert %{
                "error" => %{
-                 "code" => -32603,
+                 "code" => -32_603,
                  "message" => message
                },
                "id" => 206,
@@ -1280,7 +1282,7 @@ defmodule GenMCP.StreamableHttpTest do
                "id" => 304,
                "jsonrpc" => "2.0",
                "error" => %{
-                 "code" => -32602,
+                 "code" => -32_602,
                  "message" => "Prompt not found: unknown",
                  "data" => %{"name" => "unknown"}
                }
@@ -1313,7 +1315,7 @@ defmodule GenMCP.StreamableHttpTest do
                "id" => 305,
                "jsonrpc" => "2.0",
                "error" => %{
-                 "code" => -32603,
+                 "code" => -32_603,
                  "message" => "Missing required argument: dataset"
                }
              } = resp.body
@@ -1337,7 +1339,7 @@ defmodule GenMCP.StreamableHttpTest do
 
       assert %{
                "error" => %{
-                 "code" => -32603,
+                 "code" => -32_603,
                  "message" => _message
                },
                "id" => 789,

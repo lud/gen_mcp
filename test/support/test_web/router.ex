@@ -1,6 +1,11 @@
+alias GenMCP.Support.ServerMock
+alias GenMCP.TestWeb.Router.McpMock
+alias GenMCP.TestWeb.Router.McpReal
+
 require GenMCP.Transport.StreamableHttp, as: StreamableHttp
-StreamableHttp.defplug(GenMCP.TestWeb.Router.McpMock)
-StreamableHttp.defplug(GenMCP.TestWeb.Router.McpReal)
+
+StreamableHttp.defplug(McpMock)
+StreamableHttp.defplug(McpReal)
 
 defmodule GenMCP.TestWeb.Router.AuthWrapper do
   # Wrapper is not actually needed since we use :runtime plug init mode but
@@ -32,26 +37,26 @@ defmodule GenMCP.TestWeb.Router.NoAuth do
 end
 
 defmodule GenMCP.TestWeb.Router do
+  @moduledoc false
   use Phoenix.Router
 
-  @moduledoc false
   scope "/dummy", GenMCP.TestWeb do
     get "/sse-test", LoopController, :sse
   end
 
   scope "/mcp" do
-    forward "/mock", GenMCP.TestWeb.Router.McpMock, server: GenMCP.Support.ServerMock
+    forward "/mock", McpMock, server: ServerMock
 
     scope "/" do
       pipe_through :auth
 
-      forward "/mock-auth", GenMCP.TestWeb.Router.McpMock,
-        server: GenMCP.Support.ServerMock,
+      forward "/mock-auth", McpMock,
+        server: ServerMock,
         assigns: %{assign_from_forward: "hello", shared_assign: "from forward"},
         copy_assigns: [:assign_from_auth, :shared_assign, :unexisting_assign]
     end
 
-    forward "/real", GenMCP.TestWeb.Router.McpReal,
+    forward "/real", McpReal,
       server_name: "Real Server",
       server_version: "0.0.1",
       tools: [GenMCP.Test.Tools.ErlangHasher],

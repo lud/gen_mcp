@@ -49,7 +49,7 @@ defmodule GenMCP.MixProject do
       # Resources
       mcp_schemas(),
 
-      # Test
+      # Dev
       {:req, "~> 0.5", only: [:dev, :test]},
       {:local_cluster, "~> 2.0", only: [:test]},
       {:bandit, "~> 1.0", only: [:dev, :test]},
@@ -63,7 +63,8 @@ defmodule GenMCP.MixProject do
       {:mix_audit, ">= 2.1.5", only: [:dev, :test], runtime: false},
       {:sobelow, ">= 0.14.0", only: [:dev, :test], runtime: false},
       {:nvir, "~> 0.13.4", only: [:dev, :test]},
-      {:readmix, "~> 0.6", only: [:dev, :test], runtime: false}
+      {:readmix, "~> 0.6", only: [:dev, :test], runtime: false},
+      {:quokka, "~> 2.11", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -103,8 +104,8 @@ defmodule GenMCP.MixProject do
     [
       licenses: ["MIT"],
       links: %{
-        "Github" => @source_url,
-        "Changelog" => "https://github.com/lud/gen_mcp/blob/main/CHANGELOG.md"
+        "Changelog" => "https://github.com/lud/gen_mcp/blob/main/CHANGELOG.md",
+        "Github" => @source_url
       }
     ]
   end

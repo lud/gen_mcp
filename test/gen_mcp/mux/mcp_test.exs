@@ -2,6 +2,7 @@ defmodule GenMCP.MCPTest do
   use ExUnit.Case, async: true
 
   alias GenMCP.MCP
+  alias GenMCP.MCP.TextContent
 
   describe "intialize_result/1" do
     test "creates initialize result with required server_info" do
@@ -322,9 +323,9 @@ defmodule GenMCP.MCPTest do
 
       assert %GenMCP.MCP.CallToolResult{
                content: [
-                 %GenMCP.MCP.TextContent{text: "foo", type: "text"},
-                 %GenMCP.MCP.TextContent{
-                   text: "{\"foo\":\"bar\"}",
+                 %TextContent{text: "foo", type: "text"},
+                 %TextContent{
+                   text: ~s({"foo":"bar"}),
                    type: "text"
                  }
                ],

@@ -1,10 +1,11 @@
 defmodule GenMCP.Mux do
+  @moduledoc false
+
   alias GenMCP.Cluster.NodeSync
   alias GenMCP.Mux.Session
   alias GenMCP.Mux.SessionSupervisor
-  require Logger
 
-  @moduledoc false
+  require Logger
 
   # -- Session Initializing ---------------------------------------------------
 
@@ -41,7 +42,7 @@ defmodule GenMCP.Mux do
 
   # -- Stopping Session -------------------------------------------------------
 
-  def stop_session(session_id, timeout \\ :timer.minutes(1)) do
+  def stop_session(session_id, timeout \\ to_timeout(minute: 1)) do
     call_session(session_id, {:"$gen_mcp", :stop}, timeout)
   end
 

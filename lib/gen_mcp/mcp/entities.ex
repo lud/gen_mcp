@@ -104,6 +104,7 @@ end
 
 defmodule GenMCP.MCP.Annotations do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -156,6 +157,7 @@ end
 
 defmodule GenMCP.MCP.AudioContent do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -183,6 +185,7 @@ end
 
 defmodule GenMCP.MCP.BlobResourceContents do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -207,6 +210,7 @@ end
 
 defmodule GenMCP.MCP.BooleanSchema do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -226,6 +230,7 @@ end
 
 defmodule GenMCP.MCP.CallToolRequest do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -247,6 +252,7 @@ end
 
 defmodule GenMCP.MCP.CallToolRequestParams do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -265,6 +271,7 @@ end
 
 defmodule GenMCP.MCP.CallToolResult do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -315,6 +322,7 @@ end
 
 defmodule GenMCP.MCP.CancelledNotification do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -345,6 +353,7 @@ end
 
 defmodule GenMCP.MCP.CancelledNotificationParams do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -368,6 +377,7 @@ end
 
 defmodule GenMCP.MCP.ClientCapabilities do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -443,6 +453,7 @@ end
 
 defmodule GenMCP.MCP.EmbeddedResource do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -471,6 +482,7 @@ end
 
 defmodule GenMCP.MCP.GetPromptRequest do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -492,6 +504,7 @@ end
 
 defmodule GenMCP.MCP.GetPromptRequestParams do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -514,6 +527,7 @@ end
 
 defmodule GenMCP.MCP.GetPromptResult do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -535,6 +549,7 @@ end
 
 defmodule GenMCP.MCP.ImageContent do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -562,6 +577,7 @@ end
 
 defmodule GenMCP.MCP.Implementation do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -601,6 +617,7 @@ end
 
 defmodule GenMCP.MCP.InitializeRequest do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -623,6 +640,7 @@ end
 
 defmodule GenMCP.MCP.InitializeRequestParams do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -648,6 +666,7 @@ end
 
 defmodule GenMCP.MCP.InitializeResult do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -689,6 +708,7 @@ end
 
 defmodule GenMCP.MCP.InitializedNotification do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -714,6 +734,7 @@ end
 
 defmodule GenMCP.MCP.JSONRPCError do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -755,6 +776,7 @@ end
 
 defmodule GenMCP.MCP.JSONRPCResponse do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -774,6 +796,7 @@ end
 
 defmodule GenMCP.MCP.ListPromptsRequest do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -796,6 +819,7 @@ end
 
 defmodule GenMCP.MCP.ListPromptsRequestParams do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -818,6 +842,7 @@ end
 
 defmodule GenMCP.MCP.ListPromptsResult do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -845,6 +870,7 @@ end
 
 defmodule GenMCP.MCP.ListResourceTemplatesRequest do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -879,6 +905,7 @@ end
 
 defmodule GenMCP.MCP.ListResourceTemplatesResult do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -907,6 +934,7 @@ end
 
 defmodule GenMCP.MCP.ListResourcesRequest do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -928,6 +956,7 @@ end
 
 defmodule GenMCP.MCP.ListResourcesRequestParams do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -950,6 +979,7 @@ end
 
 defmodule GenMCP.MCP.ListResourcesResult do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -977,6 +1007,7 @@ end
 
 defmodule GenMCP.MCP.ListToolsRequest do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1010,6 +1041,7 @@ end
 
 defmodule GenMCP.MCP.ListToolsResult do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1037,6 +1069,7 @@ end
 
 defmodule GenMCP.MCP.PingRequest do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1064,6 +1097,7 @@ end
 
 defmodule GenMCP.MCP.ProgressNotification do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1125,6 +1159,7 @@ end
 
 defmodule GenMCP.MCP.Prompt do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1176,6 +1211,7 @@ end
 
 defmodule GenMCP.MCP.PromptArgument do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1213,6 +1249,7 @@ end
 
 defmodule GenMCP.MCP.PromptMessage do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1233,6 +1270,7 @@ end
 
 defmodule GenMCP.MCP.ReadResourceRequest do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1254,6 +1292,7 @@ end
 
 defmodule GenMCP.MCP.ReadResourceRequestParams do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1277,6 +1316,7 @@ end
 
 defmodule GenMCP.MCP.ReadResourceResult do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1311,6 +1351,7 @@ end
 
 defmodule GenMCP.MCP.Resource do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1371,6 +1412,7 @@ end
 
 defmodule GenMCP.MCP.ResourceLink do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1436,6 +1478,7 @@ end
 
 defmodule GenMCP.MCP.ResourceTemplate do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1499,6 +1542,7 @@ end
 
 defmodule GenMCP.MCP.Result do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1521,6 +1565,7 @@ end
 
 defmodule GenMCP.MCP.RootsListChangedNotification do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1548,6 +1593,7 @@ end
 
 defmodule GenMCP.MCP.ServerCapabilities do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1641,6 +1687,7 @@ end
 
 defmodule GenMCP.MCP.SubscribeRequest do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1676,6 +1723,7 @@ end
 
 defmodule GenMCP.MCP.TextContent do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1696,6 +1744,7 @@ end
 
 defmodule GenMCP.MCP.TextResourceContents do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1721,6 +1770,7 @@ end
 
 defmodule GenMCP.MCP.Tool do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1806,6 +1856,7 @@ end
 
 defmodule GenMCP.MCP.ToolAnnotations do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{
@@ -1872,6 +1923,7 @@ end
 
 defmodule GenMCP.MCP.UnsubscribeRequest do
   use JSV.Schema
+
   JsonDerive.auto()
 
   defschema %{

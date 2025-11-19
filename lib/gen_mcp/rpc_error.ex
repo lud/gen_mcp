@@ -25,15 +25,16 @@ defmodule GenMCP.RpcError.Compiler do
 end
 
 defmodule GenMCP.RpcError do
-  @rpc_invalid_request -32600
-  @rpc_invalid_params -32602
-  @rpc_method_not_found -32601
-  @rpc_internal_error -32603
-  @rpc_resource_not_found -32002
-  @rpc_prompt_not_found @rpc_invalid_params
-
   import GenMCP.RpcError.Compiler
+
   require Logger
+
+  @rpc_invalid_request -32_600
+  @rpc_invalid_params -32_602
+  @rpc_method_not_found -32_601
+  @rpc_internal_error -32_603
+  @rpc_resource_not_found -32_002
+  @rpc_prompt_not_found @rpc_invalid_params
 
   defcasterror :missing_session_id, :missing_session_id, 400 do
     %{

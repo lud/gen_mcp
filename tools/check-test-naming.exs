@@ -22,7 +22,7 @@ defmodule Tool do
     |> Enum.take(1)
     |> case do
       [] -> []
-      ["defmodule " <> rest] -> [{path, String.split(rest, " ") |> hd()}]
+      ["defmodule " <> rest] -> [{path, hd(String.split(rest, " "))}]
     end
   end
 
@@ -55,9 +55,7 @@ defmodule Tool do
     module = Module.concat([module_str])
     cur_path = Path.relative_to_cwd(path)
 
-    if cur_path == pref_path do
-      # pass
-    else
+    if cur_path != pref_path do
       IO.puts("# relocate module #{inspect(module)}")
       print_move(module, cur_path, pref_path)
       IO.puts("mkdir -p " <> Path.dirname(pref_path))

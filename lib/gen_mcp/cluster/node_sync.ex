@@ -1,6 +1,7 @@
 defmodule GenMCP.Cluster.NodeSync do
-  require Logger
   use GenServer
+
+  require Logger
 
   # TODO(doc) document configuration for static node id
 

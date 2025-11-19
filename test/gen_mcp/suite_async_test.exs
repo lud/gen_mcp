@@ -1,13 +1,15 @@
 # credo:disable-for-this-file Credo.Check.Readability.LargeNumbers
 
 defmodule GenMCP.SuiteAsyncTest do
+  use ExUnit.Case, async: true
+
+  import GenMCP.Test.Helpers
+  import Mox
+
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
   alias GenMCP.Suite
   alias GenMCP.Support.ToolMock
-  import Mox
-  import GenMCP.Test.Helpers
-  use ExUnit.Case, async: true
 
   @moduletag :capture_log
 
@@ -382,7 +384,7 @@ defmodule GenMCP.SuiteAsyncTest do
       assert_receive {:"$gen_mcp", :error, error}
 
       # Should return HTTP 500 and RPC code -32603 (internal error)
-      assert {500, %{code: -32603, message: "Error from continue callback"}} =
+      assert {500, %{code: -32_603, message: "Error from continue callback"}} =
                check_error(error)
     end
 

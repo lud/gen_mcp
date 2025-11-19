@@ -1,10 +1,10 @@
 defmodule GenMCP.Suite.PromptRepoTest do
   use ExUnit.Case, async: true
 
+  import Mox
+
   alias GenMCP.Suite.PromptRepo
   alias GenMCP.Support.PromptRepoMock
-
-  import Mox
 
   setup :verify_on_exit!
 

@@ -1,20 +1,22 @@
 defmodule GenMCP.ConnCase do
-  alias Phoenix.ConnTest
-  require Phoenix.ConnTest
+  @moduledoc false
+
   use ExUnit.CaseTemplate
 
-  @moduledoc false
+  alias Phoenix.ConnTest
+
+  require Phoenix.ConnTest
 
   using do
     quote do
-      @endpoint GenMCP.TestWeb.Endpoint
+      use GenMCP.TestWeb, :verified_routes
 
-      import unquote(__MODULE__)
-      import Plug.Conn
       import Phoenix.ConnTest
       import Phoenix.Controller, only: [json: 2, text: 2, html: 2]
+      import Plug.Conn
+      import unquote(__MODULE__)
 
-      use GenMCP.TestWeb, :verified_routes
+      @endpoint GenMCP.TestWeb.Endpoint
     end
   end
 

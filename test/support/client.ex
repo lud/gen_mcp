@@ -1,5 +1,6 @@
 defmodule GenMCP.Test.Client do
   import ExUnit.Assertions
+
   require(GenMCP.MCP.ModMap).require_all()
 
   [
@@ -62,7 +63,7 @@ defmodule GenMCP.Test.Client do
       assert :ok = validate_request(data)
     end
 
-    Req.post!(client, [json: data, receive_timeout: :timer.minutes(1)] ++ req_opts)
+    Req.post!(client, [json: data, receive_timeout: to_timeout(minute: 1)] ++ req_opts)
   end
 
   def expect_status(resp, status) when is_integer(status) do

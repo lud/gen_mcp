@@ -1,15 +1,4 @@
 defmodule GenMCP.Transport.StreamableHttp do
-  alias GenMCP.MCP.InitializeRequest
-  alias GenMCP.MCP.InitializeResult
-  alias GenMCP.MCP.JSONRPCResponse
-  alias GenMCP.Mux
-  alias GenMCP.RpcError
-  alias GenMCP.Validator
-  alias JSV.Codec
-  import Plug.Conn
-  require Logger
-  use Plug.Router, copy_opts_to_assign: :gen_mcp_streamable_http_opts
-
   @moduledoc """
   Handles incoming MCP requests.
 
@@ -21,6 +10,21 @@ defmodule GenMCP.Transport.StreamableHttp do
   session during that timespan. Use the `:session_timeout` option to increase
   that timeout (in milliseconds).
   """
+
+  use Plug.Router, copy_opts_to_assign: :gen_mcp_streamable_http_opts
+
+  import Plug.Conn
+
+  alias GenMCP.MCP.InitializeRequest
+  alias GenMCP.MCP.InitializeResult
+  alias GenMCP.MCP.JSONRPCError
+  alias GenMCP.MCP.JSONRPCResponse
+  alias GenMCP.Mux
+  alias GenMCP.RpcError
+  alias GenMCP.Validator
+  alias JSV.Codec
+
+  require Logger
 
   # -- Plug API ---------------------------------------------------------------
 
@@ -50,8 +54,10 @@ defmodule GenMCP.Transport.StreamableHttp do
 
     {:module, mod, _, _} =
       defmodule module do
-        defdelegate init(opts), to: GenMCP.Transport.StreamableHttp
-        defdelegate call(conn, opts), to: GenMCP.Transport.StreamableHttp
+        alias GenMCP.Transport.StreamableHttp
+
+        defdelegate init(opts), to: StreamableHttp
+        defdelegate call(conn, opts), to: StreamableHttp
       end
 
     mod
@@ -59,7 +65,7 @@ defmodule GenMCP.Transport.StreamableHttp do
 
   # -- Internal ---------------------------------------------------------------
 
-  @stream_keepalive_timeout :timer.seconds(25)
+  @stream_keepalive_timeout to_timeout(second: 25)
   @session_id_assign_key :gen_mcp_session_id
   @session_id_header "mcp-session-id"
 
@@ -208,7 +214,7 @@ defmodule GenMCP.Transport.StreamableHttp do
   defp send_error(conn, reason, opts \\ []) do
     case RpcError.cast_error(reason) do
       {status, payload} ->
-        payload = %GenMCP.MCP.JSONRPCError{
+        payload = %JSONRPCError{
           error: payload,
           id: opts[:msg_id],
           jsonrpc: "2.0"
@@ -283,7 +289,7 @@ defmodule GenMCP.Transport.StreamableHttp do
   defp send_error_response_chunk(conn, msg_id, reason) do
     {_status, error_payload} = RpcError.cast_error(reason)
 
-    payload = %GenMCP.MCP.JSONRPCError{
+    payload = %JSONRPCError{
       error: error_payload,
       id: msg_id,
       jsonrpc: "2.0"

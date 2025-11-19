@@ -1,7 +1,7 @@
 defmodule GenMCP.TestWeb.Endpoint do
-  use Phoenix.Endpoint, otp_app: :gen_mcp
-
   @moduledoc false
+
+  use Phoenix.Endpoint, otp_app: :gen_mcp
 
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]

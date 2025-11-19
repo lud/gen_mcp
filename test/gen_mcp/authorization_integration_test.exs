@@ -1,9 +1,13 @@
 defmodule GenMCP.AuthorizationIntegrationTest do
-  alias GenMCP.MCP
-  alias GenMCP.Support.ServerMock
+  use ExUnit.Case, async: false
+
   import GenMCP.Test.Client
   import Mox
-  use ExUnit.Case, async: false
+
+  alias GenMCP.MCP
+  alias GenMCP.Support.AuthorizationMock
+  alias GenMCP.Support.ServerMock
+  alias GenMCP.Transport.StreamableHttp
 
   # DISCLAIMER
   #
@@ -31,7 +35,7 @@ defmodule GenMCP.AuthorizationIntegrationTest do
 
   describe "when auth plug halts the connection" do
     setup do
-      GenMCP.Support.AuthorizationMock
+      AuthorizationMock
       |> expect(:init, fn opts -> opts end)
       |> expect(:call, fn conn, _opts ->
         conn
@@ -103,7 +107,7 @@ defmodule GenMCP.AuthorizationIntegrationTest do
 
   describe "when auth plug passes the connection through" do
     setup do
-      GenMCP.Support.AuthorizationMock
+      AuthorizationMock
       |> stub(:init, fn opts -> opts end)
       |> stub(:call, fn conn, _opts ->
         conn
@@ -118,7 +122,7 @@ defmodule GenMCP.AuthorizationIntegrationTest do
       ServerMock
       |> expect(:init, fn sid, _ -> {:ok, {:sid, sid}} end)
       |> expect(:handle_request, fn _req, chan_info, {:sid, sid} ->
-        assert {:channel, GenMCP.Transport.StreamableHttp, _pid, assigns} = chan_info
+        assert {:channel, StreamableHttp, _pid, assigns} = chan_info
 
         # sessionid is set in the assigns by the client
         assert ^sid = assigns.gen_mcp_session_id
@@ -165,7 +169,7 @@ defmodule GenMCP.AuthorizationIntegrationTest do
       ServerMock
       |> expect(:init, fn sid, _ -> {:ok, {:sid, sid}} end)
       |> expect(:handle_request, fn _req, chan_info, {:sid, sid} ->
-        assert {:channel, GenMCP.Transport.StreamableHttp, _pid, assigns} = chan_info
+        assert {:channel, StreamableHttp, _pid, assigns} = chan_info
 
         assert ^sid = assigns.gen_mcp_session_id
         assert assigns[:assign_from_forward] == "hello"
@@ -181,7 +185,7 @@ defmodule GenMCP.AuthorizationIntegrationTest do
         {:reply, {:result, init_result}, :session_state_1}
       end)
       |> expect(:handle_request, fn _req, chan_info, :session_state_1 ->
-        assert {:channel, GenMCP.Transport.StreamableHttp, _pid, assigns} = chan_info
+        assert {:channel, StreamableHttp, _pid, assigns} = chan_info
 
         # assigns are properly merged for tool call
         assert assigns[:assign_from_forward] == "hello"

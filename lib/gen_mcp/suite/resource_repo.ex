@@ -54,6 +54,7 @@ defmodule GenMCP.Suite.ResourceRepo do
   """
 
   alias GenMCP.MCP
+  alias GenMCP.Mux.Channel
 
   @type resource_item :: %{
           required(:uri) => String.t(),
@@ -135,7 +136,7 @@ defmodule GenMCP.Suite.ResourceRepo do
         ], nil}
       end
   """
-  @callback list(pagination_token :: String.t() | nil, GenMCP.Mux.Channel.t(), arg) ::
+  @callback list(pagination_token :: String.t() | nil, Channel.t(), arg) ::
               {[resource_item], next_cursor :: term | nil}
 
   @doc """
@@ -183,7 +184,7 @@ defmodule GenMCP.Suite.ResourceRepo do
         end
       end
   """
-  @callback read(uri_or_template_args, GenMCP.Mux.Channel.t(), arg) ::
+  @callback read(uri_or_template_args, Channel.t(), arg) ::
               {:ok, MCP.ReadResourceResult.t()} | {:error, :not_found | String.t()}
             when uri_or_template_args: String.t() | %{String.t() => term}
 
@@ -251,8 +252,6 @@ defmodule GenMCP.Suite.ResourceRepo do
             raise ArgumentError,
                   "resource repo #{inspect(mod)} must return a map with :uriTemplate and :name keys, got: #{inspect(invalid)}"
         end
-      else
-        nil
       end
 
     %{
@@ -297,7 +296,7 @@ defmodule GenMCP.Suite.ResourceRepo do
   - `{:error, {:resource_not_found, uri}}` - Resource not found
   - `{:error, String.t()}` - Custom error message from repository
   """
-  @spec read_resource(resource_repo_descriptor, String.t(), GenMCP.Mux.Channel.t()) ::
+  @spec read_resource(resource_repo_descriptor, String.t(), Channel.t()) ::
           {:ok, MCP.ReadResourceResult.t()}
           | {:error, {:resource_not_found, String.t()} | String.t()}
   def read_resource(%{template: template} = repo, uri, channel) when is_map(template) do

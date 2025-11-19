@@ -122,7 +122,7 @@ defmodule GenMCP.MCP do
       tools:
         Enum.map(tools, fn
           %MCP.Tool{} = tool -> tool
-          tool -> GenMCP.Suite.Tool.describe(tool)
+          tool -> Tool.describe(tool)
         end)
     }
   end

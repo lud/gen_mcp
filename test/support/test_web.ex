@@ -3,11 +3,11 @@ defmodule GenMCP.TestWeb do
 
   def controller do
     quote do
-      import Plug.Conn
-
       use Phoenix.Controller,
         formats: [:html, :json],
         layouts: []
+
+      import Plug.Conn
 
       unquote(verified_routes())
     end

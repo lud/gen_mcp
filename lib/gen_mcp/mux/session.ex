@@ -1,5 +1,6 @@
 defmodule GenMCP.Mux.Session do
   @moduledoc false
+  use GenServer, restart: :temporary
 
   require Logger
 
@@ -7,8 +8,6 @@ defmodule GenMCP.Mux.Session do
   # plug. It is not kept in memory by the supervisor as long as the session has
   # restart: :temporary. If we want to use another restart strategy we must
   # change the boot setup to avoid keeping to much in memory.
-  use GenServer, restart: :temporary
-
   @gen_opts ~w(name timeout debug spawn_opt hibernate_after)a
 
   def start_link(opts) do
@@ -31,7 +30,7 @@ defmodule GenMCP.Mux.Session do
     session_id = Keyword.fetch!(opts, :session_id)
 
     session_timeout =
-      Keyword.get(opts, :session_timeout, :timer.minutes(default_session_timeout_minutes()))
+      Keyword.get(opts, :session_timeout, to_timeout(minute: default_session_timeout_minutes()))
 
     self_opts = [session_timeout: session_timeout]
 
