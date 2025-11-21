@@ -4,6 +4,34 @@ defmodule GenMCP.Suite.ResourceRepo do
 
   Repositories expose data to the MCP server either via fixed URIs or URI templates.
   This module validates repository definitions and orchestrates URI parsing and content retrieval.
+
+  ## Example
+
+      defmodule MyResourceRepo do
+        @behaviour GenMCP.Suite.ResourceRepo
+
+        @impl true
+        def prefix(_arg), do: "file:///"
+
+        @impl true
+        def list(_cursor, _channel, _arg) do
+          resources = [
+            %{uri: "file:///readme.txt", name: "README"}
+          ]
+          {resources, nil}
+        end
+
+        @impl true
+        def read("file:///readme.txt", _channel, _arg) do
+          result = GenMCP.MCP.read_resource_result(
+            uri: "file:///readme.txt",
+            text: "Hello world"
+          )
+          {:ok, result}
+        end
+
+        def read(_uri, _channel, _arg), do: {:error, :not_found}
+      end
   """
 
   alias GenMCP.MCP
@@ -38,7 +66,7 @@ defmodule GenMCP.Suite.ResourceRepo do
   @doc """
   Returns the URI prefix for routing requests.
 
-  ## Example
+  ## Examples
 
       def prefix(_arg), do: "file:///"
   """
@@ -49,7 +77,7 @@ defmodule GenMCP.Suite.ResourceRepo do
 
   Must return a map with `:uriTemplate` and `:name`.
 
-  ## Example
+  ## Examples
 
       def template(_arg) do
         %{uriTemplate: "file:///{path}", name: "File"}
@@ -63,7 +91,7 @@ defmodule GenMCP.Suite.ResourceRepo do
   Receives the pagination token (nil for first page) and the channel context.
   Must return a tuple containing the list of resources and the next cursor (or nil).
 
-  ## Example
+  ## Examples
 
       def list(nil, _channel, _arg) do
         resources = [%{uri: "file:///readme.txt", name: "README"}]
@@ -79,10 +107,28 @@ defmodule GenMCP.Suite.ResourceRepo do
   Receives the URI string (for direct resources) or a map of template arguments (for templates).
   Must return `{:ok, result}` or an error tuple.
 
-  ## Example
+  ## Examples
+
+  Direct resource:
 
       def read("file:///readme.txt", _channel, _arg) do
-        {:ok, %GenMCP.MCP.ReadResourceResult{contents: [...]}}
+        result =
+          GenMCP.MCP.read_resource_result(
+            uri: "file:///readme.txt",
+            text: "Hello world"
+          )
+        {:ok, result}
+      end
+
+  Template resource:
+
+      def read(%{"path" => ["config", "app.json"]}, _channel, _arg) do
+        result =
+          GenMCP.MCP.read_resource_result(
+            uri: "file:///config/app.json",
+            text: "{}"
+          )
+        {:ok, result}
       end
   """
   @callback read(uri_or_template_args, Channel.t(), arg) ::
@@ -95,7 +141,7 @@ defmodule GenMCP.Suite.ResourceRepo do
   Called before `c:read/3` to extract arguments from the URI.
   If not implemented, `Texture.UriTemplate.match/2` is used.
 
-  ## Example
+  ## Examples
 
       def parse_uri("file:///" <> path, _arg) do
         {:ok, %{"path" => path}}

@@ -1,14 +1,33 @@
-defmodule GenMCP.Transport.StreamableHttp do
+defmodule GenMCP.Transport.StreamableHTTP do
   @moduledoc """
-  Handles incoming MCP requests.
+  Handles incoming MCP requests over HTTP with SSE support.
 
-  On initialize requests, as session is started with all the options.
+  This module is a Plug that can be mounted in your router. It handles the MCP
+  protocol handshake, session management, and request routing.
 
-  Important: Session timeout defaults to
-  #{GenMCP.Mux.Session.default_session_timeout_minutes()} minutes, which is
-  short. MCP clients will receive 404 errors if they do not interact with the
-  session during that timespan. Use the `:session_timeout` option to increase
-  that timeout (in milliseconds).
+  It supports Server-Sent Events (SSE) for streaming responses, such as
+  notifications and asynchronous tool results.
+
+  ## Configuration
+
+  *   `:session_timeout` - Session timeout in milliseconds. Defaults to 60 minutes.
+      Clients must interact with the session within this window or they will receive
+      404 errors.
+  *   `:assigns` - A map of static assigns to add to the channel context.
+  *   `:copy_assigns` - A list of keys to copy from `conn.assigns` to the channel
+      context.
+
+  All other options are forwarded to the server implementation (e.g., `GenMCP.Suite`).
+  See `GenMCP.Suite` for server configuration options like `:server_name`,
+  `:tools`, etc.
+
+  ## Example
+
+      # In your router
+      forward "/mcp", GenMCP.Transport.StreamableHTTP,
+        server_name: "My App",
+        server_version: "1.0.0",
+        tools: [MyTool]
   """
 
   use Plug.Router, copy_opts_to_assign: :gen_mcp_streamable_http_opts
@@ -49,15 +68,27 @@ defmodule GenMCP.Transport.StreamableHttp do
 
   # -- Plug Duplication -------------------------------------------------------
 
+  @doc """
+  Defines a module that delegates to `GenMCP.Transport.StreamableHTTP`.
+
+  This is useful if you want to define a named Plug for your MCP server.
+
+  ## Example
+
+      defmodule MyMCPPlug do
+        require GenMCP.Transport.StreamableHTTP
+        GenMCP.Transport.StreamableHTTP.defplug(MyMCPPlug)
+      end
+  """
   defmacro defplug(module) do
     module = Macro.expand_literals(module, __CALLER__)
 
     {:module, mod, _, _} =
       defmodule module do
-        alias GenMCP.Transport.StreamableHttp
+        alias GenMCP.Transport.StreamableHTTP
 
-        defdelegate init(opts), to: StreamableHttp
-        defdelegate call(conn, opts), to: StreamableHttp
+        defdelegate init(opts), to: StreamableHTTP
+        defdelegate call(conn, opts), to: StreamableHTTP
       end
 
     mod

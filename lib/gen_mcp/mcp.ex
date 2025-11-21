@@ -24,8 +24,6 @@ defmodule GenMCP.MCP do
           | MCP.ImageContent.t()
           | MCP.EmbeddedResource.t()
           | MCP.ResourceLink.t()
-          | {:error, boolean() | binary() | nil}
-          | map()
 
   defp require_key!(keywords, key, errmsg) do
     case :lists.keyfind(key, 1, keywords) do
@@ -44,7 +42,7 @@ defmodule GenMCP.MCP do
 
   Requires `:server_info` (usually a `%#{inspect(MCP.Implementation)}{}`) and
   uses `:capabilities` if provided. The `protocolVersion` field is fixed to
-  "2025-06-18" to match the MCP spec supported here.
+  `"2025-06-18"` to match the MCP spec supported here.
 
   ## Example
 
@@ -135,13 +133,12 @@ defmodule GenMCP.MCP do
   `call_tool_result/1` or `get_prompt_result/1`.
 
   Supported shortcuts are
-  - `{:text, binary()}`,
-  - `{:resource, %{uri: binary(), text: binary()}}`,
-  - `{:resource, %{uri: binary(), blob: binary()}}`,
-  - `{:link, %{name: binary(), uri: binary()}}`,
-  - `{:image, {mime, data}}` and
-  - `{:audio, {mime, data}}`. Unsupported definitions raise
-  - `ArgumentError` to ensure content validity.
+  - `{:text, binary()}`
+  - `{:resource, %{uri: binary(), text: binary()}}`
+  - `{:resource, %{uri: binary(), blob: binary()}}`
+  - `{:link, %{name: binary(), uri: binary()}}`
+  - `{:image, {mime, data}}`
+  - `{:audio, {mime, data}}`
 
   ## Example
 
@@ -191,16 +188,19 @@ defmodule GenMCP.MCP do
   implementations.
 
   The list may contain shortcuts such as `text: "foo"`, `image: {"mime", data}`
-  or literal `%MCP.*` structs. Maps without a shortcut become
-  `structuredContent` (only one is allowed) while the `:error` option toggles
-  `isError` or converts a binary message into a text entry with the flag set to
-  `true`.
+  or literal `%#{inspect(MCP)}.*` structs. Maps without a shortcut become
+  `structuredContent` (only one is allowed).
+
+  Errors can be reported by including `error: true` (sets `isError` to true) or
+  `error: "message"` (adds a text content block with the message and sets
+  `isError` to true).
 
   ## Example
 
       MCP.call_tool_result(text: "Hello, world!", error: true)
   """
-  @spec call_tool_result([content_block()]) :: MCP.CallToolResult.t()
+  @spec call_tool_result([content_block() | {:error, boolean() | binary() | nil} | map()]) ::
+          MCP.CallToolResult.t()
   def call_tool_result(all_content) when is_list(all_content) do
     {content, {structured_content, error_or_nil?}} =
       Enum.flat_map_reduce(all_content, {nil, nil}, &flat_map_reduce_tool_result/2)

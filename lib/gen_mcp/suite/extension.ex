@@ -2,25 +2,55 @@ defmodule GenMCP.Suite.Extension do
   @moduledoc """
   A behaviour describing extensions to the `GenMCP.Suite` server.
 
-  Extensions can be added by providing the `:extensions` option when plugging
-  `GenMCP.Transport.StreamableHttp` in the router.
+  Extensions allow modular addition of tools, resources, and prompts to the
+  suite. They are configured via the `:extensions` option when plugging
+  `GenMCP.Transport.StreamableHTTP`.
 
-  They are called when the server initializes (or when the server handles
-  `listChanged` notifications from the session controller but this is not
-  implemeted yet).
+  ## Lifecycle
 
-  Order of call follows the order of the :extensions options, except that direct
-  options like :resources, :tools given directly to the plug will be treated as
-  another extension that is called fist, so its tools, resources and prompts are
-  listed first when the client reuquests a list.
+  Extensions are invoked during server initialization to gather the initial list
+  of capabilities.
 
-  Extensions receive the channel from the initialize request on server
-  initialization, or the channel from the client listener (GET http method) if
-  any. The channel bears session controller assigns and assigns copied from the
-  Plug.Conn, which can be used to filter tools or resource repos based on the
-  assigns added by you authorization layer in the plug pipeline.
+  The order of invocation follows the order in the `:extensions` list. However,
+  tools, resources, and prompts defined directly on the configuration (via
+  `:tools`, `:resources`, `:prompts` options) are always treated as the first
+  extension, taking precedence in the listing order.
 
-  Extensions should not send notifications to that channel.
+  ## Channel Access
+
+  Extension callbacks receive the `GenMCP.Mux.Channel` from the initialization
+  HTTP request.
+
+  This allows extensions to filter or dynamically generate capabilities based on
+  request context (e.g., user authorization).
+
+  Future implementations to support `listChanged` notifications will pass the
+  channel from the current GET HTTP request streaming server notifications.
+
+  ## Example
+
+      defmodule MyExtension do
+        @behaviour GenMCP.Suite.Extension
+
+        @impl true
+        def tools(channel, _arg) do
+          if channel.assigns.admin do
+            [AdminTool]
+          else
+            []
+          end
+        end
+
+        @impl true
+        def resources(_channel, _arg), do: [MyResourceRepo]
+
+        @impl true
+        def prompts(_channel, _arg), do: []
+      end
+
+      # In Router
+      plug GenMCP.Transport.StreamableHTTP,
+        extensions: [{MyExtension, []}]
   """
   alias GenMCP.Mux.Channel
   alias GenMCP.Suite
@@ -32,8 +62,31 @@ defmodule GenMCP.Suite.Extension do
         }
   @type arg :: term
 
+  @doc """
+  Returns a list of tools to be added to the suite.
+
+  ## Examples
+
+      def tools(_channel, _arg), do: [MyTool, {AnotherTool, [opt: :val]}]
+  """
   @callback tools(Channel.t(), arg) :: [Suite.Tool.tool()]
+
+  @doc """
+  Returns a list of resource repositories to be added to the suite.
+
+  ## Examples
+
+      def resources(_channel, _arg), do: [MyResourceRepo]
+  """
   @callback resources(Channel.t(), arg) :: [Suite.ResourceRepo.resource_repo()]
+
+  @doc """
+  Returns a list of prompt repositories to be added to the suite.
+
+  ## Examples
+
+      def prompts(_channel, _arg), do: [MyPromptRepo]
+  """
   @callback prompts(Channel.t(), arg) :: [Suite.PromptRepo.prompt_repo()]
 
   @doc false

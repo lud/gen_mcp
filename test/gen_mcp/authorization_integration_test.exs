@@ -7,7 +7,7 @@ defmodule GenMCP.AuthorizationIntegrationTest do
   alias GenMCP.MCP
   alias GenMCP.Support.AuthorizationMock
   alias GenMCP.Support.ServerMock
-  alias GenMCP.Transport.StreamableHttp
+  alias GenMCP.Transport.StreamableHTTP
 
   # DISCLAIMER
   #
@@ -122,7 +122,7 @@ defmodule GenMCP.AuthorizationIntegrationTest do
       ServerMock
       |> expect(:init, fn sid, _ -> {:ok, {:sid, sid}} end)
       |> expect(:handle_request, fn _req, chan_info, {:sid, sid} ->
-        assert {:channel, StreamableHttp, _pid, assigns} = chan_info
+        assert {:channel, StreamableHTTP, _pid, assigns} = chan_info
 
         # sessionid is set in the assigns by the client
         assert ^sid = assigns.gen_mcp_session_id
@@ -169,7 +169,7 @@ defmodule GenMCP.AuthorizationIntegrationTest do
       ServerMock
       |> expect(:init, fn sid, _ -> {:ok, {:sid, sid}} end)
       |> expect(:handle_request, fn _req, chan_info, {:sid, sid} ->
-        assert {:channel, StreamableHttp, _pid, assigns} = chan_info
+        assert {:channel, StreamableHTTP, _pid, assigns} = chan_info
 
         assert ^sid = assigns.gen_mcp_session_id
         assert assigns[:assign_from_forward] == "hello"
@@ -185,7 +185,7 @@ defmodule GenMCP.AuthorizationIntegrationTest do
         {:reply, {:result, init_result}, :session_state_1}
       end)
       |> expect(:handle_request, fn _req, chan_info, :session_state_1 ->
-        assert {:channel, StreamableHttp, _pid, assigns} = chan_info
+        assert {:channel, StreamableHTTP, _pid, assigns} = chan_info
 
         # assigns are properly merged for tool call
         assert assigns[:assign_from_forward] == "hello"

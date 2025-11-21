@@ -2,10 +2,10 @@ alias GenMCP.Support.ServerMock
 alias GenMCP.TestWeb.Router.McpMock
 alias GenMCP.TestWeb.Router.McpReal
 
-require GenMCP.Transport.StreamableHttp, as: StreamableHttp
+require GenMCP.Transport.StreamableHTTP, as: StreamableHTTP
 
-StreamableHttp.defplug(McpMock)
-StreamableHttp.defplug(McpReal)
+StreamableHTTP.defplug(McpMock)
+StreamableHTTP.defplug(McpReal)
 
 defmodule GenMCP.TestWeb.Router.AuthWrapper do
   @moduledoc false

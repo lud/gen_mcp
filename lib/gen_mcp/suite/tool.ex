@@ -19,7 +19,7 @@ defmodule GenMCP.Suite.Tool do
           required: [:query]
         }
 
-  Auto-generates `info/2`, `input_schema/1`, and `validate_request/2` with JSON
+  Auto-generates `c:info/2`, `c:input_schema/1`, and `c:validate_request/2` with JSON
   schema validation.
 
   ## Synchronous Tool Example
@@ -27,10 +27,21 @@ defmodule GenMCP.Suite.Tool do
       defmodule MySearchTool do
         use GenMCP.Suite.Tool,
           name: "search_files",
-          input_schema: %{type: :object, properties: %{query: %{type: :string}}}
+          input_schema: %{
+            type: :object,
+            properties: %{
+              query: %{type: :string}
+            }
+          }
 
+        alias GenMCP.MCP
+
+        @impl true
         def call(req, channel, _arg) do
+          # Arguments are string keys unless using a JSV module based schema or a
+          # custom validate_request function.
           %{arguments: %{"query" => query}} = req.params
+
           text = generate_text_response(query)
           {:result, MCP.call_tool_result(text: text), channel}
         end
@@ -43,13 +54,17 @@ defmodule GenMCP.Suite.Tool do
           name: "expensive_search",
           input_schema: %{}
 
+        alias GenMCP.MCP
+
+        @impl true
         def call(req, channel, _arg) do
           task = Task.async(fn -> perform_expensive_search(req) end)
           {:async, {:search_task, task}, channel}
         end
 
-        def continue({:search_task, results}, channel, _arg) do
-          {:result, MCP.call_tool_result(text: results), channel}
+        @impl true
+        def continue({:search_task, {:ok, document}}, channel, _arg) do
+          {:result, MCP.call_tool_result(text: document), channel}
         end
       end
   """
@@ -91,12 +106,12 @@ defmodule GenMCP.Suite.Tool do
   # MCP.CreateMessageResult.t()
   # | MCP.ListRootsResult.t()
   # | MCP.ElicitResult.t()
+  #
 
   @doc """
   Returns tool metadata for the specified key.
 
-  Invoked by `describe/1` to gather tool metadata. The `:name` key must return a
-  non-empty string; all other keys may return `nil`.
+  Invoked by `describe/1` to gather tool metadata.
 
   With `use GenMCP.Suite.Tool` with metadata options, this callback is
   auto-generated.
@@ -160,8 +175,7 @@ defmodule GenMCP.Suite.Tool do
   @doc """
   Validates and optionally transforms the incoming call request.
 
-  Invoked before `c:call/3`. Return `{:error, reason}` to reject invalid
-  requests with an MCP invalid parameters error.
+  Invoked before `c:call/3`.
 
   Auto-generated with JSON schema validation when using `use GenMCP.Suite.Tool`
   with an `:input_schema` option.
@@ -182,8 +196,10 @@ defmodule GenMCP.Suite.Tool do
   Executes the tool call and returns a result, error, or async continuation.
 
   Receives validated request parameters if `c:validate_request/2` is defined.
+  When using `use GenMCP.Suite.Tool`, JSON schema validation is automatically
+  implemented, ensuring `req.params.arguments` conforms to the schema.
 
-  ### Async calls
+  ## Async calls
 
   When returning `{:async, {tag, ref}, channel}`, the `c:continue/3` callback
   will be invoked with `{tag, {:ok, value}}` if the server process receives a
@@ -200,11 +216,12 @@ defmodule GenMCP.Suite.Tool do
   process obtains the ref to send the `{ref, result}` value back to the calling
   process.
 
-  ### Channel and Assigns
+  ## Channel and Assigns
 
-  The channel provides access to assigns copied from the `Plug.Conn` struct and
-  can be modified via `#{inspect(Channel)}.assign/3` to keep state before
-  entering the `c:continue/3` callback.
+  The channel provides access to assigns copied from the `Plug.Conn` struct
+  (from the HTTP request that delivered the tool call request) and can be
+  modified via `GenMCP.Mux.Channel.assign/3` to keep state before entering the
+  `c:continue/3` callback.
 
   Assigning modifies the channel, so the last updated channel must always be
   returned from your callback.
@@ -215,8 +232,13 @@ defmodule GenMCP.Suite.Tool do
 
       def call(req, channel, _arg) do
         %{arguments: %{"query" => query}} = req.params
-        results = perform_search(query)
-        {:result, MCP.call_tool_result(text: Jason.encode!(results)), channel}
+        entity = perform_search(query)
+
+        # With structured output (entity is a map), mind the list wrapper
+        {:result, MCP.call_tool_result([entity]), channel}
+
+        # Without structured output
+        {:result, MCP.call_tool_result(text: Jason.encode!(entity)), channel}
       end
 
   Asynchronous with Task:
@@ -413,7 +435,7 @@ defmodule GenMCP.Suite.Tool do
   ## Examples
 
       iex> Tool.describe(MySearchTool)
-      %MCP.Tool{
+      %GenMCP.MCP.Tool{
         name: "search_files",
         description: "Searches for files matching a pattern",
         inputSchema: %{"type" => "object", "properties" => ...},
@@ -421,7 +443,7 @@ defmodule GenMCP.Suite.Tool do
       }
 
       iex> Tool.describe({MySearchTool, [repo_path: "/data"]})
-      %MCP.Tool{name: "search_files", ...}
+      %GenMCP.MCP.Tool{name: "search_files", ...}
   """
   @spec describe(tool) :: MCP.Tool.t()
   def describe(tool) do
@@ -462,11 +484,11 @@ defmodule GenMCP.Suite.Tool do
 
   ## Examples
 
-      req = %MCP.CallToolRequest{
+      req = %GenMCP.MCP.CallToolRequest{
         params: %{name: "search_files", arguments: %{"query" => "*.ex"}}
       }
       Tool.call(tool_descriptor, req, channel)
-      #=> {:result, %MCP.CallToolResult{...}, channel}
+      #=> {:result, %GenMCP.MCP.CallToolResult{...}, channel}
 
       # With validation error
       Tool.call(tool_descriptor, invalid_req, channel)
@@ -513,7 +535,7 @@ defmodule GenMCP.Suite.Tool do
   ## Examples
 
       Tool.continue(tool_descriptor, {:search_task, {:ok, results}}, channel)
-      #=> {:result, %MCP.CallToolResult{...}, channel}
+      #=> {:result, %GenMCP.MCP.CallToolResult{...}, channel}
 
       Tool.continue(tool_descriptor, {:search_task, {:error, :timeout}}, channel)
       #=> {:error, "Search timed out", channel}

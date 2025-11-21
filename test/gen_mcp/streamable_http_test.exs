@@ -1,6 +1,6 @@
 # credo:disable-for-this-file Credo.Check.Readability.LargeNumbers
 
-defmodule GenMCP.StreamableHttpTest do
+defmodule GenMCP.StreamableHTTPTest do
   use ExUnit.Case, async: false
 
   import GenMCP.Test.Client
@@ -81,7 +81,7 @@ defmodule GenMCP.StreamableHttpTest do
 
       # We are using a real HTTP client in test so the chan_info pid is not the
       # test pid.
-      assert {:channel, GenMCP.Transport.StreamableHttp, pid, assigns} = chan_info
+      assert {:channel, GenMCP.Transport.StreamableHTTP, pid, assigns} = chan_info
       assert is_pid(pid)
       assert %{gen_mcp_session_id: _} = assigns
       assert 1 = map_size(assigns)

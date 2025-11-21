@@ -137,7 +137,7 @@ defmodule GenMCP.MixProject do
         Core: [
           GenMCP,
           GenMCP.MCP,
-          GenMCP.Transport.StreamableHttp
+          GenMCP.Transport.StreamableHTTP
         ],
         Suite: [
           GenMCP.Suite,
@@ -159,6 +159,9 @@ defmodule GenMCP.MixProject do
         Dev: [
           ~r/GenMCP\.Test/
         ]
+      ],
+      extras: [
+        "guides/getting_started.md"
       ]
     ]
   end

@@ -5,9 +5,36 @@ defmodule GenMCP.Suite do
 
   `GenMCP.Suite` handles protocol initialization, request routing, and manages
   the lifecycle of tools, resource repositories, and prompt repositories.
-  Extensions can be composed via the `:extensions` option to provide
-  domain-specific functionality. The suite automatically aggregates capabilities
-  from all registered extensions and manages pagination for list operations.
+
+  ## Configuration
+
+  These options are typically passed to the transport plug (e.g.,
+  `GenMCP.Transport.StreamableHTTP`).
+
+  *   `:server_name` (required) - The name of the server (string).
+  *   `:server_version` (required) - The version of the server (string).
+  *   `:server_title` - A display title for the server (string).
+  *   `:tools` - A list of tool providers.
+  *   `:resources` - A list of resource repository providers.
+  *   `:prompts` - A list of prompt repository providers.
+  *   `:extensions` - A list of extension providers.
+
+  ## Providers
+
+  Tools, resources, prompts, and extensions are configured using "providers". A
+  provider can be:
+
+  *   A module atom (e.g., `MyTool`).
+  *   A tuple `{module, arg}` (e.g., `{MyTool, [opt: 1]}`).
+  *   A map (for internal use or dynamic definitions).
+
+  ## Example
+
+      plug GenMCP.Transport.StreamableHTTP,
+        server_name: "MyServer",
+        server_version: "1.0.0",
+        tools: [MyTool, {AnotherTool, []}],
+        resources: [MyResourceRepo]
   """
 
   @behaviour GenMCP

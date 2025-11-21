@@ -1,4 +1,43 @@
 defmodule GenMCP.Suite.PromptRepo do
+  @moduledoc """
+  Defines the behaviour for implementing prompt repositories.
+
+  Prompts are reusable templates for LLM interactions. A repository groups
+  related prompts under a common namespace (prefix).
+
+  ## Example
+
+      defmodule MyPromptRepo do
+        @behaviour GenMCP.Suite.PromptRepo
+
+        @impl true
+        def prefix(_arg), do: "my_prompts"
+
+        @impl true
+        def list(_cursor, _channel, _arg) do
+          prompts = [
+            %{name: "greeting", description: "Say hello", arguments: []}
+          ]
+          {prompts, nil}
+        end
+
+        @impl true
+        def get("greeting", _args, _channel, _arg) do
+          result = %GenMCP.MCP.GetPromptResult{
+            description: "Say hello",
+            messages: [
+              %GenMCP.MCP.PromptMessage{
+                role: "user",
+                content: %GenMCP.MCP.TextContent{type: "text", text: "Hello!"}
+              }
+            ]
+          }
+          {:ok, result}
+        end
+
+        def get(_name, _args, _channel, _arg), do: {:error, :not_found}
+      end
+  """
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
 
@@ -24,14 +63,59 @@ defmodule GenMCP.Suite.PromptRepo do
 
   @type arg :: term
 
+  @doc """
+  Returns the prefix for prompts in this repository.
+
+  The prefix is used to namespace prompts to avoid collisions when multiple
+  repositories are used.
+
+  ## Examples
+
+      def prefix(_arg), do: "my_app"
+  """
   @callback prefix(arg) :: String.t()
 
+  @doc """
+  Lists available prompts in the repository.
+
+  Supports pagination via a cursor. Returns a tuple `{prompts, next_cursor}`.
+  If `next_cursor` is `nil`, there are no more pages.
+
+  ## Examples
+
+      def list(nil, _channel, _arg) do
+        {[%{name: "prompt1"}], "page2"}
+      end
+
+      def list("page2", _channel, _arg) do
+        {[%{name: "prompt2"}], nil}
+      end
+  """
   @callback list(pagination_token :: String.t() | nil, Channel.t(), arg) ::
               {[prompt_item], next_cursor :: term | nil}
 
   @doc """
-  Returns the prompt result with contents. Arguments are not automatically
-  validated.
+  Retrieves a specific prompt by name with arguments.
+
+  Arguments are passed as a map and are not automatically validated against the
+  prompt's definition.
+
+  ## Examples
+
+      def get("greeting", %{"name" => name}, _channel, _arg) do
+        result =
+          GenMCP.MCP.get_prompt_result(
+            description: "Say hello",
+            assistant: "Hello \#{name}, how can I help you?",
+            text: "Hello, ..."
+          )
+
+        {:ok, result}
+      end
+
+      def get("unknown", _args, _channel, _arg) do
+        {:error, :not_found}
+      end
   """
   @callback get(name :: String.t(), arguments :: %{binary => term}, Channel.t(), arg) ::
               {:ok, MCP.GetPromptResult.t()} | {:error, :not_found | String.t()}
