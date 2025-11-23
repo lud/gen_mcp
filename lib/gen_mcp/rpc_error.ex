@@ -38,8 +38,11 @@ defmodule GenMCP.RpcError do
   @rpc_invalid_params -32_602
   @rpc_method_not_found -32_601
   @rpc_internal_error -32_603
-  @rpc_resource_not_found -32_002
-  @rpc_prompt_not_found @rpc_invalid_params
+  @mcp_resource_not_found -32_002
+  @mcp_prompt_not_found @rpc_invalid_params
+
+  # https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1442
+  @mcp_unsupported_protocol_version -32_000
 
   defcasterror :missing_session_id, :missing_session_id, 400 do
     %{
@@ -91,7 +94,7 @@ defmodule GenMCP.RpcError do
     }
   end
 
-  defcasterror {:unsupported_protocol, version}, @rpc_invalid_request, 400 do
+  defcasterror {:unsupported_protocol, version}, @mcp_unsupported_protocol_version, 400 do
     %{
       data: %{version: version, supported: GenMCP.supported_protocol_versions()},
       message: "Unsupported protocol version"
@@ -105,14 +108,14 @@ defmodule GenMCP.RpcError do
     }
   end
 
-  defcasterror {:resource_not_found, uri} when is_binary(uri), @rpc_resource_not_found, 400 do
+  defcasterror {:resource_not_found, uri} when is_binary(uri), @mcp_resource_not_found, 400 do
     %{
       data: %{uri: uri},
       message: "Resource not found: #{uri}"
     }
   end
 
-  defcasterror {:prompt_not_found, name} when is_binary(name), @rpc_prompt_not_found, 400 do
+  defcasterror {:prompt_not_found, name} when is_binary(name), @mcp_prompt_not_found, 400 do
     %{
       data: %{name: name},
       message: "Prompt not found: #{name}"
