@@ -13,6 +13,7 @@ defmodule GenMCP.MixProject do
       elixir: "~> 1.18",
       start_permanent: true,
       elixirc_paths: elixirc_paths(Mix.env()),
+      consolidate_protocols: Mix.env() == :prod,
       source_url: @source_url,
       deps: deps(),
       dialyzer: dialyzer(),

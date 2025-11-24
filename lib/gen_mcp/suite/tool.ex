@@ -465,7 +465,19 @@ defmodule GenMCP.Suite.Tool do
     end
   end
 
+  defp normalize_schema(schema) when is_atom(schema) do
+    if JSV.Schema.schema_module?(schema) do
+      do_normalize_schema(schema.json_schema())
+    else
+      do_normalize_schema(schema)
+    end
+  end
+
   defp normalize_schema(schema) do
+    do_normalize_schema(schema)
+  end
+
+  defp do_normalize_schema(schema) do
     schema
     |> JSV.Schema.normalize()
     |> JSV.Helpers.Traverse.prewalk(fn

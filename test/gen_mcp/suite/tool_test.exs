@@ -554,4 +554,44 @@ defmodule GenMCP.Suite.ToolTest do
                check_error({:invalid_params, self()})
     end
   end
+
+  describe "JSV integration" do
+    test "module based schema is exported" do
+      defmodule MyTool do
+        # The first thing to notice is while `defschema Args` is defined later
+        # than `input_schema: Args`, it still works, because `use
+        # GenMCP.Suite.Tool` defines callbacks in @before_compile, after the
+        # `defschema` is called, and Elixir is not hygienic here.
+
+        use GenMCP.Suite.Tool, name: "some_tool", input_schema: Args
+        use JSV.Schema
+
+        defschema Args, name: string(), age: integer()
+      end
+
+      # If we let JSV normalize the schema, we should get something like this:
+      #
+      #     %{
+      #       "$ref" => "jsv:module:Elixir.GenMCP.Suite.ToolTest.MyTool.Args"
+      #     }
+      #
+      # So the Tool describe function has to check if the schema is a module
+      # exporting a json_schema/0 function, and if yes it will call it.
+      #
+      # For now it will not do it recursively. We need a helper in JSV to
+      # collect schemas as definitions.
+
+      assert %{
+               "title" => "Args",
+               "description" => nil,
+               "type" => "object",
+               "properties" => %{
+                 "age" => %{"type" => "integer"},
+                 "name" => %{"type" => "string"}
+               },
+               "required" => ["name", "age"]
+             } ==
+               Tool.describe(MyTool).inputSchema
+    end
+  end
 end
