@@ -88,7 +88,8 @@ defmodule GenMCP.SuiteAsyncTest do
       # and the result should be delivered to the client process
       assert_receive {:"$gen_mcp", :result, result}
 
-      assert %MCP.CallToolResult{content: [%{type: "text", text: "Result: 42"}]} = result
+      assert %MCP.CallToolResult{content: [%MCP.TextContent{text: "Result: 42"}]} =
+               result
     end
 
     test "tool returns async with Task struct instead of ref" do

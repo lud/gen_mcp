@@ -213,7 +213,7 @@ defmodule Generator do
         []
 
       :AudioContent ->
-        [set_default_resource_type: true]
+        [content_block: true]
 
       :BaseMetadata ->
         :skip
@@ -242,9 +242,6 @@ defmodule Generator do
       :ClientResult ->
         :skip
 
-      :CompleteRequest ->
-        :skip
-
       :CompleteResult ->
         :skip
 
@@ -267,7 +264,7 @@ defmodule Generator do
         :skip
 
       :EmbeddedResource ->
-        [set_default_resource_type: true]
+        [content_block: true]
 
       :EmptyResult ->
         :skip
@@ -279,7 +276,7 @@ defmodule Generator do
         []
 
       :ImageContent ->
-        [set_default_resource_type: true]
+        [content_block: true]
 
       :Implementation ->
         []
@@ -387,7 +384,7 @@ defmodule Generator do
         :skip
 
       :ResourceLink ->
-        [set_default_resource_type: true]
+        [content_block: true]
 
       :ResourceListChangedNotification ->
         :skip
@@ -432,7 +429,7 @@ defmodule Generator do
         :skip
 
       :TextContent ->
-        [set_default_resource_type: true]
+        [content_block: true]
 
       :TextResourceContents ->
         []
@@ -460,8 +457,8 @@ defmodule Generator do
     true == Keyword.get(module_config(name), :rpc_request)
   end
 
-  defp set_default_resource_type?(name) do
-    true == Keyword.get(module_config(name), :set_default_resource_type)
+  defp content_block?(name) do
+    true == Keyword.get(module_config(name), :content_block)
   end
 
   defp filter_schemas(defs) do
@@ -469,14 +466,12 @@ defmodule Generator do
   end
 
   defp process_schema(conf) do
-    conf(name: name) = conf
-
     conf
-    |> enforce_request_params_meta(name)
-    |> skip_request_fields(name)
-    |> resource_type_as_default(name)
-    |> use_schema_api()
+    |> enforce_request_params_meta()
+    |> skip_request_fields()
+    |> skip_content_type()
     |> classify_schema()
+    |> use_schema_api()
   end
 
   # update the conf identified by confname by:
@@ -605,29 +600,24 @@ defmodule Generator do
     {kind, schema} =
       case schema do
         %{type: "object", properties: _, required: required} ->
-          schema =
-            Map.merge(schema, %{
-              required: Enum.map(required, &String.to_atom/1),
-              title: Atom.to_string(name)
-            })
+          schema = Map.put(schema, :required, Enum.map(required, &String.to_atom/1))
 
           {:struct, schema}
 
         %{type: "object", properties: _} ->
-          schema =
-            Map.put(schema, :title, Atom.to_string(name))
-
           {:struct, schema}
 
         _ ->
           {:generic, schema}
       end
 
+    schema = Map.put_new(schema, :title, "MCP:" <> Atom.to_string(name))
+
     conf(conf, kind: kind, schema: schema)
   end
 
-  defp enforce_request_params_meta(conf, name) do
-    conf(schema: schema) = conf
+  defp enforce_request_params_meta(conf) do
+    conf(schema: schema, name: name) = conf
 
     schema =
       if request_params_schema?(name) do
@@ -641,7 +631,7 @@ defmodule Generator do
     conf(conf, schema: schema)
   end
 
-  defp skip_request_fields(conf, name) do
+  defp skip_request_fields(conf) do
     # Requests schemas in the official dependency do not inherit the generic
     # JSONRPCRequest `jsonrpc` and `id` fields, so we add them back.
     #
@@ -678,30 +668,15 @@ defmodule Generator do
     end
   end
 
-  defp resource_type_as_default(conf, name) do
-    conf(name: name, schema: schema) = conf
+  defp skip_content_type(conf) do
+    conf(name: name, schema: schema, opts: opts) = conf
 
-    schema =
-      if set_default_resource_type?(name) do
-        # This is done so we do not have to specify the type when creating a struct
-        schema =
-          update_in(schema.properties.type, fn %{const: type} = subschema ->
-            Map.put(subschema, :default, type)
-          end)
-
-        # As we set is as default we will not require it anymore
-        schema =
-          update_in(schema.required, fn required ->
-            true = "type" in required
-            required -- ["type"]
-          end)
-
-        schema
-      else
-        schema
-      end
-
-    conf(conf, schema: schema)
+    if content_block?(name) do
+      %{const: type} = schema.properties.type
+      conf(conf, opts: Keyword.merge(opts, skip_keys: [:type], serialize_merge: %{type: type}))
+    else
+      conf
+    end
   end
 
   defp use_schema_api(conf) do
@@ -794,8 +769,14 @@ defmodule Generator do
       {:val, %{type: "string", format: _} = schema} ->
         to_string_format(schema)
 
-      {:val, %{const: value, type: t} = constschema} ->
-        "string" = t
+      {:val, %{const: value} = constschema} ->
+        :ok =
+          case constschema do
+            %{type: "string"} -> :ok
+            %{type: other} -> raise "unsupported const type: #{inspect(other)}"
+            _ -> :ok
+          end
+
         true = is_binary(value)
 
         # If the const is a method we may have defined it as a default

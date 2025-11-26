@@ -191,7 +191,7 @@ defmodule GenMCP.MCPTest do
       result = MCP.call_tool_result(text: "Hello, world!")
 
       assert %MCP.CallToolResult{
-               content: [%MCP.TextContent{type: "text", text: "Hello, world!"}],
+               content: [%MCP.TextContent{text: "Hello, world!"}],
                structuredContent: nil,
                isError: nil
              } = result
@@ -206,8 +206,8 @@ defmodule GenMCP.MCPTest do
 
       assert %MCP.CallToolResult{
                content: [
-                 %MCP.TextContent{type: "text", text: "First message"},
-                 %MCP.TextContent{type: "text", text: "Second message"}
+                 %MCP.TextContent{text: "First message"},
+                 %MCP.TextContent{text: "Second message"}
                ],
                structuredContent: nil,
                isError: nil
@@ -223,8 +223,8 @@ defmodule GenMCP.MCPTest do
 
       assert %MCP.CallToolResult{
                content: [
-                 %MCP.ImageContent{type: "image", mimeType: "image/png", data: "some-base-64"},
-                 %MCP.AudioContent{type: "audio", mimeType: "audio/wav", data: "some-base-64"}
+                 %MCP.ImageContent{mimeType: "image/png", data: "some-base-64"},
+                 %MCP.AudioContent{mimeType: "audio/wav", data: "some-base-64"}
                ],
                structuredContent: nil,
                isError: nil
@@ -241,11 +241,9 @@ defmodule GenMCP.MCPTest do
       assert %MCP.CallToolResult{
                content: [
                  %MCP.EmbeddedResource{
-                   type: "resource",
                    resource: %{text: "some text", uri: "some-uri"}
                  },
                  %MCP.EmbeddedResource{
-                   type: "resource",
                    resource: %{blob: "some blob", uri: "some-uri"}
                  }
                ],
@@ -264,12 +262,10 @@ defmodule GenMCP.MCPTest do
       assert %MCP.CallToolResult{
                content: [
                  %MCP.ResourceLink{
-                   type: "resource_link",
                    name: "some name",
                    uri: "some-uri"
                  },
                  %MCP.ResourceLink{
-                   type: "resource_link",
                    name: "some name",
                    uri: "some-uri"
                  }
@@ -325,11 +321,8 @@ defmodule GenMCP.MCPTest do
 
       assert %GenMCP.MCP.CallToolResult{
                content: [
-                 %TextContent{text: "foo", type: "text"},
-                 %TextContent{
-                   text: ~s({"foo":"bar"}),
-                   type: "text"
-                 }
+                 %TextContent{text: "foo"},
+                 %TextContent{text: ~s({"foo":"bar"})}
                ],
                structuredContent: %{foo: :bar}
              } == result
@@ -352,7 +345,7 @@ defmodule GenMCP.MCPTest do
         )
 
       assert %MCP.CallToolResult{
-               content: [%MCP.TextContent{type: "text", text: "Error occurred"}],
+               content: [%MCP.TextContent{text: "Error occurred"}],
                structuredContent: nil,
                isError: true
              } = result
@@ -362,7 +355,7 @@ defmodule GenMCP.MCPTest do
       result = MCP.call_tool_result(error: "something bad")
 
       assert %MCP.CallToolResult{
-               content: [%MCP.TextContent{type: "text", text: "something bad"}],
+               content: [%MCP.TextContent{text: "something bad"}],
                structuredContent: nil,
                isError: true
              } = result
@@ -376,7 +369,7 @@ defmodule GenMCP.MCPTest do
         )
 
       assert %MCP.CallToolResult{
-               content: [%MCP.TextContent{type: "text", text: "Success"}],
+               content: [%MCP.TextContent{text: "Success"}],
                structuredContent: nil,
                isError: nil
              } = result

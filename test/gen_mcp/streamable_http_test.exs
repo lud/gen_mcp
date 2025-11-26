@@ -394,7 +394,7 @@ defmodule GenMCP.StreamableHTTPTest do
 
       chan_info
       |> Channel.from_client(req)
-      |> Channel.send_result(MCP.call_tool_result(text: "hello"))
+      |> Channel.send_result(MCP.call_tool_result(audio: {"wav", "some-base-64"}))
 
       {:reply, :stream, :state_after_stream}
     end)
@@ -416,7 +416,7 @@ defmodule GenMCP.StreamableHTTPTest do
              "id" => 456,
              "jsonrpc" => "2.0",
              "result" => %{
-               "content" => [%{"text" => "hello", "type" => "text"}]
+               "content" => [%{"type" => "audio", "data" => "some-base-64", "mimeType" => "wav"}]
              }
            } = JSV.Codec.decode!(json)
   end
@@ -1140,10 +1140,7 @@ defmodule GenMCP.StreamableHTTPTest do
           messages: [
             %MCP.PromptMessage{
               role: :user,
-              content: %MCP.TextContent{
-                type: :text,
-                text: "Hello! How can I help you today?"
-              }
+              content: %MCP.TextContent{text: "Hello! How can I help you today?"}
             }
           ]
         }
@@ -1195,10 +1192,7 @@ defmodule GenMCP.StreamableHTTPTest do
           messages: [
             %MCP.PromptMessage{
               role: :user,
-              content: %MCP.TextContent{
-                type: :text,
-                text: "Analyze dataset: sales.csv"
-              }
+              content: %MCP.TextContent{text: "Analyze dataset: sales.csv"}
             }
           ]
         }

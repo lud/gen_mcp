@@ -150,7 +150,7 @@ defmodule GenMCP.MCP.Annotations do
         type: "number"
       }
     },
-    title: "Annotations",
+    title: "MCP:Annotations",
     type: "object"
   }
 
@@ -160,7 +160,9 @@ end
 defmodule GenMCP.MCP.AudioContent do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{type: "audio"})
+
+  @skip_keys [:type]
 
   defschema %{
     description: "Audio provided to or from an LLM.",
@@ -175,10 +177,10 @@ defmodule GenMCP.MCP.AudioContent do
           audio types.
           """
         ),
-      type: const("audio", default: "audio")
+      type: const("audio")
     },
-    required: [:data, :mimeType],
-    title: "AudioContent",
+    required: [:data, :mimeType, :type],
+    title: "MCP:AudioContent",
     type: "object"
   }
 
@@ -203,7 +205,7 @@ defmodule GenMCP.MCP.BlobResourceContents do
       uri: uri(description: "The URI of this resource.")
     },
     required: [:blob, :uri],
-    title: "BlobResourceContents",
+    title: "MCP:BlobResourceContents",
     type: "object"
   }
 
@@ -223,7 +225,7 @@ defmodule GenMCP.MCP.BooleanSchema do
       type: const("boolean")
     },
     required: [:type],
-    title: "BooleanSchema",
+    title: "MCP:BooleanSchema",
     type: "object"
   }
 
@@ -243,12 +245,12 @@ defmodule GenMCP.MCP.CallToolRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      jsonrpc: %{const: "2.0"},
+      jsonrpc: const("2.0"),
       method: const("tools/call"),
       params: GenMCP.MCP.CallToolRequestParams
     },
     required: [:method, :params],
-    title: "CallToolRequest",
+    title: "MCP:CallToolRequest",
     type: "object"
   }
 
@@ -267,7 +269,7 @@ defmodule GenMCP.MCP.CallToolRequestParams do
       name: string()
     },
     required: [:name],
-    title: "CallToolRequestParams",
+    title: "MCP:CallToolRequestParams",
     type: "object"
   }
 
@@ -318,7 +320,7 @@ defmodule GenMCP.MCP.CallToolResult do
       }
     },
     required: [:content],
-    title: "CallToolResult",
+    title: "MCP:CallToolResult",
     type: "object"
   }
 
@@ -349,7 +351,7 @@ defmodule GenMCP.MCP.CancelledNotification do
       params: GenMCP.MCP.CancelledNotificationParams
     },
     required: [:method, :params],
-    title: "CancelledNotification",
+    title: "MCP:CancelledNotification",
     type: "object"
   }
 
@@ -374,7 +376,7 @@ defmodule GenMCP.MCP.CancelledNotificationParams do
       requestId: GenMCP.MCP.RequestId
     },
     required: [:requestId],
-    title: "CancelledNotificationParams",
+    title: "MCP:CancelledNotificationParams",
     type: "object"
   }
 
@@ -434,7 +436,7 @@ defmodule GenMCP.MCP.ClientCapabilities do
         type: "object"
       }
     },
-    title: "ClientCapabilities",
+    title: "MCP:ClientCapabilities",
     type: "object"
   }
 
@@ -452,7 +454,8 @@ defmodule GenMCP.MCP.ContentBlock do
         GenMCP.MCP.AudioContent,
         GenMCP.MCP.ResourceLink,
         GenMCP.MCP.EmbeddedResource
-      ]
+      ],
+      title: "MCP:ContentBlock"
     }
   end
 end
@@ -460,7 +463,9 @@ end
 defmodule GenMCP.MCP.EmbeddedResource do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{type: "resource"})
+
+  @skip_keys [:type]
 
   defschema %{
     description: ~SD"""
@@ -476,10 +481,10 @@ defmodule GenMCP.MCP.EmbeddedResource do
       resource: %{
         anyOf: [GenMCP.MCP.TextResourceContents, GenMCP.MCP.BlobResourceContents]
       },
-      type: const("resource", default: "resource")
+      type: const("resource")
     },
-    required: [:resource],
-    title: "EmbeddedResource",
+    required: [:resource, :type],
+    title: "MCP:EmbeddedResource",
     type: "object"
   }
 
@@ -499,12 +504,12 @@ defmodule GenMCP.MCP.GetPromptRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      jsonrpc: %{const: "2.0"},
+      jsonrpc: const("2.0"),
       method: const("prompts/get"),
       params: GenMCP.MCP.GetPromptRequestParams
     },
     required: [:method, :params],
-    title: "GetPromptRequest",
+    title: "MCP:GetPromptRequest",
     type: "object"
   }
 
@@ -527,7 +532,7 @@ defmodule GenMCP.MCP.GetPromptRequestParams do
       name: string(description: "The name of the prompt or prompt template.")
     },
     required: [:name],
-    title: "GetPromptRequestParams",
+    title: "MCP:GetPromptRequestParams",
     type: "object"
   }
 
@@ -549,7 +554,7 @@ defmodule GenMCP.MCP.GetPromptResult do
       messages: array_of(GenMCP.MCP.PromptMessage)
     },
     required: [:messages],
-    title: "GetPromptResult",
+    title: "MCP:GetPromptResult",
     type: "object"
   }
 
@@ -559,7 +564,9 @@ end
 defmodule GenMCP.MCP.ImageContent do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{type: "image"})
+
+  @skip_keys [:type]
 
   defschema %{
     description: "An image provided to or from an LLM.",
@@ -574,10 +581,10 @@ defmodule GenMCP.MCP.ImageContent do
           image types.
           """
         ),
-      type: const("image", default: "image")
+      type: const("image")
     },
-    required: [:data, :mimeType],
-    title: "ImageContent",
+    required: [:data, :mimeType, :type],
+    title: "MCP:ImageContent",
     type: "object"
   }
 
@@ -617,7 +624,7 @@ defmodule GenMCP.MCP.Implementation do
       version: string()
     },
     required: [:name, :version],
-    title: "Implementation",
+    title: "MCP:Implementation",
     type: "object"
   }
 
@@ -638,12 +645,12 @@ defmodule GenMCP.MCP.InitializeRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      jsonrpc: %{const: "2.0"},
+      jsonrpc: const("2.0"),
       method: const("initialize"),
       params: GenMCP.MCP.InitializeRequestParams
     },
     required: [:method, :params],
-    title: "InitializeRequest",
+    title: "MCP:InitializeRequest",
     type: "object"
   }
 
@@ -669,7 +676,7 @@ defmodule GenMCP.MCP.InitializeRequestParams do
         )
     },
     required: [:capabilities, :clientInfo, :protocolVersion],
-    title: "InitializeRequestParams",
+    title: "MCP:InitializeRequestParams",
     type: "object"
   }
 
@@ -711,7 +718,7 @@ defmodule GenMCP.MCP.InitializeResult do
       serverInfo: GenMCP.MCP.Implementation
     },
     required: [:capabilities, :protocolVersion, :serverInfo],
-    title: "InitializeResult",
+    title: "MCP:InitializeResult",
     type: "object"
   }
 
@@ -737,7 +744,7 @@ defmodule GenMCP.MCP.InitializedNotification do
       }
     },
     required: [:method],
-    title: "InitializedNotification",
+    title: "MCP:InitializedNotification",
     type: "object"
   }
 
@@ -779,7 +786,7 @@ defmodule GenMCP.MCP.JSONRPCError do
       jsonrpc: const("2.0")
     },
     required: [:error, :id, :jsonrpc],
-    title: "JSONRPCError",
+    title: "MCP:JSONRPCError",
     type: "object"
   }
 
@@ -814,7 +821,7 @@ defmodule GenMCP.MCP.JSONRPCRequest do
       }
     },
     required: [:id, :jsonrpc, :method],
-    title: "JSONRPCRequest",
+    title: "MCP:JSONRPCRequest",
     type: "object"
   }
 
@@ -834,7 +841,7 @@ defmodule GenMCP.MCP.JSONRPCResponse do
       result: GenMCP.MCP.Result
     },
     required: [:id, :jsonrpc, :result],
-    title: "JSONRPCResponse",
+    title: "MCP:JSONRPCResponse",
     type: "object"
   }
 
@@ -855,12 +862,12 @@ defmodule GenMCP.MCP.ListPromptsRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      jsonrpc: %{const: "2.0"},
+      jsonrpc: const("2.0"),
       method: const("prompts/list"),
       params: GenMCP.MCP.ListPromptsRequestParams
     },
     required: [:method],
-    title: "ListPromptsRequest",
+    title: "MCP:ListPromptsRequest",
     type: "object"
   }
 
@@ -883,7 +890,7 @@ defmodule GenMCP.MCP.ListPromptsRequestParams do
           """
         )
     },
-    title: "ListPromptsRequestParams",
+    title: "MCP:ListPromptsRequestParams",
     type: "object"
   }
 
@@ -911,7 +918,7 @@ defmodule GenMCP.MCP.ListPromptsResult do
       prompts: array_of(GenMCP.MCP.Prompt)
     },
     required: [:prompts],
-    title: "ListPromptsResult",
+    title: "MCP:ListPromptsResult",
     type: "object"
   }
 
@@ -932,12 +939,12 @@ defmodule GenMCP.MCP.ListResourceTemplatesRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      jsonrpc: %{const: "2.0"},
+      jsonrpc: const("2.0"),
       method: const("resources/templates/list"),
       params: GenMCP.MCP.ListResourceTemplatesRequestParams
     },
     required: [:method],
-    title: "ListResourceTemplatesRequest",
+    title: "MCP:ListResourceTemplatesRequest",
     type: "object"
   }
 
@@ -960,7 +967,7 @@ defmodule GenMCP.MCP.ListResourceTemplatesRequestParams do
           """
         )
     },
-    title: "ListResourceTemplatesRequestParams",
+    title: "MCP:ListResourceTemplatesRequestParams",
     type: "object"
   }
 
@@ -989,7 +996,7 @@ defmodule GenMCP.MCP.ListResourceTemplatesResult do
       resourceTemplates: array_of(GenMCP.MCP.ResourceTemplate)
     },
     required: [:resourceTemplates],
-    title: "ListResourceTemplatesResult",
+    title: "MCP:ListResourceTemplatesResult",
     type: "object"
   }
 
@@ -1009,12 +1016,12 @@ defmodule GenMCP.MCP.ListResourcesRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      jsonrpc: %{const: "2.0"},
+      jsonrpc: const("2.0"),
       method: const("resources/list"),
       params: GenMCP.MCP.ListResourcesRequestParams
     },
     required: [:method],
-    title: "ListResourcesRequest",
+    title: "MCP:ListResourcesRequest",
     type: "object"
   }
 
@@ -1037,7 +1044,7 @@ defmodule GenMCP.MCP.ListResourcesRequestParams do
           """
         )
     },
-    title: "ListResourcesRequestParams",
+    title: "MCP:ListResourcesRequestParams",
     type: "object"
   }
 
@@ -1065,7 +1072,7 @@ defmodule GenMCP.MCP.ListResourcesResult do
       resources: array_of(GenMCP.MCP.Resource)
     },
     required: [:resources],
-    title: "ListResourcesResult",
+    title: "MCP:ListResourcesResult",
     type: "object"
   }
 
@@ -1085,7 +1092,7 @@ defmodule GenMCP.MCP.ListToolsRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      jsonrpc: %{const: "2.0"},
+      jsonrpc: const("2.0"),
       method: const("tools/list"),
       params: %{
         properties: %{
@@ -1101,7 +1108,7 @@ defmodule GenMCP.MCP.ListToolsRequest do
       }
     },
     required: [:method],
-    title: "ListToolsRequest",
+    title: "MCP:ListToolsRequest",
     type: "object"
   }
 
@@ -1129,7 +1136,7 @@ defmodule GenMCP.MCP.ListToolsResult do
       tools: array_of(GenMCP.MCP.Tool)
     },
     required: [:tools],
-    title: "ListToolsResult",
+    title: "MCP:ListToolsResult",
     type: "object"
   }
 
@@ -1151,7 +1158,7 @@ defmodule GenMCP.MCP.PingRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      jsonrpc: %{const: "2.0"},
+      jsonrpc: const("2.0"),
       method: const("ping"),
       params: %{
         additionalProperties: %{},
@@ -1170,7 +1177,7 @@ defmodule GenMCP.MCP.PingRequest do
       }
     },
     required: [:method],
-    title: "PingRequest",
+    title: "MCP:PingRequest",
     type: "object"
   }
 
@@ -1218,7 +1225,7 @@ defmodule GenMCP.MCP.ProgressNotification do
       }
     },
     required: [:method, :params],
-    title: "ProgressNotification",
+    title: "MCP:ProgressNotification",
     type: "object"
   }
 
@@ -1234,6 +1241,7 @@ defmodule GenMCP.MCP.ProgressToken do
       A progress token, used to associate progress notifications with the
       original request.
       """,
+      title: "MCP:ProgressToken",
       type: ["string", "integer"]
     }
   end
@@ -1284,7 +1292,7 @@ defmodule GenMCP.MCP.Prompt do
         )
     },
     required: [:name],
-    title: "Prompt",
+    title: "MCP:Prompt",
     type: "object"
   }
 
@@ -1322,7 +1330,7 @@ defmodule GenMCP.MCP.PromptArgument do
         )
     },
     required: [:name],
-    title: "PromptArgument",
+    title: "MCP:PromptArgument",
     type: "object"
   }
 
@@ -1343,7 +1351,7 @@ defmodule GenMCP.MCP.PromptMessage do
     """,
     properties: %{content: GenMCP.MCP.ContentBlock, role: GenMCP.MCP.Role},
     required: [:content, :role],
-    title: "PromptMessage",
+    title: "MCP:PromptMessage",
     type: "object"
   }
 
@@ -1363,12 +1371,12 @@ defmodule GenMCP.MCP.ReadResourceRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      jsonrpc: %{const: "2.0"},
+      jsonrpc: const("2.0"),
       method: const("resources/read"),
       params: GenMCP.MCP.ReadResourceRequestParams
     },
     required: [:method, :params],
-    title: "ReadResourceRequest",
+    title: "MCP:ReadResourceRequest",
     type: "object"
   }
 
@@ -1392,7 +1400,7 @@ defmodule GenMCP.MCP.ReadResourceRequestParams do
         )
     },
     required: [:uri],
-    title: "ReadResourceRequestParams",
+    title: "MCP:ReadResourceRequestParams",
     type: "object"
   }
 
@@ -1414,7 +1422,7 @@ defmodule GenMCP.MCP.ReadResourceResult do
         array_of(%{anyOf: [GenMCP.MCP.TextResourceContents, GenMCP.MCP.BlobResourceContents]})
     },
     required: [:contents],
-    title: "ReadResourceResult",
+    title: "MCP:ReadResourceResult",
     type: "object"
   }
 
@@ -1429,6 +1437,7 @@ defmodule GenMCP.MCP.RequestId do
       description: ~SD"""
       A uniquely identifying ID for a request in JSON-RPC.
       """,
+      title: "MCP:RequestId",
       type: ["string", "integer"]
     }
   end
@@ -1488,7 +1497,7 @@ defmodule GenMCP.MCP.Resource do
       uri: uri(description: "The URI of this resource.")
     },
     required: [:name, :uri],
-    title: "Resource",
+    title: "MCP:Resource",
     type: "object"
   }
 
@@ -1498,7 +1507,9 @@ end
 defmodule GenMCP.MCP.ResourceLink do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{type: "resource_link"})
+
+  @skip_keys [:type]
 
   defschema %{
     description: ~SD"""
@@ -1550,11 +1561,11 @@ defmodule GenMCP.MCP.ResourceLink do
           `name`, if present).
           """
         ),
-      type: const("resource_link", default: "resource_link"),
+      type: const("resource_link"),
       uri: uri(description: "The URI of this resource.")
     },
-    required: [:name, :uri],
-    title: "ResourceLink",
+    required: [:name, :type, :uri],
+    title: "MCP:ResourceLink",
     type: "object"
   }
 
@@ -1618,7 +1629,7 @@ defmodule GenMCP.MCP.ResourceTemplate do
         )
     },
     required: [:name, :uriTemplate],
-    title: "ResourceTemplate",
+    title: "MCP:ResourceTemplate",
     type: "object"
   }
 
@@ -1633,7 +1644,7 @@ defmodule GenMCP.MCP.Result do
   defschema %{
     additionalProperties: %{},
     properties: %{_meta: GenMCP.MCP.Meta},
-    title: "Result",
+    title: "MCP:Result",
     type: "object"
   }
 
@@ -1669,7 +1680,7 @@ defmodule GenMCP.MCP.RootsListChangedNotification do
       }
     },
     required: [:method],
-    title: "RootsListChangedNotification",
+    title: "MCP:RootsListChangedNotification",
     type: "object"
   }
 
@@ -1763,7 +1774,7 @@ defmodule GenMCP.MCP.ServerCapabilities do
         type: "object"
       }
     },
-    title: "ServerCapabilities",
+    title: "MCP:ServerCapabilities",
     type: "object"
   }
 
@@ -1784,7 +1795,7 @@ defmodule GenMCP.MCP.SubscribeRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      jsonrpc: %{const: "2.0"},
+      jsonrpc: const("2.0"),
       method: const("resources/subscribe"),
       params: %{
         properties: %{
@@ -1801,7 +1812,7 @@ defmodule GenMCP.MCP.SubscribeRequest do
       }
     },
     required: [:method, :params],
-    title: "SubscribeRequest",
+    title: "MCP:SubscribeRequest",
     type: "object"
   }
 
@@ -1811,7 +1822,9 @@ end
 defmodule GenMCP.MCP.TextContent do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{type: "text"})
+
+  @skip_keys [:type]
 
   defschema %{
     description: "Text provided to or from an LLM.",
@@ -1819,10 +1832,10 @@ defmodule GenMCP.MCP.TextContent do
       _meta: GenMCP.MCP.Meta,
       annotations: GenMCP.MCP.Annotations,
       text: string(description: "The text content of the message."),
-      type: const("text", default: "text")
+      type: const("text")
     },
-    required: [:text],
-    title: "TextContent",
+    required: [:text, :type],
+    title: "MCP:TextContent",
     type: "object"
   }
 
@@ -1848,7 +1861,7 @@ defmodule GenMCP.MCP.TextResourceContents do
       uri: uri(description: "The URI of this resource.")
     },
     required: [:text, :uri],
-    title: "TextResourceContents",
+    title: "MCP:TextResourceContents",
     type: "object"
   }
 
@@ -1934,7 +1947,7 @@ defmodule GenMCP.MCP.Tool do
         )
     },
     required: [:inputSchema, :name],
-    title: "Tool",
+    title: "MCP:Tool",
     type: "object"
   }
 
@@ -2001,7 +2014,7 @@ defmodule GenMCP.MCP.ToolAnnotations do
         ),
       title: string(description: "A human-readable title for the tool.")
     },
-    title: "ToolAnnotations",
+    title: "MCP:ToolAnnotations",
     type: "object"
   }
 
@@ -2023,7 +2036,7 @@ defmodule GenMCP.MCP.UnsubscribeRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      jsonrpc: %{const: "2.0"},
+      jsonrpc: const("2.0"),
       method: const("resources/unsubscribe"),
       params: %{
         properties: %{
@@ -2034,7 +2047,7 @@ defmodule GenMCP.MCP.UnsubscribeRequest do
       }
     },
     required: [:method, :params],
-    title: "UnsubscribeRequest",
+    title: "MCP:UnsubscribeRequest",
     type: "object"
   }
 

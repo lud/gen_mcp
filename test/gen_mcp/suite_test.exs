@@ -543,7 +543,7 @@ defmodule GenMCP.SuiteTest do
 
       assert %GenMCP.MCP.CallToolResult{
                _meta: nil,
-               content: [%MCP.TextContent{type: "text", text: "hello"}],
+               content: [%MCP.TextContent{text: "hello"}],
                isError: nil,
                structuredContent: nil
              } = result

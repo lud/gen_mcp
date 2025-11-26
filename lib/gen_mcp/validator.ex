@@ -39,9 +39,9 @@ defmodule GenMCP.Validator do
       {ctx, items} ->
         js = mod.json_schema()
         method = js.properties.method.const
-        title = js.title
-        {method, kind, title}
-        {jsv_key, ctx} = JSV.build_key!(ctx, Ref.pointer!(["definitions", title], :root))
+        "MCP:" <> shortname = js.title
+
+        {jsv_key, ctx} = JSV.build_key!(ctx, Ref.pointer!(["definitions", shortname], :root))
         item = {method, kind, jsv_key}
         {ctx, [item | items]}
     end
