@@ -29,7 +29,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
     init_req = %MCP.InitializeRequest{
       id: "setup-init-1",
-      method: "initialize",
       params: %MCP.InitializeRequestParams{
         capabilities: %MCP.ClientCapabilities{},
         clientInfo: %{name: "test", version: "1.0.0"},
@@ -72,7 +71,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "AsyncTool",
           arguments: %{}
@@ -118,7 +116,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "AsyncTaskTool",
           arguments: %{}
@@ -175,7 +172,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "SupervisedTool",
           arguments: %{}
@@ -224,7 +220,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "DownTestTool",
           arguments: %{}
@@ -285,7 +280,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "FailingTool",
           arguments: %{}
@@ -334,7 +328,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
           tool_call_req = %MCP.CallToolRequest{
             id: 1001,
-            method: "tools/call",
             params: %MCP.CallToolRequestParams{
               name: "ErrorTool",
               arguments: %{}
@@ -366,7 +359,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "ErrorContinueTool",
           arguments: %{}
@@ -408,7 +400,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "StaleTool",
           arguments: %{}
@@ -462,7 +453,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "ChainTool",
           arguments: %{}
@@ -521,7 +511,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "ChainErrorTool",
           arguments: %{}
@@ -576,7 +565,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "RapidTool",
           arguments: %{}
@@ -648,7 +636,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
       req_a = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "ToolA",
           arguments: %{}
@@ -659,7 +646,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
       req_b = %MCP.CallToolRequest{
         id: 1002,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "ToolB",
           arguments: %{}
@@ -700,7 +686,6 @@ defmodule GenMCP.SuiteAsyncTest do
       # Call tool A
       req_a = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "SomeTool",
           arguments: %{"callname" => "A"}
@@ -713,7 +698,6 @@ defmodule GenMCP.SuiteAsyncTest do
       # Call tool B
       req_b = %MCP.CallToolRequest{
         id: 1002,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "SomeTool",
           arguments: %{"callname" => "B"}
@@ -780,7 +764,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "DisconnectTool",
           arguments: %{}
@@ -821,7 +804,6 @@ defmodule GenMCP.SuiteAsyncTest do
       # Call tool one
       req_one = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "SomeTool",
           arguments: %{}
@@ -834,7 +816,6 @@ defmodule GenMCP.SuiteAsyncTest do
       # Call tool two - should raise error about duplicate reference
       req_two = %MCP.CallToolRequest{
         id: 1002,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "SomeTool",
           arguments: %{}
@@ -865,7 +846,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "AssignsTool",
           arguments: {}
@@ -956,7 +936,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "BadTool",
           arguments: %{}
@@ -989,7 +968,6 @@ defmodule GenMCP.SuiteAsyncTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "BadContinueTool",
           arguments: %{}

@@ -20,7 +20,8 @@ defmodule GenMCP.MixProject do
       aliases: aliases(),
       modkit: modkit(),
       package: package(),
-      docs: docs()
+      docs: docs(),
+      versioning: versioning()
     ]
   end
 
@@ -43,7 +44,7 @@ defmodule GenMCP.MixProject do
     [
       # App
       {:phoenix, ">= 1.7.0"},
-      {:jsv, "~> 0.11"},
+      {:jsv, "~> 0.13"},
       {:abnf_parsec, "~> 2.0"},
       {:texture, ">= 0.3.2"},
       {:nimble_options, "~> 1.1"},
@@ -165,5 +166,22 @@ defmodule GenMCP.MixProject do
         "guides/getting_started.md"
       ]
     ]
+  end
+
+  defp versioning do
+    [
+      annotate: true,
+      before_commit: [
+        &gen_changelog/1,
+        {:add, "CHANGELOG.md"}
+      ]
+    ]
+  end
+
+  defp gen_changelog(vsn) do
+    case System.cmd("git", ["cliff", "--tag", vsn, "-o", "CHANGELOG.md"], stderr_to_stdout: true) do
+      {_, 0} -> IO.puts("Updated CHANGELOG.md with #{vsn}")
+      {out, _} -> {:error, "Could not update CHANGELOG.md:\n\n #{out}"}
+    end
   end
 end

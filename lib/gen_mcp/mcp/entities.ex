@@ -63,11 +63,13 @@ defmodule GenMCP.MCP.ModMap do
         "InitializeResult" => GenMCP.MCP.InitializeResult,
         "InitializedNotification" => GenMCP.MCP.InitializedNotification,
         "JSONRPCError" => GenMCP.MCP.JSONRPCError,
+        "JSONRPCRequest" => GenMCP.MCP.JSONRPCRequest,
         "JSONRPCResponse" => GenMCP.MCP.JSONRPCResponse,
         "ListPromptsRequest" => GenMCP.MCP.ListPromptsRequest,
         "ListPromptsRequestParams" => GenMCP.MCP.ListPromptsRequestParams,
         "ListPromptsResult" => GenMCP.MCP.ListPromptsResult,
         "ListResourceTemplatesRequest" => GenMCP.MCP.ListResourceTemplatesRequest,
+        "ListResourceTemplatesRequestParams" => GenMCP.MCP.ListResourceTemplatesRequestParams,
         "ListResourceTemplatesResult" => GenMCP.MCP.ListResourceTemplatesResult,
         "ListResourcesRequest" => GenMCP.MCP.ListResourcesRequest,
         "ListResourcesRequestParams" => GenMCP.MCP.ListResourcesRequestParams,
@@ -231,7 +233,9 @@ end
 defmodule GenMCP.MCP.CallToolRequest do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{method: "tools/call", jsonrpc: "2.0"})
+
+  @skip_keys [:method, :jsonrpc]
 
   defschema %{
     description: ~SD"""
@@ -239,10 +243,11 @@ defmodule GenMCP.MCP.CallToolRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      method: const("tools/call", default: "tools/call"),
+      jsonrpc: %{const: "2.0"},
+      method: const("tools/call"),
       params: GenMCP.MCP.CallToolRequestParams
     },
-    required: [:params],
+    required: [:method, :params],
     title: "CallToolRequest",
     type: "object"
   }
@@ -358,6 +363,7 @@ defmodule GenMCP.MCP.CancelledNotificationParams do
 
   defschema %{
     properties: %{
+      _meta: GenMCP.MCP.RequestMeta,
       reason:
         string(
           description: ~SD"""
@@ -483,7 +489,9 @@ end
 defmodule GenMCP.MCP.GetPromptRequest do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{method: "prompts/get", jsonrpc: "2.0"})
+
+  @skip_keys [:method, :jsonrpc]
 
   defschema %{
     description: ~SD"""
@@ -491,10 +499,11 @@ defmodule GenMCP.MCP.GetPromptRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      method: const("prompts/get", default: "prompts/get"),
+      jsonrpc: %{const: "2.0"},
+      method: const("prompts/get"),
       params: GenMCP.MCP.GetPromptRequestParams
     },
-    required: [:params],
+    required: [:method, :params],
     title: "GetPromptRequest",
     type: "object"
   }
@@ -618,7 +627,9 @@ end
 defmodule GenMCP.MCP.InitializeRequest do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{method: "initialize", jsonrpc: "2.0"})
+
+  @skip_keys [:method, :jsonrpc]
 
   defschema %{
     description: ~SD"""
@@ -627,10 +638,11 @@ defmodule GenMCP.MCP.InitializeRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      method: const("initialize", default: "initialize"),
+      jsonrpc: %{const: "2.0"},
+      method: const("initialize"),
       params: GenMCP.MCP.InitializeRequestParams
     },
-    required: [:params],
+    required: [:method, :params],
     title: "InitializeRequest",
     type: "object"
   }
@@ -774,6 +786,41 @@ defmodule GenMCP.MCP.JSONRPCError do
   @type t :: %__MODULE__{}
 end
 
+defmodule GenMCP.MCP.JSONRPCRequest do
+  use JSV.Schema
+
+  JsonDerive.auto()
+
+  defschema %{
+    description: "A request that expects a response.",
+    properties: %{
+      id: GenMCP.MCP.RequestId,
+      jsonrpc: const("2.0"),
+      method: string(),
+      params: %{
+        additionalProperties: %{},
+        properties: %{
+          _meta: %{
+            additionalProperties: %{},
+            description: ~SD"""
+            See [specification/2025-06-18/basic/index#general-fields] for notes on
+            _meta usage.
+            """,
+            properties: %{progressToken: GenMCP.MCP.ProgressToken},
+            type: "object"
+          }
+        },
+        type: "object"
+      }
+    },
+    required: [:id, :jsonrpc, :method],
+    title: "JSONRPCRequest",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
 defmodule GenMCP.MCP.JSONRPCResponse do
   use JSV.Schema
 
@@ -797,7 +844,9 @@ end
 defmodule GenMCP.MCP.ListPromptsRequest do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{method: "prompts/list", jsonrpc: "2.0"})
+
+  @skip_keys [:method, :jsonrpc]
 
   defschema %{
     description: ~SD"""
@@ -806,10 +855,11 @@ defmodule GenMCP.MCP.ListPromptsRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      method: const("prompts/list", default: "prompts/list"),
+      jsonrpc: %{const: "2.0"},
+      method: const("prompts/list"),
       params: GenMCP.MCP.ListPromptsRequestParams
     },
-    required: [],
+    required: [:method],
     title: "ListPromptsRequest",
     type: "object"
   }
@@ -871,7 +921,9 @@ end
 defmodule GenMCP.MCP.ListResourceTemplatesRequest do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{method: "resources/templates/list", jsonrpc: "2.0"})
+
+  @skip_keys [:method, :jsonrpc]
 
   defschema %{
     description: ~SD"""
@@ -880,23 +932,35 @@ defmodule GenMCP.MCP.ListResourceTemplatesRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      method: const("resources/templates/list", default: "resources/templates/list"),
-      params: %{
-        properties: %{
-          _meta: GenMCP.MCP.RequestMeta,
-          cursor:
-            string(
-              description: ~SD"""
-              An opaque token representing the current pagination position. If
-              provided, the server should return results starting after this cursor.
-              """
-            )
-        },
-        type: "object"
-      }
+      jsonrpc: %{const: "2.0"},
+      method: const("resources/templates/list"),
+      params: GenMCP.MCP.ListResourceTemplatesRequestParams
     },
-    required: [],
+    required: [:method],
     title: "ListResourceTemplatesRequest",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.ListResourceTemplatesRequestParams do
+  use JSV.Schema
+
+  JsonDerive.auto()
+
+  defschema %{
+    properties: %{
+      _meta: GenMCP.MCP.RequestMeta,
+      cursor:
+        string(
+          description: ~SD"""
+          An opaque token representing the current pagination position. If
+          provided, the server should return results starting after this cursor.
+          """
+        )
+    },
+    title: "ListResourceTemplatesRequestParams",
     type: "object"
   }
 
@@ -935,7 +999,9 @@ end
 defmodule GenMCP.MCP.ListResourcesRequest do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{method: "resources/list", jsonrpc: "2.0"})
+
+  @skip_keys [:method, :jsonrpc]
 
   defschema %{
     description: ~SD"""
@@ -943,10 +1009,11 @@ defmodule GenMCP.MCP.ListResourcesRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      method: const("resources/list", default: "resources/list"),
+      jsonrpc: %{const: "2.0"},
+      method: const("resources/list"),
       params: GenMCP.MCP.ListResourcesRequestParams
     },
-    required: [],
+    required: [:method],
     title: "ListResourcesRequest",
     type: "object"
   }
@@ -1008,7 +1075,9 @@ end
 defmodule GenMCP.MCP.ListToolsRequest do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{method: "tools/list", jsonrpc: "2.0"})
+
+  @skip_keys [:method, :jsonrpc]
 
   defschema %{
     description: ~SD"""
@@ -1016,10 +1085,10 @@ defmodule GenMCP.MCP.ListToolsRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      method: const("tools/list", default: "tools/list"),
+      jsonrpc: %{const: "2.0"},
+      method: const("tools/list"),
       params: %{
         properties: %{
-          _meta: GenMCP.MCP.RequestMeta,
           cursor:
             string(
               description: ~SD"""
@@ -1031,7 +1100,7 @@ defmodule GenMCP.MCP.ListToolsRequest do
         type: "object"
       }
     },
-    required: [],
+    required: [:method],
     title: "ListToolsRequest",
     type: "object"
   }
@@ -1070,7 +1139,9 @@ end
 defmodule GenMCP.MCP.PingRequest do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{method: "ping", jsonrpc: "2.0"})
+
+  @skip_keys [:method, :jsonrpc]
 
   defschema %{
     description: ~SD"""
@@ -1080,14 +1151,25 @@ defmodule GenMCP.MCP.PingRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      method: const("ping", default: "ping"),
+      jsonrpc: %{const: "2.0"},
+      method: const("ping"),
       params: %{
         additionalProperties: %{},
-        properties: %{_meta: GenMCP.MCP.RequestMeta},
+        properties: %{
+          _meta: %{
+            additionalProperties: %{},
+            description: ~SD"""
+            See [specification/2025-06-18/basic/index#general-fields] for notes on
+            _meta usage.
+            """,
+            properties: %{progressToken: GenMCP.MCP.ProgressToken},
+            type: "object"
+          }
+        },
         type: "object"
       }
     },
-    required: [],
+    required: [:method],
     title: "PingRequest",
     type: "object"
   }
@@ -1271,7 +1353,9 @@ end
 defmodule GenMCP.MCP.ReadResourceRequest do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{method: "resources/read", jsonrpc: "2.0"})
+
+  @skip_keys [:method, :jsonrpc]
 
   defschema %{
     description: ~SD"""
@@ -1279,10 +1363,11 @@ defmodule GenMCP.MCP.ReadResourceRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      method: const("resources/read", default: "resources/read"),
+      jsonrpc: %{const: "2.0"},
+      method: const("resources/read"),
       params: GenMCP.MCP.ReadResourceRequestParams
     },
-    required: [:params],
+    required: [:method, :params],
     title: "ReadResourceRequest",
     type: "object"
   }
@@ -1688,7 +1773,9 @@ end
 defmodule GenMCP.MCP.SubscribeRequest do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{method: "resources/subscribe", jsonrpc: "2.0"})
+
+  @skip_keys [:method, :jsonrpc]
 
   defschema %{
     description: ~SD"""
@@ -1697,10 +1784,10 @@ defmodule GenMCP.MCP.SubscribeRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      method: const("resources/subscribe", default: "resources/subscribe"),
+      jsonrpc: %{const: "2.0"},
+      method: const("resources/subscribe"),
       params: %{
         properties: %{
-          _meta: GenMCP.MCP.RequestMeta,
           uri:
             uri(
               description: ~SD"""
@@ -1713,7 +1800,7 @@ defmodule GenMCP.MCP.SubscribeRequest do
         type: "object"
       }
     },
-    required: [:params],
+    required: [:method, :params],
     title: "SubscribeRequest",
     type: "object"
   }
@@ -1924,7 +2011,9 @@ end
 defmodule GenMCP.MCP.UnsubscribeRequest do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{method: "resources/unsubscribe", jsonrpc: "2.0"})
+
+  @skip_keys [:method, :jsonrpc]
 
   defschema %{
     description: ~SD"""
@@ -1934,17 +2023,17 @@ defmodule GenMCP.MCP.UnsubscribeRequest do
     """,
     properties: %{
       id: GenMCP.MCP.RequestId,
-      method: const("resources/unsubscribe", default: "resources/unsubscribe"),
+      jsonrpc: %{const: "2.0"},
+      method: const("resources/unsubscribe"),
       params: %{
         properties: %{
-          _meta: GenMCP.MCP.RequestMeta,
           uri: uri(description: "The URI of the resource to unsubscribe from.")
         },
         required: ["uri"],
         type: "object"
       }
     },
-    required: [:params],
+    required: [:method, :params],
     title: "UnsubscribeRequest",
     type: "object"
   }

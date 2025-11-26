@@ -144,7 +144,6 @@ defmodule GenMCP.Suite.ToolTest do
 
       valid_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "some_name",
           arguments: %{"foo" => 123}
@@ -158,7 +157,6 @@ defmodule GenMCP.Suite.ToolTest do
 
       bad_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "some_name",
           arguments: %{"foo" => "not_an_int"}
@@ -213,7 +211,6 @@ defmodule GenMCP.Suite.ToolTest do
 
       bad_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "some_name",
           arguments: %{"foo" => "not_an_int"}
@@ -402,7 +399,6 @@ defmodule GenMCP.Suite.ToolTest do
 
       valid_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "some_name",
           arguments: %{"foo" => 123}
@@ -416,7 +412,6 @@ defmodule GenMCP.Suite.ToolTest do
 
       bad_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "some_name",
           arguments: %{"foo" => "not_an_int"}
@@ -463,7 +458,6 @@ defmodule GenMCP.Suite.ToolTest do
 
       bad_req = %MCP.CallToolRequest{
         id: 1001,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "some_name",
           arguments: %{"foo" => "not_an_int"}

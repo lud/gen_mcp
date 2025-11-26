@@ -61,7 +61,6 @@ defmodule GenMCP.StreamableHTTPTest do
     |> expect(:handle_request, fn req, chan_info, :some_session_state ->
       assert %MCP.InitializeRequest{
                id: 123,
-               method: "initialize",
                params: %MCP.InitializeRequestParams{
                  _meta: nil,
                  capabilities: %MCP.ClientCapabilities{
@@ -97,13 +96,11 @@ defmodule GenMCP.StreamableHTTPTest do
 
     resp =
       client()
-      |> post_message(%{
-        jsonrpc: "2.0",
+      |> post_message(%MCP.InitializeRequest{
         id: 123,
-        method: "initialize",
-        params: %{
-          capabilities: %{},
-          clientInfo: %{name: "test client", version: "0.0.0"},
+        params: %MCP.InitializeRequestParams{
+          capabilities: %MCP.ClientCapabilities{},
+          clientInfo: %MCP.Implementation{name: "test client", version: "0.0.0"},
           protocolVersion: "2025-06-18"
         }
       })
@@ -240,7 +237,7 @@ defmodule GenMCP.StreamableHTTPTest do
     session_id = init_session()
 
     expect(ServerMock, :handle_request, fn req, _chan_info, state ->
-      assert %MCP.ListToolsRequest{id: 123, method: "tools/list", params: %{}} =
+      assert %MCP.ListToolsRequest{id: 123, params: %{}} =
                req
 
       resp =
@@ -304,7 +301,6 @@ defmodule GenMCP.StreamableHTTPTest do
     expect(ServerMock, :handle_request, fn req, _chan_info, state ->
       assert %MCP.CallToolRequest{
                id: 456,
-               method: "tools/call",
                params: %MCP.CallToolRequestParams{
                  _meta: %{"progressToken" => "hello"},
                  arguments: %{"some" => "arg"},
@@ -343,7 +339,6 @@ defmodule GenMCP.StreamableHTTPTest do
     expect(ServerMock, :handle_request, fn req, _chan_info, state ->
       assert %MCP.CallToolRequest{
                id: 456,
-               method: "tools/call",
                params: %MCP.CallToolRequestParams{
                  _meta: nil,
                  arguments: %{},
@@ -387,7 +382,6 @@ defmodule GenMCP.StreamableHTTPTest do
     expect(ServerMock, :handle_request, fn req, chan_info, _state ->
       assert %MCP.CallToolRequest{
                id: 456,
-               method: "tools/call",
                params: %MCP.CallToolRequestParams{
                  arguments: %{"arg" => 123},
                  name: "SomeAsyncTool"
@@ -521,7 +515,6 @@ defmodule GenMCP.StreamableHTTPTest do
     |> expect(:handle_request, fn req, chan_info, _state ->
       assert %MCP.CallToolRequest{
                id: 457,
-               method: "tools/call",
                params: %MCP.CallToolRequestParams{
                  arguments: %{"arg" => 123},
                  name: "AsyncToolWithError"
@@ -723,7 +716,6 @@ defmodule GenMCP.StreamableHTTPTest do
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
         assert %MCP.ListResourcesRequest{
                  id: 200,
-                 method: "resources/list",
                  params: %{}
                } = req
 
@@ -774,7 +766,6 @@ defmodule GenMCP.StreamableHTTPTest do
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
         assert %MCP.ListResourcesRequest{
                  id: 201,
-                 method: "resources/list",
                  params: %MCP.ListResourcesRequestParams{cursor: ^cursor}
                } = req
 
@@ -825,7 +816,6 @@ defmodule GenMCP.StreamableHTTPTest do
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
         assert %MCP.ListResourcesRequest{
                  id: 202,
-                 method: "resources/list",
                  params: %MCP.ListResourcesRequestParams{
                    cursor: "some-cursor"
                  }
@@ -862,7 +852,6 @@ defmodule GenMCP.StreamableHTTPTest do
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
         assert %MCP.ReadResourceRequest{
                  id: 204,
-                 method: "resources/read",
                  params: %MCP.ReadResourceRequestParams{
                    uri: "file:///readme.txt"
                  }
@@ -909,7 +898,6 @@ defmodule GenMCP.StreamableHTTPTest do
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
         assert %MCP.ReadResourceRequest{
                  id: 205,
-                 method: "resources/read",
                  params: %MCP.ReadResourceRequestParams{
                    uri: "file:///missing.txt"
                  }
@@ -948,7 +936,6 @@ defmodule GenMCP.StreamableHTTPTest do
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
         assert %MCP.ReadResourceRequest{
                  id: 206,
-                 method: "resources/read",
                  params: %MCP.ReadResourceRequestParams{
                    uri: "file:///wrongprefix/data.txt"
                  }
@@ -989,7 +976,6 @@ defmodule GenMCP.StreamableHTTPTest do
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
         assert %MCP.ListResourceTemplatesRequest{
                  id: 207,
-                 method: "resources/templates/list",
                  params: %{}
                } = req
 
@@ -1047,8 +1033,7 @@ defmodule GenMCP.StreamableHTTPTest do
 
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
         assert %MCP.ListPromptsRequest{
-                 id: 300,
-                 method: "prompts/list"
+                 id: 300
                } = req
 
         result =
@@ -1110,7 +1095,6 @@ defmodule GenMCP.StreamableHTTPTest do
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
         assert %MCP.ListPromptsRequest{
                  id: 301,
-                 method: "prompts/list",
                  params: %{cursor: "page-2-token"}
                } = req
 
@@ -1148,7 +1132,6 @@ defmodule GenMCP.StreamableHTTPTest do
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
         assert %MCP.GetPromptRequest{
                  id: 302,
-                 method: "prompts/get",
                  params: %{name: "greeting"}
                } = req
 
@@ -1202,7 +1185,6 @@ defmodule GenMCP.StreamableHTTPTest do
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
         assert %MCP.GetPromptRequest{
                  id: 303,
-                 method: "prompts/get",
                  params: %{
                    name: "analysis",
                    arguments: %{"dataset" => "sales.csv"}
@@ -1260,7 +1242,6 @@ defmodule GenMCP.StreamableHTTPTest do
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
         assert %MCP.GetPromptRequest{
                  id: 304,
-                 method: "prompts/get",
                  params: %{name: "unknown"}
                } = req
 
@@ -1293,8 +1274,7 @@ defmodule GenMCP.StreamableHTTPTest do
 
       expect(ServerMock, :handle_request, fn req, _chan_info, state ->
         assert %MCP.GetPromptRequest{
-                 id: 305,
-                 method: "prompts/get"
+                 id: 305
                } = req
 
         {:reply, {:error, "Missing required argument: dataset"}, state}

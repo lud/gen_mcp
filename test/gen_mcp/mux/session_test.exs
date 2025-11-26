@@ -14,7 +14,6 @@ defmodule GenMCP.Mux.SessionTest do
   defp init_req do
     %MCP.InitializeRequest{
       id: "test-ini-req",
-      method: "initialize",
       params: %MCP.InitializeRequestParams{
         _meta: nil,
         capabilities: %MCP.ClientCapabilities{
@@ -41,7 +40,7 @@ defmodule GenMCP.Mux.SessionTest do
   end
 
   defp list_tools_req do
-    %MCP.ListToolsRequest{id: :erlang.unique_integer(), method: "tools/list", params: %{}}
+    %MCP.ListToolsRequest{id: :erlang.unique_integer(), params: %{}}
   end
 
   test "session can timeout" do
@@ -134,7 +133,6 @@ defmodule GenMCP.Mux.SessionTest do
 
     bad_request = %MCP.InitializeRequest{
       id: 1,
-      method: "initialize",
       params: %MCP.InitializeRequestParams{
         capabilities: %{},
         clientInfo: %{name: "test", version: "1.0.0"},

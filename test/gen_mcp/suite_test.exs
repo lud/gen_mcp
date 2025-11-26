@@ -27,7 +27,6 @@ defmodule GenMCP.SuiteTest do
 
     init_req = %MCP.InitializeRequest{
       id: "setup-init-1",
-      method: "initialize",
       params: %MCP.InitializeRequestParams{
         capabilities: %MCP.ClientCapabilities{elicitation: %{"foo" => "bar"}},
         clientInfo: %{name: "test", version: "1.0.0"},
@@ -61,7 +60,6 @@ defmodule GenMCP.SuiteTest do
 
       init_req = %MCP.InitializeRequest{
         id: 1,
-        method: "initialize",
         params: %MCP.InitializeRequestParams{
           capabilities: %MCP.ClientCapabilities{},
           clientInfo: %{name: "test", version: "1.0.0"},
@@ -94,7 +92,6 @@ defmodule GenMCP.SuiteTest do
 
       init_req = %MCP.InitializeRequest{
         id: 1,
-        method: "initialize",
         params: %MCP.InitializeRequestParams{
           capabilities: %MCP.ClientCapabilities{},
           clientInfo: %{name: "test", version: "1.0.0"},
@@ -132,7 +129,6 @@ defmodule GenMCP.SuiteTest do
 
       init_req = %MCP.InitializeRequest{
         id: 1,
-        method: "initialize",
         params: %MCP.InitializeRequestParams{
           capabilities: %MCP.ClientCapabilities{},
           clientInfo: %{name: "test", version: "1.0.0"},
@@ -163,7 +159,6 @@ defmodule GenMCP.SuiteTest do
 
       init_req = %MCP.InitializeRequest{
         id: 1,
-        method: "initialize",
         params: %MCP.InitializeRequestParams{
           capabilities: %MCP.ClientCapabilities{},
           clientInfo: %{name: "test", version: "1.0.0"},
@@ -199,7 +194,6 @@ defmodule GenMCP.SuiteTest do
 
       init_req = %MCP.InitializeRequest{
         id: 1,
-        method: "initialize",
         params: %MCP.InitializeRequestParams{
           capabilities: %MCP.ClientCapabilities{},
           clientInfo: %{name: "test", version: "1.0.0"},
@@ -230,7 +224,6 @@ defmodule GenMCP.SuiteTest do
 
       init_req = %MCP.InitializeRequest{
         id: 1,
-        method: "initialize",
         params: %MCP.InitializeRequestParams{
           capabilities: %MCP.ClientCapabilities{},
           clientInfo: %{name: "test", version: "1.0.0"},
@@ -266,7 +259,6 @@ defmodule GenMCP.SuiteTest do
 
       init_req = %MCP.InitializeRequest{
         id: 1,
-        method: "initialize",
         params: %MCP.InitializeRequestParams{
           capabilities: %MCP.ClientCapabilities{},
           clientInfo: %{name: "test", version: "1.0.0"},
@@ -307,7 +299,6 @@ defmodule GenMCP.SuiteTest do
 
       init_req = %MCP.InitializeRequest{
         id: 1,
-        method: "initialize",
         params: %MCP.InitializeRequestParams{
           capabilities: %MCP.ClientCapabilities{},
           clientInfo: %{name: "test", version: "1.0.0"},
@@ -334,7 +325,6 @@ defmodule GenMCP.SuiteTest do
 
       init_eq = %MCP.InitializeRequest{
         id: 1,
-        method: "initialize",
         params: %MCP.InitializeRequestParams{
           capabilities: %MCP.ClientCapabilities{},
           clientInfo: %{name: "test", version: "1.0.0"},
@@ -360,7 +350,6 @@ defmodule GenMCP.SuiteTest do
 
       req = %MCP.CallToolRequest{
         id: 2,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "SomeTool",
           arguments: %{}
@@ -382,7 +371,6 @@ defmodule GenMCP.SuiteTest do
 
       init_req = %MCP.InitializeRequest{
         id: 1,
-        method: "initialize",
         params: %MCP.InitializeRequestParams{
           capabilities: %MCP.ClientCapabilities{},
           clientInfo: %{name: "test", version: "1.0.0"},
@@ -395,7 +383,6 @@ defmodule GenMCP.SuiteTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 2,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "SomeTool",
           arguments: %{}
@@ -412,7 +399,6 @@ defmodule GenMCP.SuiteTest do
       # Attempt to initialize again while already initialized
       init_req = %MCP.InitializeRequest{
         id: "setup-init-2",
-        method: "initialize",
         params: %MCP.InitializeRequestParams{
           capabilities: %MCP.ClientCapabilities{},
           clientInfo: %{name: "test", version: "1.0.0"},
@@ -435,7 +421,6 @@ defmodule GenMCP.SuiteTest do
 
       init_req = %MCP.InitializeRequest{
         id: 1,
-        method: "initialize",
         params: %MCP.InitializeRequestParams{
           capabilities: %MCP.ClientCapabilities{},
           clientInfo: %{name: "test", version: "1.0.0"},
@@ -508,7 +493,6 @@ defmodule GenMCP.SuiteTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 2,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "SomeTool",
           arguments: %{}
@@ -530,7 +514,6 @@ defmodule GenMCP.SuiteTest do
 
         assert %GenMCP.MCP.CallToolRequest{
                  id: 2,
-                 method: "tools/call",
                  params: %GenMCP.MCP.CallToolRequestParams{
                    _meta: nil,
                    arguments: %{"some" => "arg"},
@@ -549,7 +532,6 @@ defmodule GenMCP.SuiteTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 2,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "ExistingTool",
           arguments: %{"some" => "arg"}
@@ -578,7 +560,6 @@ defmodule GenMCP.SuiteTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 4,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "ValidatedTool",
           arguments: %{"invalid" => "args"}
@@ -604,7 +585,6 @@ defmodule GenMCP.SuiteTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 5,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "ErrorTool",
           arguments: %{}
@@ -630,7 +610,6 @@ defmodule GenMCP.SuiteTest do
 
       tool_call_req = %MCP.CallToolRequest{
         id: 5,
-        method: "tools/call",
         params: %MCP.CallToolRequestParams{
           name: "ErrorTool",
           arguments: %{}

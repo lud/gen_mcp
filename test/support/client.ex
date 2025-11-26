@@ -59,13 +59,13 @@ defmodule GenMCP.Test.Client do
   end
 
   defp post(client, data, req_opts, validate_req?) do
-    data = JSV.Normalizer.normalize(data)
+    raw = JSON.decode!(JSON.encode!(data))
 
     if validate_req? do
-      assert :ok = validate_request(data)
+      assert :ok = validate_request(raw)
     end
 
-    Req.post!(client, [json: data, receive_timeout: to_timeout(minute: 1)] ++ req_opts)
+    Req.post!(client, [json: raw, receive_timeout: to_timeout(minute: 1)] ++ req_opts)
   end
 
   def expect_status(resp, status) when is_integer(status) do

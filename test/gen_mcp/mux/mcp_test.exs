@@ -4,6 +4,8 @@ defmodule GenMCP.MCPTest do
   alias GenMCP.MCP
   alias GenMCP.MCP.TextContent
 
+  require(Elixir.GenMCP.MCP.ModMap).require_all()
+
   describe "intialize_result/1" do
     test "creates initialize result with required server_info" do
       server_info = %MCP.Implementation{
@@ -843,6 +845,51 @@ defmodule GenMCP.MCPTest do
       assert_raise ArgumentError, fn ->
         MCP.get_prompt_result([%{foo: "bar"}])
       end
+    end
+  end
+
+  describe "structs generate valid json" do
+    test "initialize request" do
+      # Given a struct
+      data = %MCP.InitializeRequest{
+        id: 123,
+        params: %MCP.InitializeRequestParams{
+          capabilities: %MCP.ClientCapabilities{},
+          clientInfo: %MCP.Implementation{name: "clientname", version: "clientversion"},
+          protocolVersion: "foo"
+        }
+      }
+
+      # It should be JSON-encodable
+      json = JSON.encode!(data)
+
+      # When decoded
+      raw = JSON.decode!(json)
+
+      # Raw map should have RPC request fields
+      assert %{"jsonrpc" => "2.0", "method" => "initialize"} = raw
+
+      # It should produce a valid initialize request
+      assert {:ok, :request, new_data} = GenMCP.Validator.validate_request(raw)
+
+      assert %GenMCP.MCP.InitializeRequest{
+               id: 123,
+               params: %GenMCP.MCP.InitializeRequestParams{
+                 _meta: nil,
+                 capabilities: %GenMCP.MCP.ClientCapabilities{
+                   elicitation: nil,
+                   experimental: nil,
+                   roots: nil,
+                   sampling: nil
+                 },
+                 clientInfo: %GenMCP.MCP.Implementation{
+                   name: "clientname",
+                   title: nil,
+                   version: "clientversion"
+                 },
+                 protocolVersion: "foo"
+               }
+             } = new_data
     end
   end
 end

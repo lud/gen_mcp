@@ -92,6 +92,12 @@ end
 defmodule Generator do
   alias JSV.Helpers.Traverse
 
+  require Record
+
+  @jsonrpc_vsn "2.0"
+
+  Record.defrecordp(:conf, name: nil, schema: nil, opts: [], kind: nil)
+
   def run do
     schema =
       "deps/modelcontextprotocol/schema/2025-06-18/schema.json"
@@ -100,20 +106,31 @@ defmodule Generator do
 
     metaschema = schema."$schema"
 
-    defs =
+    confs =
       schema
       |> Map.fetch!(:definitions)
+      |> Enum.map(fn {name, schema} -> conf(name: name, schema: schema, opts: []) end)
       |> filter_schemas()
-      |> inherit_schemas()
+      # index by name so we can target schemas by name and add new confs to the
+      # definitions
+      |> Map.new(fn conf(name: name) = conf -> {name, conf} end)
       |> swap_sub_schemas()
-      |> Enum.sort()
 
-    modules =
-      defs
-      |> Enum.map_join("\n\n", &generate_module/1)
-      |> to_string()
+      # Back to list and sort
+      |> Map.values()
+      |> Stream.map(&process_schema/1)
+      |> Enum.sort_by(fn conf(name: name) -> name end)
 
-    code = Enum.intersperse([prelude(), mod_map(defs, metaschema), modules], "\n\n")
+    # We can now generate the modules
+    generated_modules = Enum.map_join(confs, "\n\n", &generate_module/1)
+
+    generated_block = [
+      prelude(),
+      mod_map(confs, metaschema),
+      generated_modules
+    ]
+
+    code = Enum.intersperse(generated_block, "\n\n")
 
     File.write!("lib/gen_mcp/mcp/entities.ex", code)
 
@@ -124,46 +141,73 @@ defmodule Generator do
 
   defp module_config(name) do
     case name do
+      # Custom additions
+      :CallToolRequestParams ->
+        [rpc_request_params: true]
+
+      :CancelledNotificationParams ->
+        [rpc_request_params: true]
+
+      :GetPromptRequestParams ->
+        [rpc_request_params: true]
+
+      :InitializeRequestParams ->
+        [rpc_request_params: true]
+
+      :ListPromptsRequestParams ->
+        [rpc_request_params: true]
+
+      :ListResourcesRequestParams ->
+        [rpc_request_params: true]
+
+      :ListResourceTemplatesRequestParams ->
+        [rpc_request_params: true]
+
+      :ReadResourceRequestParams ->
+        [rpc_request_params: true]
+
+      # Existing definitions
+
       :CallToolRequest ->
-        [msg_id: true, request_meta: true, set_default_method: true]
+        [rpc_request: true]
 
       :CompleteRequest ->
-        # [msg_id: true, request_meta: true, set_default_method: true]
+        # [ rpc_request: true]
         :skip
 
       :GetPromptRequest ->
-        [msg_id: true, request_meta: true, set_default_method: true]
+        [rpc_request: true]
 
       :InitializeRequest ->
-        [msg_id: true, request_meta: true, set_default_method: true]
+        [rpc_request: true]
 
       :ListPromptsRequest ->
-        [msg_id: true, request_meta: true, set_default_method: true]
+        [rpc_request: true]
 
       :ListResourcesRequest ->
-        [msg_id: true, request_meta: true, set_default_method: true]
+        [rpc_request: true]
 
       :ListResourceTemplatesRequest ->
-        [msg_id: true, request_meta: true, set_default_method: true]
+        [rpc_request: true]
 
       :ListToolsRequest ->
-        [msg_id: true, request_meta: true, set_default_method: true]
+        [rpc_request: true]
 
       :PingRequest ->
-        [msg_id: true, request_meta: true, set_default_method: true]
+        [rpc_request: true]
 
       :ReadResourceRequest ->
-        [msg_id: true, request_meta: true, set_default_method: true]
+        [rpc_request: true]
 
       :SetLevelRequest ->
-        # [msg_id: true, request_meta: true, set_default_method: true]
+        # [ rpc_request: true]
         :skip
 
       :SubscribeRequest ->
-        [msg_id: true, request_meta: true, set_default_method: true]
+        [rpc_request: true]
 
       :UnsubscribeRequest ->
-        [msg_id: true, request_meta: true, set_default_method: true]
+        [rpc_request: true]
 
       :Annotations ->
         []
@@ -256,7 +300,7 @@ defmodule Generator do
         :skip
 
       :JSONRPCRequest ->
-        :skip
+        []
 
       :JSONRPCResponse ->
         []
@@ -408,16 +452,12 @@ defmodule Generator do
     :skip == module_config(name)
   end
 
-  defp requires_message_id?(name) do
-    true == Keyword.get(module_config(name), :msg_id)
+  defp request_params_schema?(name) do
+    true == Keyword.get(module_config(name), :rpc_request_params)
   end
 
-  defp use_request_meta?(name) do
-    true == Keyword.get(module_config(name), :request_meta)
-  end
-
-  defp set_default_method?(name) do
-    true == Keyword.get(module_config(name), :set_default_method)
+  defp rpc_request?(name) do
+    true == Keyword.get(module_config(name), :rpc_request)
   end
 
   defp set_default_resource_type?(name) do
@@ -425,55 +465,78 @@ defmodule Generator do
   end
 
   defp filter_schemas(defs) do
-    Enum.reject(defs, fn {name, _} ->
-      skip_definition?(name)
-    end)
+    Enum.reject(defs, fn conf(name: name) -> skip_definition?(name) end)
   end
 
-  defp inherit_schemas(defs) do
-    Map.new(defs, fn {name, schema} ->
-      schema =
-        schema
-        |> enforce_id(name)
-        |> enforce_request_meta(name)
-        |> method_const_as_default(name)
-        |> resource_type_as_default(name)
+  defp process_schema(conf) do
+    conf(name: name) = conf
 
-      {name, schema}
-    end)
+    conf
+    |> enforce_request_params_meta(name)
+    |> skip_request_fields(name)
+    |> resource_type_as_default(name)
+    |> use_schema_api()
+    |> classify_schema()
   end
 
-  def swap_sub_schema(defs, path, name) do
-    {sub_schema, defs} =
-      try do
-        get_and_update_in(defs, path, fn sub -> {sub, %{"$ref": "#/definitions/#{name}"}} end)
-      rescue
-        e in ArgumentError ->
-          case Map.fetch(defs, hd(path)) do
-            {:ok, schema_def} ->
-              IO.warn("check if #{inspect(tl(path))} is defined in #{inspect(schema_def)}", [])
+  # update the conf identified by confname by:
+  #
+  # * lookup the schema_path in the conf schema
+  # * copy that schema (named new_schema_name) in the confmap under key new_schema_name
+  # * replace the original schema place with a ref to that new schema
+  def swap_sub_schema(confmap, parent_name, schema_path, new_schema_name) do
+    # Lookup the parent schema from the confs map
+    parent_conf = Map.fetch!(confmap, parent_name)
+    conf(schema: parent_schema) = parent_conf
 
-            :error ->
-              IO.warn("could not find schema def #{inspect(hd(path))}")
-          end
+    # Locate the sub schema under path, extract it and replace it in the
+    # parent schema (under path) by a ref to a new created confmap entry
+    # (done later)
+    {sub_schema, parent_schema} =
+      get_and_update_in(parent_schema, schema_path, fn sub_schema ->
+        {sub_schema, %{"$ref": "#/definitions/#{new_schema_name}"}}
+      end)
 
-          reraise e, __STACKTRACE__
+    # Update the parent and sub schema in the confs
+    #
+
+    parent_conf = conf(parent_conf, schema: parent_schema)
+    sub_conf = conf(name: new_schema_name, schema: sub_schema, opts: [])
+
+    Map.merge(confmap, %{
+      parent_name => parent_conf,
+      new_schema_name => sub_conf
+    })
+  rescue
+    e in ArgumentError ->
+      case Map.fetch(confmap, parent_name) do
+        {:ok, conf(schema: schema)} ->
+          IO.warn("check if #{inspect(schema_path)} is defined in #{inspect(schema)}", [])
+
+        :error ->
+          IO.warn("could not find schema def #{inspect(parent_name)}")
       end
 
-    Map.put(defs, name, sub_schema)
+      reraise e, __STACKTRACE__
   end
 
   # extract sub obeject schemas from entities and move them as new definitions.
-  defp swap_sub_schemas(defs) do
-    defs
-    |> swap_sub_schema([:InitializeRequest, :properties, :params], :InitializeRequestParams)
-    |> swap_sub_schema([:CallToolRequest, :properties, :params], :CallToolRequestParams)
-    |> swap_sub_schema([:ListResourcesRequest, :properties, :params], :ListResourcesRequestParams)
-    |> swap_sub_schema([:ReadResourceRequest, :properties, :params], :ReadResourceRequestParams)
-    |> swap_sub_schema([:ListPromptsRequest, :properties, :params], :ListPromptsRequestParams)
-    |> swap_sub_schema([:GetPromptRequest, :properties, :params], :GetPromptRequestParams)
+  defp swap_sub_schemas(confmap) do
+    confmap
+    |> swap_sub_schema(:InitializeRequest, [:properties, :params], :InitializeRequestParams)
+    |> swap_sub_schema(:CallToolRequest, [:properties, :params], :CallToolRequestParams)
+    |> swap_sub_schema(:ListResourcesRequest, [:properties, :params], :ListResourcesRequestParams)
     |> swap_sub_schema(
-      [:CancelledNotification, :properties, :params],
+      :ListResourceTemplatesRequest,
+      [:properties, :params],
+      :ListResourceTemplatesRequestParams
+    )
+    |> swap_sub_schema(:ReadResourceRequest, [:properties, :params], :ReadResourceRequestParams)
+    |> swap_sub_schema(:ListPromptsRequest, [:properties, :params], :ListPromptsRequestParams)
+    |> swap_sub_schema(:GetPromptRequest, [:properties, :params], :GetPromptRequestParams)
+    |> swap_sub_schema(
+      :CancelledNotification,
+      [:properties, :params],
       :CancelledNotificationParams
     )
   end
@@ -511,7 +574,7 @@ defmodule Generator do
   end
 
   defp mod_map(defs, metaschema) do
-    map = Map.new(defs, fn {name, _} -> {Atom.to_string(name), module_name(name)} end)
+    map = Map.new(defs, fn conf(name: name) -> {Atom.to_string(name), module_name(name)} end)
 
     schema = %{
       "$schema": metaschema,
@@ -536,121 +599,125 @@ defmodule Generator do
     """
   end
 
-  defp inspect_opts(overrides \\ []) do
-    overrides ++ [pretty: true, custom_options: [sort_maps: true]]
-  end
+  defp classify_schema(conf) do
+    conf(schema: schema, kind: nil, name: name) = conf
 
-  defp generate_module({name, schema}) do
-    IO.puts("generating #{name}")
-    module = module_name(name)
-
-    case prepare_schema(schema, name) do
-      {:struct, schema} ->
-        """
-        defmodule #{inspect(module)} do
-          use JSV.Schema
-          JsonDerive.auto
-          defschema #{inspect(schema, inspect_opts())}
-          @type t :: %__MODULE__{}
-        end
-        """
-
-      {:generic, schema} ->
-        """
-        defmodule #{inspect(module)} do
-          use JSV.Schema
-          def json_schema do
-           #{inspect(schema, inspect_opts())}
-          end
-        end
-        """
-    end
-
-    # |> tap(&IO.puts/1)
-  end
-
-  defp prepare_schema(schema, name) do
-    schema
-    |> use_schema_api()
-    |> maybe_format_for_struct()
-    |> case do
-      {:struct, schema} -> {:struct, Map.put(schema, :title, Atom.to_string(name))}
-      {:generic, _} = gen -> gen
-    end
-  end
-
-  # Adds the :id property into schema requests so we keep it on casting to
-  # structs. The given official JSON schema does not inherit properties from the
-  # generic request in specific requests.
-  defp enforce_id(schema, name) do
-    if requires_message_id?(name) do
+    {kind, schema} =
       case schema do
-        %{properties: %{id: _}} ->
-          raise "id already defined"
+        %{type: "object", properties: _, required: required} ->
+          schema =
+            Map.merge(schema, %{
+              required: Enum.map(required, &String.to_atom/1),
+              title: Atom.to_string(name)
+            })
 
-        %{properties: props} ->
-          %{schema | properties: Map.put(props, :id, %{"$ref": "#/definitions/RequestId"})}
+          {:struct, schema}
+
+        %{type: "object", properties: _} ->
+          schema =
+            Map.put(schema, :title, Atom.to_string(name))
+
+          {:struct, schema}
+
+        _ ->
+          {:generic, schema}
       end
+
+    conf(conf, kind: kind, schema: schema)
+  end
+
+  defp enforce_request_params_meta(conf, name) do
+    conf(schema: schema) = conf
+
+    schema =
+      if request_params_schema?(name) do
+        put_in(schema, [:properties, :_meta], %{
+          "$ref": "#/definitions/RequestMeta"
+        })
+      else
+        schema
+      end
+
+    conf(conf, schema: schema)
+  end
+
+  defp skip_request_fields(conf, name) do
+    # Requests schemas in the official dependency do not inherit the generic
+    # JSONRPCRequest `jsonrpc` and `id` fields, so we add them back.
+    #
+    # We will also skip the `jsonrpc` and `method` properties in the struct, as
+    # they can be infered from the struct name.
+    #
+    # Finally we will add back the `jsonrpc` and `method` properties when the
+    # schema is serialized.
+
+    conf(name: name, schema: schema, opts: opts) = conf
+
+    if rpc_request?(name) do
+      %{const: method} = schema.properties.method
+
+      schema = %{
+        schema
+        | properties:
+            Map.merge(schema.properties, %{
+              id: %{"$ref": "#/definitions/RequestId"},
+              jsonrpc: %{const: @jsonrpc_vsn}
+            })
+      }
+
+      conf(conf,
+        schema: schema,
+        opts:
+          Keyword.merge(opts,
+            skip_keys: [:method, :jsonrpc],
+            serialize_merge: %{method: method, jsonrpc: @jsonrpc_vsn}
+          )
+      )
     else
-      schema
+      conf
     end
   end
 
-  defp enforce_request_meta(schema, name) do
-    if use_request_meta?(name) do
-      put_in(schema, [:properties, :params, :properties, :_meta], %{
-        "$ref": "#/definitions/RequestMeta"
-      })
-    else
-      schema
-    end
+  defp resource_type_as_default(conf, name) do
+    conf(name: name, schema: schema) = conf
+
+    schema =
+      if set_default_resource_type?(name) do
+        # This is done so we do not have to specify the type when creating a struct
+        schema =
+          update_in(schema.properties.type, fn %{const: type} = subschema ->
+            Map.put(subschema, :default, type)
+          end)
+
+        # As we set is as default we will not require it anymore
+        schema =
+          update_in(schema.required, fn required ->
+            true = "type" in required
+            required -- ["type"]
+          end)
+
+        schema
+      else
+        schema
+      end
+
+    conf(conf, schema: schema)
   end
 
-  defp method_const_as_default(schema, name) do
-    if set_default_method?(name) do
-      # This is done so we do not have to specify the method when creating a struct
-      schema =
-        update_in(schema.properties.method, fn %{const: method} = subschema ->
-          Map.put(subschema, :default, method)
-        end)
+  defp use_schema_api(conf) do
+    conf(schema: schema) = conf
 
-      # As we set is as default we will not require it anymore
-      schema =
-        update_in(schema.required, fn required ->
-          true = "method" in required
-          required -- ["method"]
-        end)
+    schema =
+      schema
+      |> traverse_replace_default_meta()
+      |> trawverse_hardwrap_descriptions()
+      |> traverse_use_schema_helpers()
 
-      schema
-    else
-      schema
-    end
+    conf(conf, schema: schema)
   end
 
-  defp resource_type_as_default(schema, name) do
-    if set_default_resource_type?(name) do
-      # This is done so we do not have to specify the type when creating a struct
-      schema =
-        update_in(schema.properties.type, fn %{const: type} = subschema ->
-          Map.put(subschema, :default, type)
-        end)
-
-      # As we set is as default we will not require it anymore
-      schema =
-        update_in(schema.required, fn required ->
-          true = "type" in required
-          required -- ["type"]
-        end)
-
-      schema
-    else
-      schema
-    end
-  end
-
-  defp use_schema_api(schema) do
-    schema
-    |> Traverse.prewalk(fn
+  defp traverse_replace_default_meta(schema) do
+    Traverse.prewalk(schema, fn
       {:val, %{_meta: meta} = prop} ->
         generic? =
           match?(
@@ -671,7 +738,10 @@ defmodule Generator do
       other ->
         elem(other, 1)
     end)
-    |> Traverse.postwalk(fn
+  end
+
+  defp trawverse_hardwrap_descriptions(schema) do
+    Traverse.postwalk(schema, fn
       {:val, %{description: description} = map} when is_binary(description) ->
         if String.contains?(description, "\n") || String.length(description) > 50 do
           Map.update!(map, :description, &DescriptionWrapper.of/1)
@@ -682,7 +752,10 @@ defmodule Generator do
       other ->
         elem(other, 1)
     end)
-    |> Traverse.postwalk(fn
+  end
+
+  defp traverse_use_schema_helpers(schema) do
+    Traverse.postwalk(schema, fn
       {:val, %{"$ref": "#/definitions/" <> name} = schema} ->
         case Map.drop(schema, [:description, :"$schema"]) do
           rest when map_size(rest) == 1 -> module_name(name)
@@ -768,26 +841,53 @@ defmodule Generator do
     |> Enum.sort_by(&elem(&1, 0))
   end
 
-  defp maybe_format_for_struct(%{type: "object", properties: _} = schema) do
-    schema =
-      case schema do
-        %{required: keys} -> %{schema | required: Enum.map(keys, &String.to_atom/1)}
-        _ -> schema
-      end
-
-    {:struct, schema}
-  end
-
-  defp maybe_format_for_struct(schema) do
-    {:generic, schema}
-  end
-
   def base_module do
     GenMCP.MCP
   end
 
   defp module_name(name) do
     Module.concat(base_module(), name)
+  end
+
+  defp generate_module(conf) do
+    conf(name: name, schema: schema, opts: opts, kind: kind) = conf
+    IO.puts("generating #{name}")
+    module = module_name(name)
+    skip_keys = Keyword.get(opts, :skip_keys, nil)
+    serialize_merge = Keyword.get(opts, :serialize_merge, nil)
+
+    case kind do
+      :struct ->
+        """
+        defmodule #{inspect(module)} do
+          use JSV.Schema
+
+          JsonDerive.auto(#{serialize_merge && inspect(serialize_merge)})
+
+          #{skip_keys && "@skip_keys #{inspect(skip_keys)}"}
+
+          defschema #{inspect(schema, inspect_opts())}
+
+          @type t :: %__MODULE__{}
+        end
+        """
+
+      :generic ->
+        """
+        defmodule #{inspect(module)} do
+          use JSV.Schema
+          def json_schema do
+           #{inspect(schema, inspect_opts())}
+          end
+        end
+        """
+    end
+
+    # |> tap(&IO.puts/1)
+  end
+
+  defp inspect_opts(overrides \\ []) do
+    overrides ++ [pretty: true, custom_options: [sort_maps: true]]
   end
 end
 
