@@ -48,9 +48,10 @@ defmodule MyApp.Tools.Calculator do
   end
 
   @impl true
-  def call(_request, %{"a" => a, "b" => b}, _channel) do
+  def call(req, channel, _arg) do
+    %{"a" => a, "b" => b} = req.params.arguments
     result = GenMCP.MCP.call_tool_result(text: "#{a + b}")
-    {:result, result}
+    {:result, result, channel}
   end
 end
 ```
