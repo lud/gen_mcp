@@ -329,11 +329,10 @@ defmodule GenMCP.Suite do
   end
 
   def handle_request(req, _, state) do
-    Logger.warning("""
-    received unsupported request when status=#{inspect(state.status)}:
-
-    #{inspect(req)}
-    """)
+    :telemetry.execute([:gen_mcp, :suite, :error, :unknown_request], %{}, %{
+      session_id: state.session_id,
+      request: req
+    })
 
     {:reply, {:error, :unsupported_request, req}, state}
   end
@@ -396,6 +395,8 @@ defmodule GenMCP.Suite do
   end
 
   defp log_unhandled_info(msg) do
+    # This should be handled by the session controller, no need for
+    # telemetry logging here
     Logger.error("unhandled info message in #{inspect(__MODULE__)}: #{inspect(msg)}")
   end
 

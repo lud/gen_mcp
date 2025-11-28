@@ -17,21 +17,30 @@ defmodule GenMCP.Application do
     Supervisor.start_link(children, opts)
   end
 
+  defp children(:prod) do
+    [
+      GenMCP.Cluster,
+      {Registry, name: GenMCP.Mux.registry(), keys: :unique},
+      GenMCP.Mux.SessionSupervisor
+    ]
+  end
+
   if Mix.env() != :prod do
-    defp children(:dev) do
+    defp children(_) do
+      :ok =
+        GenMCP.attach_default_logger([
+          # min_log_level: :error,
+          # prefixes: [
+          #   [:gen_mcp, :session],
+          #   [:gen_mcp, :suite]
+          # ]
+        ])
+
       children(:prod) ++
         [
           GenMCP.Support.Dev,
           GenMCP.TestWeb.Endpoint
         ]
     end
-  end
-
-  defp children(_) do
-    [
-      GenMCP.Cluster,
-      {Registry, name: GenMCP.Mux.registry(), keys: :unique},
-      GenMCP.Mux.SessionSupervisor
-    ]
   end
 end

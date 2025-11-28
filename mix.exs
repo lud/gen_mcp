@@ -48,6 +48,7 @@ defmodule GenMCP.MixProject do
       {:abnf_parsec, "~> 2.0"},
       {:texture, ">= 0.3.2"},
       {:nimble_options, "~> 1.1"},
+      {:telemetry, ">= 0.0.0"},
 
       # Resources
       mcp_schemas(),
@@ -152,7 +153,8 @@ defmodule GenMCP.MixProject do
           ~r/GenMCP\.Mux\..*/
         ],
         Utilities: [
-          GenMCP.RpcError
+          GenMCP.RpcError,
+          GenMCP.TelemetryLogger
         ],
         Protocol: [
           ~r/GenMCP\.MCP\..*/

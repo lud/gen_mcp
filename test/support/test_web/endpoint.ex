@@ -4,7 +4,6 @@ defmodule GenMCP.TestWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :gen_mcp
 
   plug Plug.RequestId
-  plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
@@ -15,16 +14,16 @@ defmodule GenMCP.TestWeb.Endpoint do
   plug GenMCP.TestWeb.Router
 
   def read_body(conn, opts) do
-    with {:ok, body, conn} <- Plug.Conn.read_body(conn, opts) do
-      require(Logger).debug(
-        """
-        INPUT BODY
-        #{body}
-        """,
-        ansi_color: :light_blue
-      )
-
-      {:ok, body, conn}
+    case Plug.Conn.read_body(conn, opts) do
+      {:ok, body, conn} -> {:ok, body, conn}
+      # require(Logger).debug(
+      #   """
+      #   INPUT BODY
+      #   #{body}
+      #   """,
+      #   ansi_color: :light_blue
+      # )
+      other -> raise "bad parse: #{inspect(other)}"
     end
   end
 end

@@ -168,18 +168,22 @@ defmodule GenMCP.RpcError do
 
   # -- catchall ---------------------------------------------------------------
 
-  @raise_on_unknown Mix.env() == :test
-
   defcasterror reason, @rpc_internal_error, 500 do
-    msg = "unknown MCP RPC error: #{inspect(reason)}"
-    Logger.warning(msg)
-
-    if Process.get(:_type_checker_hack_unknown_rpc_error_reason, @raise_on_unknown) do
-      raise ArgumentError, msg
-    end
+    unknown_error(reason)
 
     %{
       message: "Internal Error"
     }
+  end
+
+  if Mix.env() == :test do
+    @spec unknown_error(term) :: no_return
+    def unknown_error(reason) do
+      raise ArgumentError, "unknown MCP error: #{inspect(reason)}"
+    end
+  else
+    def unknown_error(_reason) do
+      :ok
+    end
   end
 end

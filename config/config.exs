@@ -4,7 +4,8 @@ port = String.to_integer(System.get_env("PORT", "5000"))
 
 log_level =
   if config_env() == :test do
-    :warning
+    # :warning
+    :debug
   else
     :debug
   end
@@ -20,9 +21,9 @@ config :gen_mcp, GenMCP.TestWeb.Endpoint,
 
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
-  metadata: [:node, :file, :line]
+  metadata: [:node, :gen_mcp_session_id]
 
 config :logger, level: log_level
 
-config :phoenix, :logger, true
+config :phoenix, :logger, false
 config :phoenix, :plug_init_mode, :runtime

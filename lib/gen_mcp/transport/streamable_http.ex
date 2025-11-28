@@ -118,10 +118,6 @@ defmodule GenMCP.Transport.StreamableHTTP do
       {:ok, :notification, req} ->
         dispatch_notif(conn, req, opts)
     end
-  rescue
-    e ->
-      Logger.error(Exception.format(:error, e, __STACKTRACE__))
-      reraise e, __STACKTRACE__
   end
 
   def http_post(%{body_params: %{"jsonrpc" => _}} = conn, _opts) do
@@ -298,8 +294,19 @@ defmodule GenMCP.Transport.StreamableHTTP do
 
       other
       when other != {:plug_conn, :sent} and not (is_tuple(other) and elem(other, 0) == :bandit) ->
-        Logger.warning("Received unexpected message: #{inspect(other)}")
+        unexpected_message(other)
         stream_loop(conn, msg_id, keepalive_ref)
+    end
+  end
+
+  if Mix.env() == :test do
+    @spec unexpected_message(term) :: no_return
+    defp unexpected_message(msg) do
+      raise "unexpected message in #{inspect(__MODULE__)}: #{inspect(msg)}"
+    end
+  else
+    defp unexpected_message(_msg) do
+      :ok
     end
   end
 

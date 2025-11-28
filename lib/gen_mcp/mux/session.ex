@@ -44,7 +44,12 @@ defmodule GenMCP.Mux.Session do
     default_server_options = opts
 
     {server_mod, server_arg} = normalize_server(server, default_server_options)
-    Logger.debug("GenMCP session #{opts[:session_id]} initializing with #{inspect(server_mod)}")
+
+    :telemetry.execute([:gen_mcp, :session, :init], %{}, %{
+      session_id: session_id,
+      server: server_mod,
+      pid: self()
+    })
 
     case server_mod.init(session_id, server_arg) do
       {:ok, server_state} ->
@@ -103,7 +108,13 @@ defmodule GenMCP.Mux.Session do
   end
 
   def handle_call({:"$gen_mcp", :stop}, _from, state) do
-    Logger.info("session #{state.session_id} terminating (client delete)")
+    :telemetry.execute([:gen_mcp, :session, :terminate], %{}, %{
+      session_id: state.session_id,
+      server: state.server_mod,
+      reason: :client_delete,
+      pid: self()
+    })
+
     {:stop, {:shutdown, :mcp_stop}, :ok, state}
   end
 
@@ -111,7 +122,13 @@ defmodule GenMCP.Mux.Session do
   def handle_info({:timeout, tref, :session_timeout}, state) do
     case state.session_timeout_ref do
       ^tref ->
-        Logger.info("session #{state.session_id} terminating (client timeout)")
+        :telemetry.execute([:gen_mcp, :session, :terminate], %{}, %{
+          session_id: state.session_id,
+          server: state.server_mod,
+          reason: :timeout,
+          pid: self()
+        })
+
         {:stop, {:shutdown, :session_timeout}, state}
 
       _ ->

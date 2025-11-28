@@ -128,4 +128,27 @@ defmodule GenMCP do
   or notification.
   """
   @callback handle_info(term, state) :: {:noreply, state}
+
+  @doc """
+  The gen_mcp application uses telemetry events to publish various application
+  lifecycle events. This can be used to log only what is important to you.
+
+  The telemetry logger will log all telemetry events by default, at various log
+  levels (debug, info, warning, error , _etc._).
+
+  Two filters are supported:
+
+  * `:min_log_level` - For instance if `:error` is given, the default logger
+    will not log events for which it uses the lower levels. This allows you to
+    still have logs for errors, without cluttering info and debug logs.
+  * `:prefixes` - A list of event prefixes (which are a list too) to match. The
+    logger will only log events whose prefixes match one of the the given
+    prefixes. For instance, `[[:gen_mcp, :cluster], [:gen_mcp, :session]]` will
+    only log events related to the cluster and sessions.
+
+  Both filters are compatible.
+  """
+  def attach_default_logger(filters \\ []) do
+    GenMCP.TelemetryLogger.attach(filters)
+  end
 end

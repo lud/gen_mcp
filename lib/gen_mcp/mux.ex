@@ -5,8 +5,6 @@ defmodule GenMCP.Mux do
   alias GenMCP.Mux.Session
   alias GenMCP.Mux.SessionSupervisor
 
-  require Logger
-
   # -- Session Initializing ---------------------------------------------------
 
   def start_session(opts) do
@@ -19,7 +17,11 @@ defmodule GenMCP.Mux do
         {:ok, session_id}
 
       {:error, reason} ->
-        Logger.error("Could not start MCP session: #{inspect(reason)}")
+        :telemetry.execute([:gen_mcp, :session, :start_error], %{}, %{
+          session_id: session_id,
+          reason: reason
+        })
+
         {:error, reason}
     end
   end
@@ -61,8 +63,6 @@ defmodule GenMCP.Mux do
         pid_result(whereis(session_id))
 
       {:ok, remote_node} ->
-        Logger.debug("retrieving session #{session_id} on node #{inspect(remote_node)}")
-
         rpc = :rpc.call(remote_node, GenMCP.Mux, :whereis, [session_id])
         pid_result(rpc)
 
@@ -74,8 +74,6 @@ defmodule GenMCP.Mux do
   @doc false
   # Retrieves pids locally only, exported for tests and debug
   def whereis(session_id) do
-    Logger.debug("retrieving local pid for session #{session_id}")
-
     case Registry.lookup(registry(), session_id) do
       [{pid, _}] -> pid
       [] -> nil

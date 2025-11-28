@@ -3,6 +3,7 @@ defmodule GenMCP.Cluster.NodeSync do
   use GenServer
 
   require Logger
+  require Record
 
   # TODO(doc) document configuration for static node id
   @gen_opts ~w(name timeout debug spawn_opt hibernate_after)a
@@ -14,6 +15,8 @@ defmodule GenMCP.Cluster.NodeSync do
   @persistent_key __MODULE__
   @random_node_id_chars 4
   @default_register_max_attempts 10
+
+  Record.defrecordp(:peer, node_id: nil, node: nil, pid: nil)
 
   def node_id do
     case :persistent_term.get(@persistent_key, nil) do
@@ -35,8 +38,8 @@ defmodule GenMCP.Cluster.NodeSync do
     end
   end
 
-  def node_known?(name \\ @name, node) do
-    GenServer.call(name, {:node_known?, node})
+  def node_known?(node) do
+    GenServer.call(@name, {:node_known?, node})
   end
 
   def start_link(opts) do
@@ -51,7 +54,6 @@ defmodule GenMCP.Cluster.NodeSync do
 
   @impl true
   def init(_opts) do
-    Logger.metadata(node: node())
     :ok = :net_kernel.monitor_nodes(true)
 
     {node_id_gen, max_attempts} =
@@ -81,11 +83,11 @@ defmodule GenMCP.Cluster.NodeSync do
           %{
             mref: mref,
             node_id: node_id,
-            # Nodes are stored as a list for the rare case where a cluster rejoins
-            # itself and two nodes share the same ID. In that case they will both
-            # publish their ID and we need to keep both until one of the node
-            # process is shut down by global uniqueness.
-            cluster: %{node_id => [{node(), self()}]}
+            # It is possible that multiple peers have the same node id when a
+            # cluster is formed and two nodes share the same ID. In that case
+            # they will both publish their ID and we need to keep both until one
+            # of the node process is shut down by global uniqueness.
+            cluster: [peer(node_id: node_id, node: node(), pid: self())]
           }
 
         {:ok, state}
@@ -98,14 +100,14 @@ defmodule GenMCP.Cluster.NodeSync do
   @impl true
   def handle_info({mref, :join, @group, pids}, %{mref: mref} = state) do
     publish(pids, state.node_id)
+
     dump({:noreply, state})
   end
 
   def handle_info({mref, :leave, @group, pids}, %{mref: mref} = state) do
     state =
       Enum.reduce(pids, state, fn pid, state ->
-        Logger.debug("Node #{node(pid)} left")
-        update_in(state.cluster, &cleanup_member(&1, {node(pid), pid}))
+        update_in(state.cluster, &cleanup_pid(&1, pid))
       end)
 
     dump({:noreply, state})
@@ -118,13 +120,11 @@ defmodule GenMCP.Cluster.NodeSync do
   end
 
   def handle_info({@tag, node_id, node, pid}, state) when node != node() do
-    state =
-      update_in(state.cluster[node_id], fn
-        nil -> [{node, pid}]
-        [_ | _] = list -> append_member(list, {node, pid})
-      end)
+    peer = peer(node_id: node_id, node: node, pid: pid)
+    cluster = [peer | state.cluster]
+    state = %{state | cluster: cluster}
 
-    Logger.debug("Node #{node} joined as #{node_id}")
+    :telemetry.execute([:gen_mcp, :cluster, :joined], %{}, peer_to_map(peer))
 
     dump({:noreply, state})
   end
@@ -138,8 +138,9 @@ defmodule GenMCP.Cluster.NodeSync do
     dump({:noreply, state})
   end
 
-  def handle_info({:global_name_conflict, {@glob, name}}, state) do
-    Logger.warning("duplicated node id #{name}, shutting down")
+  def handle_info({:global_name_conflict, {@glob, node_id}}, state) do
+    peer(node_id: ^node_id) = self_peer = List.keyfind!(state.cluster, self(), peer(:pid))
+    :telemetry.execute([:gen_mcp, :cluster, :conflict], %{}, peer_to_map(self_peer))
 
     # This may impact performances, hopefully duplicate node ids only happen
     # during boot or when rolling nodes.
@@ -149,7 +150,10 @@ defmodule GenMCP.Cluster.NodeSync do
   end
 
   def handle_info(other, state) do
-    Logger.error("unexpected message #{inspect(other)}")
+    :telemetry.execute([:gen_mcp, :cluster, :error], %{}, %{
+      node: node(),
+      message: "unexpected message #{inspect(other)} in #{inspect(__MODULE__)}"
+    })
 
     dump({:noreply, state})
   end
@@ -161,8 +165,8 @@ defmodule GenMCP.Cluster.NodeSync do
 
   def handle_call({:get_node, node_id}, _from, state) do
     reply =
-      case state.cluster do
-        %{^node_id => [{node, _} | _]} -> {:ok, node}
+      case List.keyfind(state.cluster, node_id, peer(:node_id)) do
+        peer(node: node) -> {:ok, node}
         _ -> :error
       end
 
@@ -171,9 +175,10 @@ defmodule GenMCP.Cluster.NodeSync do
 
   def handle_call({:node_known?, node}, _from, state) do
     known? =
-      Enum.any?(state.cluster, fn {_id, members} ->
-        Enum.any?(members, fn {n, _} -> n == node end)
-      end)
+      case List.keyfind(state.cluster, node, peer(:node)) do
+        nil -> false
+        peer() -> true
+      end
 
     {:reply, known?, state}
   end
@@ -182,7 +187,10 @@ defmodule GenMCP.Cluster.NodeSync do
 
   defp register_random_node_id(_id_generator, max_attempts, attempt)
        when attempt > max_attempts do
-    Logger.error("Could not register node_id from #{inspect(node())}")
+    :telemetry.execute([:gen_mcp, :cluster, :error], %{}, %{
+      node: node(),
+      message: "Could not register node_id from #{inspect(node())}"
+    })
 
     {:error, :max_attempts}
   end
@@ -204,35 +212,22 @@ defmodule GenMCP.Cluster.NodeSync do
         do: (acc -> <<acc::binary, Enum.random(@random_chars)>>)
   end
 
-  defp append_member([same | rest], same) do
-    [same | rest]
-  end
+  defp cleanup_pid(cluster, pid) do
+    case List.keytake(cluster, pid, peer(:pid)) do
+      nil ->
+        cluster
 
-  defp append_member([h | rest], member) do
-    [h | append_member(rest, member)]
-  end
-
-  defp append_member([], member) do
-    [member]
-  end
-
-  defp cleanup_member(cluster, member) do
-    filter_members(cluster, &(&1 != member))
+      {peer, cluster} ->
+        :telemetry.execute([:gen_mcp, :cluster, :left], %{}, peer_to_map(peer))
+        cluster
+    end
   end
 
   defp cleanup_node(cluster, node) do
-    filter_members(cluster, fn {n, _} -> n != node end)
-  end
-
-  defp filter_members(cluster, f) do
-    cluster
-    |> Enum.flat_map(fn {id, members} ->
-      case Enum.filter(members, f) do
-        [] -> []
-        rest -> [{id, rest}]
-      end
+    Enum.filter(cluster, fn
+      peer(node: ^node) -> false
+      _ -> true
     end)
-    |> Map.new()
   end
 
   defp dump({:noreply, state}) do
@@ -244,7 +239,10 @@ defmodule GenMCP.Cluster.NodeSync do
 
       _ ->
         Process.put(:prev_dump_value, value)
-        Logger.debug(inspect(state.cluster, pretty: true), ansi_color: :green)
+
+        :telemetry.execute([:gen_mcp, :cluster, :status], %{}, %{
+          peers: Enum.map(value, &peer_to_map/1)
+        })
     end
 
     {:noreply, state}
@@ -254,5 +252,10 @@ defmodule GenMCP.Cluster.NodeSync do
     Enum.each(pids, fn pid ->
       send(pid, {@tag, node_id, node(), self()})
     end)
+  end
+
+  defp peer_to_map(peer) do
+    peer(node_id: node_id, node: node, pid: pid) = peer
+    %{node_id: node_id, node: node, pid: pid}
   end
 end

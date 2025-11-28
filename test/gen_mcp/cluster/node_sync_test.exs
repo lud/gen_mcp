@@ -33,7 +33,8 @@ defmodule GenMCP.Cluster.NodeSyncTest do
         applications: [:gen_mcp],
         environment: [
           gen_mcp: [
-            {GenMCP.TestWeb.Endpoint, server: true, http: [port: 5003], url: [port: 5003]}
+            {GenMCP.TestWeb.Endpoint,
+             server: true, http: [port: 5003], url: [port: 5003], adapter: Bandit.PhoenixAdapter}
           ],
           logger: [
             level: :warning,
@@ -64,7 +65,7 @@ defmodule GenMCP.Cluster.NodeSyncTest do
         :ok
 
       false ->
-        Logger.warning("nodes not in sync yet")
+        IO.puts([IO.ANSI.yellow(), "nodes not in sync yet", IO.ANSI.reset()])
         Process.sleep(100)
         await_node_id_sync(peer)
     end
