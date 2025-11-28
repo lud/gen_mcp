@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2025-11-28
+
+### 🚀 Features
+
+- Updated MCP schemas generation to skip content blocks types in structs
+- Removed logger calls, using telemetry instead
+
 ## [0.3.1] - 2025-11-26
 
 ### 📚 Documentation
