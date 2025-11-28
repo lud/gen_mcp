@@ -18,7 +18,7 @@ This library packs two main features:
 * `GenMCP` itself - a low level behaviour to implement your own MCP server
   logic.
 * `GenMCP.Suite` - a high level suite of components to build tools, resources
-  and prompts with the default server `GenMCP` implementation.
+  and prompts with the default server implementation.
 
 ## Installation
 
@@ -28,7 +28,7 @@ The usual tuple for mix.exs!
 ```elixir
 def deps do
   [
-    {:gen_mcp, "~> 0.3"},
+    {:gen_mcp, "~> 0.4"},
   ]
 end
 ```
