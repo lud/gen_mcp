@@ -45,6 +45,7 @@ defmodule GenMCP.Suite do
   alias GenMCP.Suite.PromptRepo
   alias GenMCP.Suite.ResourceRepo
   alias GenMCP.Suite.Tool
+  alias GenMCP.Utils.OptsValidator
 
   require Logger
   require Record
@@ -103,31 +104,52 @@ defmodule GenMCP.Suite do
   # * the session controller should send the resources updated notifications
   #   itself.
 
-  @provider_type [default: [], type: {:list, {:or, [:atom, :mod_arg, :map]}}]
+  provider_list = fn doc ->
+    [
+      default: [],
+      type: {:list, {:or, [:atom, :mod_arg, :map]}},
+      doc:
+        doc <>
+          " List items can be either module names, `{module, arg}` tuples or a descriptor map."
+    ]
+  end
+
   @init_opts_schema NimbleOptions.new!(
                       server_name: [required: true, type: :string],
                       server_version: [required: true, type: :string],
                       server_title: [type: :string],
-                      tools: @provider_type,
-                      resources: @provider_type,
-                      prompts: @provider_type,
-                      extensions: @provider_type
+                      tools:
+                        provider_list.(
+                          "The list of `GenMCP.Suite.Tool` implementations" <>
+                            " that will be available in the server."
+                        ),
+                      resources:
+                        provider_list.(
+                          "The list of `GenMCP.Suite.ResourceRepo` implementations" <>
+                            " to serve resources from."
+                        ),
+                      prompts:
+                        provider_list.(
+                          "A list of `GenMCP.Suite.PromptRepo` implementations" <>
+                            " to generate prompts with."
+                        ),
+                      extensions:
+                        provider_list.(
+                          "A list `GenMCP.Suite.Extension` implementations" <>
+                            " to add more tools, resource repositories and prompt repositories."
+                        )
                     )
+
+  @doc false
+  def init_opts_schema do
+    @init_opts_schema
+  end
 
   @impl true
   def init(session_id, opts) do
-    # The transport will forward all options to the session, which forwards
-    # everything to the server.
-    #
-    # To validate with nimble options we need to keep only the known options
-
-    opts_schema = @init_opts_schema
-    keep_keys = Keyword.keys(opts_schema.schema)
-    opts = Keyword.take(opts, keep_keys)
-
-    case NimbleOptions.validate(opts, @init_opts_schema) do
-      {:ok, valid_opts} -> {:ok, {:__init__, session_id, valid_opts}}
-      {:error, _} = err -> err
+    case OptsValidator.validate_take_opts(opts, @init_opts_schema) do
+      {:ok, valid_opts, _} -> {:ok, {:__init__, session_id, valid_opts}}
+      {:error, reason} -> {:stop, reason}
     end
   end
 
@@ -142,7 +164,7 @@ defmodule GenMCP.Suite do
       init_result =
         MCP.intialize_result(
           capabilities: MCP.capabilities(capabilities(state)),
-          server_info: MCP.server_info(name: "Mock Server", version: "foo", title: "stuff")
+          server_info: state.server_info
         )
 
       {:reply, {:result, init_result}, state}

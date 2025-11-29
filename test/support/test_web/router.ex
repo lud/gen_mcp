@@ -47,22 +47,26 @@ defmodule GenMCP.TestWeb.Router do
   end
 
   scope "/mcp" do
-    forward "/mock", McpMock, server: ServerMock
+    if Mix.env() == :test do
+      forward "/mock", McpMock, server: ServerMock, foo: :bar
 
-    scope "/" do
-      pipe_through :auth
+      scope "/" do
+        pipe_through :auth
 
-      forward "/mock-auth", McpMock,
-        server: ServerMock,
-        assigns: %{assign_from_forward: "hello", shared_assign: "from forward"},
-        copy_assigns: [:assign_from_auth, :shared_assign, :unexisting_assign]
+        forward "/mock-auth", McpMock,
+          server: ServerMock,
+          assigns: %{assign_from_forward: "hello", shared_assign: "from forward"},
+          copy_assigns: [:assign_from_auth, :shared_assign, :unexisting_assign]
+      end
     end
 
     forward "/real", McpReal,
       server_name: "Real Server",
       server_version: "0.0.1",
-      tools: [GenMCP.Test.Tools.ErlangHasher],
-      extensions: []
+      server_title: "GenMCP own development server",
+      tools: [GenMCP.Test.Tools.ErlangHasher, GenMCP.Test.Tools.Addition],
+      extensions: [],
+      foo: :bar
   end
 
   pipeline :auth do

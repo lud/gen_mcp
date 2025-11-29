@@ -1,4 +1,24 @@
+# quokka:skip-module-reordering
+
 defmodule GenMCP.Transport.StreamableHTTP do
+  plug_opts_schema =
+    NimbleOptions.new!(
+      assigns: [
+        type: :map,
+        default: %{},
+        doc:
+          "A map of assigns to define to the channel passed to" <>
+            " tools, resources, etc."
+      ],
+      copy_assigns: [
+        type: {:list, :atom},
+        default: [],
+        doc:
+          "A list of assigns keys that will be copied from the conn to the channel." <>
+            " Those will overwrite the assigns from the `:assigns` option above."
+      ]
+    )
+
   @moduledoc """
   Handles incoming MCP requests over HTTP with SSE support.
 
@@ -10,16 +30,24 @@ defmodule GenMCP.Transport.StreamableHTTP do
 
   ## Configuration
 
-  *   `:session_timeout` - Session timeout in milliseconds. Defaults to 60 minutes.
-      Clients must interact with the session within this window or they will receive
-      404 errors.
-  *   `:assigns` - A map of static assigns to add to the channel context.
-  *   `:copy_assigns` - A list of keys to copy from `conn.assigns` to the channel
-      context.
+  ### Options for the HTTP connection
 
-  All other options are forwarded to the server implementation (e.g., `GenMCP.Suite`).
-  See `GenMCP.Suite` for server configuration options like `:server_name`,
-  `:tools`, etc.
+  #{NimbleOptions.docs(plug_opts_schema)}
+
+  ### Options for the MCP session handler
+
+  #{GenMCP.Mux.Session.init_opts_schema().schema |> Keyword.delete(:session_id) |> NimbleOptions.docs()}
+
+  ### Options for the GenMCP behaviour implmentation
+
+  All other options given to `#{inspect(__MODULE__)}` will be forwarded to the
+  server implementation.
+
+  The default server, `GenMCP.Suite`, will accept the following options:
+
+  #{NimbleOptions.docs(GenMCP.Suite.init_opts_schema())}
+
+
 
   ## Example
 
@@ -39,13 +67,21 @@ defmodule GenMCP.Transport.StreamableHTTP do
   alias GenMCP.MCP.JSONRPCError
   alias GenMCP.MCP.JSONRPCResponse
   alias GenMCP.Mux
+  alias GenMCP.Mux
   alias GenMCP.RpcError
+  alias GenMCP.Utils.OptsValidator
   alias GenMCP.Validator
   alias JSV.Codec
 
   require Logger
 
+  @plug_opts_schema plug_opts_schema
+
   # -- Plug API ---------------------------------------------------------------
+  def init(opts) do
+    {self_opts, session_opts} = OptsValidator.validate_take_opts!(opts, @plug_opts_schema)
+    _conf = Map.put(Map.new(self_opts), :session_opts, session_opts)
+  end
 
   plug :match
   plug :dispatch
@@ -103,32 +139,32 @@ defmodule GenMCP.Transport.StreamableHTTP do
   # TODO(doc) the :assigns option has less precedence than :copy_assigns.
   # Assigns copied from the conn will overwrite static assigns.
 
-  def http_get(conn, _opts) do
+  def http_get(conn, _conf) do
     send_resp(conn, 405, "Method Not Allowed")
   end
 
-  def http_post(%{body_params: %{"jsonrpc" => "2.0"} = body_params} = conn, opts) do
+  def http_post(%{body_params: %{"jsonrpc" => "2.0"} = body_params} = conn, conf) do
     case Validator.validate_request(body_params) do
       {:error, jsv_err} ->
         send_error(conn, jsv_err, msg_id: msg_id_from_req(body_params))
 
       {:ok, :request, %{id: msg_id} = req} ->
-        dispatch_req(conn, msg_id, req, opts)
+        dispatch_req(conn, msg_id, req, conf)
 
       {:ok, :notification, req} ->
-        dispatch_notif(conn, req, opts)
+        dispatch_notif(conn, req, conf)
     end
   end
 
-  def http_post(%{body_params: %{"jsonrpc" => _}} = conn, _opts) do
+  def http_post(%{body_params: %{"jsonrpc" => _}} = conn, _conf) do
     send_error(conn, :bad_rpc_version)
   end
 
-  def http_post(conn, _opts) do
+  def http_post(conn, _conf) do
     send_error(conn, :bad_rpc)
   end
 
-  def http_delete(conn, _opts) do
+  def http_delete(conn, _conf) do
     terminate_session(conn)
   end
 
@@ -139,9 +175,9 @@ defmodule GenMCP.Transport.StreamableHTTP do
     end
   end
 
-  defp dispatch_req(conn, msg_id, %InitializeRequest{} = req, opts) do
-    with {:ok, session_id} <- Mux.start_session(opts),
-         chan_info = channel_info(conn, req, session_id, opts),
+  defp dispatch_req(conn, msg_id, %InitializeRequest{} = req, conf) do
+    with {:ok, session_id} <- Mux.start_session(conf.session_opts),
+         chan_info = channel_info(conn, req, session_id, conf),
          {:result, %InitializeResult{} = result} <- Mux.request(session_id, req, chan_info) do
       conn
       |> with_session_id(session_id)
@@ -151,22 +187,22 @@ defmodule GenMCP.Transport.StreamableHTTP do
     end
   end
 
-  defp dispatch_req(conn, msg_id, req, opts) do
+  defp dispatch_req(conn, msg_id, req, conf) do
     case fetch_session_id(conn) do
-      {:ok, session_id} -> do_dispatch_req(conn, session_id, msg_id, req, opts)
+      {:ok, session_id} -> do_dispatch_req(conn, session_id, msg_id, req, conf)
       {:error, reason} -> send_error(conn, reason)
     end
   end
 
-  defp do_dispatch_req(conn, session_id, msg_id, req, opts) do
-    case Mux.request(session_id, req, channel_info(conn, req, session_id, opts)) do
+  defp do_dispatch_req(conn, session_id, msg_id, req, conf) do
+    case Mux.request(session_id, req, channel_info(conn, req, session_id, conf)) do
       {:result, result} -> send_result_response(conn, 200, msg_id, result)
       {:error, reason} -> send_error(conn, reason, msg_id: msg_id)
       :stream -> stream_start(conn, 200, msg_id)
     end
   end
 
-  defp dispatch_notif(conn, notif, _opts) do
+  defp dispatch_notif(conn, notif, _conf) do
     with {:ok, session_id} <- fetch_session_id(conn),
          :ack <- Mux.notify(session_id, notif) do
       send_accepted(conn)
@@ -195,15 +231,11 @@ defmodule GenMCP.Transport.StreamableHTTP do
     end
   end
 
-  defp channel_info(conn, _req, session_id, opts) do
+  defp channel_info(conn, _req, session_id, conf) do
     %{assigns: conn_assigns} = conn
 
-    static_assigns =
-      opts
-      |> Keyword.get(:assigns, %{})
-      |> Map.put(@session_id_assign_key, session_id)
-
-    copied_assign_keys = Keyword.get(opts, :copy_assigns, [])
+    static_assigns = Map.put(conf.assigns, @session_id_assign_key, session_id)
+    copied_assign_keys = conf.copy_assigns
 
     assigns =
       Enum.reduce(copied_assign_keys, static_assigns, fn key, acc ->

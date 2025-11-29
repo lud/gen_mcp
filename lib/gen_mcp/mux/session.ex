@@ -5,68 +5,107 @@ defmodule GenMCP.Mux.Session do
 
   Delegates all requests to the `GenMCP` behaviour implementations.
   """
-  use GenServer, restart: :temporary
-
-  require Logger
 
   # All session and mcp opts are given in the child spec from the transport
   # plug. It is not kept in memory by the supervisor as long as the session has
   # restart: :temporary. If we want to use another restart strategy we must
   # change the boot setup to avoid keeping to much in memory.
+  use GenServer, restart: :temporary
+
+  alias GenMCP.Utils.OptsValidator
+
+  require Logger
+
   @gen_opts ~w(name timeout debug spawn_opt hibernate_after)a
+  @default_session_timeout_minutes to_timeout(minute: 2)
+
+  @init_opts_schema NimbleOptions.new!(
+                      session_id: [
+                        required: true,
+                        type: :string,
+                        doc: "The session identifier, prefixed with the node ID and a dash"
+                      ],
+                      server: [
+                        type: {:or, [:atom, :mod_arg]},
+                        default: GenMCP.Suite,
+                        doc:
+                          "The `GenMCP` behaviour server implemetation that will handle MCP messages." <>
+                            " If a simple atom, it will receive all other options given to the session."
+                      ],
+                      session_timeout: [
+                        type: :integer,
+                        default: @default_session_timeout_minutes,
+                        doc:
+                          "Session will automatically terminate when not receiving any request" <>
+                            " or notification for that number of milliseconds."
+                      ]
+                    )
 
   def start_link(opts) do
     {gen_opts, opts} = Keyword.split(opts, @gen_opts)
     GenServer.start_link(__MODULE__, opts, gen_opts)
   end
 
-  defmodule State do
-    @moduledoc false
-    @enforce_keys [:server_mod, :server_state, :session_id, :session_timeout_ref, :opts]
-    defstruct @enforce_keys
+  @doc false
+  def init_opts_schema do
+    @init_opts_schema
   end
 
-  def default_session_timeout_minutes do
-    2
+  defmodule State do
+    @moduledoc false
+    @enforce_keys [:server_mod, :server_state, :session_id, :session_timeout_ref, :conf]
+    defstruct @enforce_keys
   end
 
   @impl true
   def init(opts) do
-    {server, opts} = Keyword.pop(opts, :server, GenMCP.Suite)
-    session_id = Keyword.fetch!(opts, :session_id)
+    with {:ok, conf} <- init_self(opts),
+         {:ok, server_state} <- init_server(conf) do
+      {:ok,
+       %State{
+         server_mod: conf.server_mod,
+         server_state: server_state,
+         session_id: conf.session_id,
+         session_timeout_ref: start_session_timeout(conf.session_timeout),
+         conf: conf
+       }}
+    else
+      {:stop, _} = stop -> stop
+    end
+  end
 
-    session_timeout =
-      Keyword.get(opts, :session_timeout, to_timeout(minute: default_session_timeout_minutes()))
+  defp init_self(opts) do
+    case OptsValidator.validate_take_opts(opts, @init_opts_schema) do
+      {:ok, self_opts, server_opts} ->
+        server = Keyword.fetch!(self_opts, :server)
+        session_timeout = Keyword.fetch!(self_opts, :session_timeout)
+        session_id = Keyword.fetch!(opts, :session_id)
+        {server_mod, server_arg} = normalize_server(server, server_opts)
 
-    self_opts = [session_timeout: session_timeout]
+        :telemetry.execute([:gen_mcp, :session, :init], %{}, %{
+          session_id: session_id,
+          server: server_mod,
+          pid: self()
+        })
 
-    # pass all other options to the server if the server is not a tuple
-    default_server_options = opts
-
-    {server_mod, server_arg} = normalize_server(server, default_server_options)
-
-    :telemetry.execute([:gen_mcp, :session, :init], %{}, %{
-      session_id: session_id,
-      server: server_mod,
-      pid: self()
-    })
-
-    case server_mod.init(session_id, server_arg) do
-      {:ok, server_state} ->
         {:ok,
-         %State{
-           server_mod: server_mod,
-           server_state: server_state,
+         %{
            session_id: session_id,
-           session_timeout_ref: start_session_timeout(session_timeout),
-           opts: self_opts
+           server_mod: server_mod,
+           server_arg: server_arg,
+           session_timeout: session_timeout
          }}
 
-      {:stop, reason} ->
-        {:stop, {:mcp_server_init_failure, reason}}
+      {:error, reason} ->
+        {:stop, reason}
+    end
+  end
 
-      other ->
-        exit({:bad_return_value, other})
+  defp init_server(conf) do
+    case conf.server_mod.init(conf.session_id, conf.server_arg) do
+      {:ok, server_state} -> {:ok, server_state}
+      {:stop, reason} -> {:stop, {:mcp_server_init_failure, reason}}
+      other -> exit({:bad_return_value, other})
     end
   end
 
@@ -154,6 +193,6 @@ defmodule GenMCP.Mux.Session do
 
   defp refresh_session_timeout(state) do
     _ = Process.cancel_timer(state.session_timeout_ref, async: true, info: false)
-    %{state | session_timeout_ref: start_session_timeout(state.opts[:session_timeout])}
+    %{state | session_timeout_ref: start_session_timeout(state.conf.session_timeout)}
   end
 end

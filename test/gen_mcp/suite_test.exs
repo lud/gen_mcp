@@ -342,7 +342,7 @@ defmodule GenMCP.SuiteTest do
     end
 
     test "stops the session if initialization request somehow is invalid" do
-      assert {:error, _} = Suite.init("some-session-id", [])
+      assert {:stop, _} = Suite.init("some-session-id", [])
     end
 
     test "handles initialize request and reject tool call request without initialization" do

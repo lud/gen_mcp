@@ -112,7 +112,7 @@ defmodule GenMCP.Mux.SessionTest do
   end
 
   @tag :capture_log
-  test "stops if server returns error tuple in init" do
+  test "stops if server returns stop tuple in init" do
     expect(ServerMock, :init, fn _, _ -> {:stop, :some_error} end)
 
     assert {:error, {:mcp_server_init_failure, :some_error}} =

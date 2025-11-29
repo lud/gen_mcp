@@ -147,6 +147,8 @@ defmodule GenMCP do
     only log events related to the cluster and sessions.
 
   Both filters are compatible.
+
+  See `GenMCP.TelemetryLogger` for a list of all emitted events.
   """
   def attach_default_logger(filters \\ []) do
     GenMCP.TelemetryLogger.attach(filters)

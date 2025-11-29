@@ -15,15 +15,18 @@ defmodule GenMCP.TestWeb.Endpoint do
 
   def read_body(conn, opts) do
     case Plug.Conn.read_body(conn, opts) do
-      {:ok, body, conn} -> {:ok, body, conn}
-      # require(Logger).debug(
-      #   """
-      #   INPUT BODY
-      #   #{body}
-      #   """,
-      #   ansi_color: :light_blue
-      # )
-      other -> raise "bad parse: #{inspect(other)}"
+      {:ok, body, conn} ->
+        # require(Logger).debug(
+        #   """
+        #   INPUT BODY
+        #   #{body}
+        #   """,
+        #   ansi_color: :light_blue
+        # )
+        {:ok, body, conn}
+
+      other ->
+        raise "bad parse: #{inspect(other)}"
     end
   end
 end

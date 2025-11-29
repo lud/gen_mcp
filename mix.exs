@@ -135,6 +135,7 @@ defmodule GenMCP.MixProject do
   defp docs do
     [
       main: "GenMCP",
+      extra_section: "GUIDES",
       nest_modules_by_prefix: [GenMCP.MCP],
       groups_for_modules: [
         Core: [
@@ -164,9 +165,42 @@ defmodule GenMCP.MixProject do
           ~r/GenMCP\.Test/
         ]
       ],
-      extras: [
-        "guides/getting_started.md"
-      ]
+      extras: doc_extras(),
+      groups_for_extras: groups_for_extras()
+    ]
+  end
+
+  def doc_extras do
+    existing_guides = Path.wildcard("guides/**/*.md")
+
+    defined_guides = [
+      "CHANGELOG.md",
+      "guides/001.getting_started.md",
+      "guides/009.system-configuration.md"
+    ]
+
+    case existing_guides -- defined_guides do
+      [] ->
+        :ok
+        defined_guides
+
+      missed ->
+        IO.warn("""
+
+        unreferenced guides
+
+        #{Enum.map(missed, &[inspect(&1), ",\n"])}
+
+
+        """)
+
+        defined_guides ++ missed
+    end
+  end
+
+  defp groups_for_extras do
+    [
+      Introduction: ~r{guides/.+}
     ]
   end
 
@@ -174,10 +208,23 @@ defmodule GenMCP.MixProject do
     [
       annotate: true,
       before_commit: [
+        &readmix/1,
+        {:add, "README.md"},
+        {:add, "guides"},
         &gen_changelog/1,
         {:add, "CHANGELOG.md"}
       ]
     ]
+  end
+
+  def readmix(vsn) do
+    rdmx = Readmix.new(vars: %{app_vsn: vsn})
+    :ok = Readmix.update_file(rdmx, "README.md")
+
+    :ok =
+      Enum.each(Path.wildcard("guides/**/*.md"), fn path ->
+        :ok = Readmix.update_file(rdmx, path)
+      end)
   end
 
   defp gen_changelog(vsn) do

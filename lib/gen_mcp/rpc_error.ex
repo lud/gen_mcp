@@ -166,6 +166,12 @@ defmodule GenMCP.RpcError do
     }
   end
 
+  defcasterror %NimbleOptions.ValidationError{}, @rpc_internal_error, 500 do
+    %{
+      message: "Internal Error"
+    }
+  end
+
   # -- catchall ---------------------------------------------------------------
 
   defcasterror reason, @rpc_internal_error, 500 do

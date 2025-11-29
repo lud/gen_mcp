@@ -26,4 +26,11 @@ config :logger, :default_formatter,
 config :logger, level: log_level
 
 config :phoenix, :logger, false
-config :phoenix, :plug_init_mode, :runtime
+
+config :phoenix,
+       :plug_init_mode,
+       (case config_env() do
+          # this is for mocks
+          :test -> :runtime
+          _ -> :compile
+        end)

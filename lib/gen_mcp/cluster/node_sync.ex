@@ -59,7 +59,14 @@ defmodule GenMCP.Cluster.NodeSync do
     {node_id_gen, max_attempts} =
       case Application.fetch_env(:gen_mcp, :node_id) do
         {:ok, <<_, _::binary>> = id} when is_binary(id) ->
-          {fn -> id end, 1}
+          case Regex.match?(~r{^[a-zA-Z0-9_]+$}, id) do
+            true ->
+              {fn -> id end, 1}
+
+            _ ->
+              raise ArgumentError,
+                    "expected config :gen_mcp/:node_id to be an alphanumeric string or '_', got: #{inspect(id)}"
+          end
 
         {:ok, :random} ->
           {&random_node_id/0, @default_register_max_attempts}
