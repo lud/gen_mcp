@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.1] - 2025-11-29
+
+### 🐛 Bug Fixes
+
+- Fixed server name/title that was hardcoded with test values
+
 ## [0.4.0] - 2025-11-28
 
 ### 🚀 Features
