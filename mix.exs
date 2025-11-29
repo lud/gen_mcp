@@ -67,7 +67,7 @@ defmodule GenMCP.MixProject do
       {:mix_audit, ">= 2.1.5", only: [:dev, :test], runtime: false},
       {:sobelow, ">= 0.14.0", only: [:dev, :test], runtime: false},
       {:nvir, "~> 0.14.0", only: [:dev, :test]},
-      {:readmix, "~> 0.6", only: [:dev, :test], runtime: false},
+      {:readmix, "~> 0.7", only: [:dev, :test], runtime: false},
       {:quokka, "~> 2.11", only: [:dev, :test], runtime: false}
     ]
   end
@@ -175,7 +175,8 @@ defmodule GenMCP.MixProject do
 
     defined_guides = [
       "CHANGELOG.md",
-      "guides/001.getting_started.md",
+      "guides/001.getting-started.md",
+      "guides/002.using-mcp-suite.md",
       "guides/009.system-configuration.md"
     ]
 

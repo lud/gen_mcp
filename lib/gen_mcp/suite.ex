@@ -1,40 +1,48 @@
+# quokka:skip-module-reordering
 defmodule GenMCP.Suite do
+  provider_list = fn doc ->
+    [
+      default: [],
+      type: {:list, {:or, [:atom, :mod_arg, :map]}},
+      doc:
+        doc <>
+          " List items can be either module names, `{module, arg}` tuples or a descriptor map."
+    ]
+  end
+
+  init_opts_schema =
+    NimbleOptions.new!(
+      server_name: [required: true, type: :string],
+      server_version: [required: true, type: :string],
+      server_title: [type: :string],
+      tools:
+        provider_list.(
+          "The list of `GenMCP.Suite.Tool` implementations" <>
+            " that will be available in the server."
+        ),
+      resources:
+        provider_list.(
+          "The list of `GenMCP.Suite.ResourceRepo` implementations" <>
+            " to serve resources from."
+        ),
+      prompts:
+        provider_list.(
+          "A list of `GenMCP.Suite.PromptRepo` implementations" <>
+            " to generate prompts with."
+        ),
+      extensions:
+        provider_list.(
+          "A list `GenMCP.Suite.Extension` implementations" <>
+            " to add more tools, resource repositories and prompt repositories."
+        )
+    )
+
   @moduledoc """
-  Default MCP server implementation providing tools, resources, and prompts
-  through a composable extension system.
+  A `GenMCP` implementation providing tools, resources, and prompts through a
+  composable extension system.
 
-  `GenMCP.Suite` handles protocol initialization, request routing, and manages
-  the lifecycle of tools, resource repositories, and prompt repositories.
-
-  ## Configuration
-
-  These options are typically passed to the transport plug (e.g.,
-  `GenMCP.Transport.StreamableHTTP`).
-
-  *   `:server_name` (required) - The name of the server (string).
-  *   `:server_version` (required) - The version of the server (string).
-  *   `:server_title` - A display title for the server (string).
-  *   `:tools` - A list of tool providers.
-  *   `:resources` - A list of resource repository providers.
-  *   `:prompts` - A list of prompt repository providers.
-  *   `:extensions` - A list of extension providers.
-
-  ## Providers
-
-  Tools, resources, prompts, and extensions are configured using "providers". A
-  provider can be:
-
-  *   A module atom (e.g., `MyTool`).
-  *   A tuple `{module, arg}` (e.g., `{MyTool, [opt: 1]}`).
-  *   A map (for internal use or dynamic definitions).
-
-  ## Example
-
-      plug GenMCP.Transport.StreamableHTTP,
-        server_name: "MyServer",
-        server_version: "1.0.0",
-        tools: [MyTool, {AnotherTool, []}],
-        resources: [MyResourceRepo]
+  This module does not directly export functions or callbacks. Please refer to
+  the [GenMCP Suite guide](guides/002.using-mcp-suite.md) to use the suite.
   """
 
   @behaviour GenMCP
@@ -104,42 +112,7 @@ defmodule GenMCP.Suite do
   # * the session controller should send the resources updated notifications
   #   itself.
 
-  provider_list = fn doc ->
-    [
-      default: [],
-      type: {:list, {:or, [:atom, :mod_arg, :map]}},
-      doc:
-        doc <>
-          " List items can be either module names, `{module, arg}` tuples or a descriptor map."
-    ]
-  end
-
-  @init_opts_schema NimbleOptions.new!(
-                      server_name: [required: true, type: :string],
-                      server_version: [required: true, type: :string],
-                      server_title: [type: :string],
-                      tools:
-                        provider_list.(
-                          "The list of `GenMCP.Suite.Tool` implementations" <>
-                            " that will be available in the server."
-                        ),
-                      resources:
-                        provider_list.(
-                          "The list of `GenMCP.Suite.ResourceRepo` implementations" <>
-                            " to serve resources from."
-                        ),
-                      prompts:
-                        provider_list.(
-                          "A list of `GenMCP.Suite.PromptRepo` implementations" <>
-                            " to generate prompts with."
-                        ),
-                      extensions:
-                        provider_list.(
-                          "A list `GenMCP.Suite.Extension` implementations" <>
-                            " to add more tools, resource repositories and prompt repositories."
-                        )
-                    )
-
+  @init_opts_schema init_opts_schema
   @doc false
   def init_opts_schema do
     @init_opts_schema

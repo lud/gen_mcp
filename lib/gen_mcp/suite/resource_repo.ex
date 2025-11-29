@@ -88,8 +88,8 @@ defmodule GenMCP.Suite.ResourceRepo do
   @doc """
   Returns a page of available resources.
 
-  Receives the pagination token (nil for first page) and the channel context.
-  Must return a tuple containing the list of resources and the next cursor (or nil).
+  Supports pagination via a cursor. Returns a tuple `{prompts, next_cursor}`.
+  If `next_cursor` is `nil`, there are no more pages.
 
   ## Examples
 
@@ -152,7 +152,9 @@ defmodule GenMCP.Suite.ResourceRepo do
 
   @optional_callbacks template: 1, parse_uri: 2
 
-  @doc false
+  @doc """
+  Returns a descriptor for the given `module` or `{module, arg}` tuple.
+  """
   @spec expand(resource_repo) :: resource_repo_descriptor
   def expand(mod) when is_atom(mod) do
     expand({mod, []})

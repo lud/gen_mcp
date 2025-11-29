@@ -89,7 +89,9 @@ defmodule GenMCP.Suite.Extension do
   """
   @callback prompts(Channel.t(), arg) :: [Suite.PromptRepo.prompt_repo()]
 
-  @doc false
+  @doc """
+  Returns a descriptor for the given `module` or `{module, arg}` tuple.
+  """
   @spec expand(extension) :: extension_descriptor
   def expand(%{mod: _} = extension) do
     extension

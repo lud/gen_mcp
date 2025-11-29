@@ -404,7 +404,9 @@ defmodule GenMCP.Suite.Tool do
     end
   end
 
-  @doc false
+  @doc """
+  Returns a descriptor for the given `module` or `{module, arg}` tuple.
+  """
   @spec expand(tool) :: tool_descriptor
   def expand(%{name: _, mod: _, arg: _} = tool) do
     tool
