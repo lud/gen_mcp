@@ -6,6 +6,7 @@ require GenMCP.Transport.StreamableHTTP, as: StreamableHTTP
 
 StreamableHTTP.defplug(McpMock)
 StreamableHTTP.defplug(McpReal)
+StreamableHTTP.defplug(McpPizza)
 
 defmodule GenMCP.TestWeb.Router.AuthWrapper do
   @moduledoc false
@@ -42,6 +43,10 @@ defmodule GenMCP.TestWeb.Router do
   @moduledoc false
   use Phoenix.Router
 
+  pipeline :auth do
+    plug GenMCP.TestWeb.Router.AuthWrapper
+  end
+
   scope "/dummy", GenMCP.TestWeb do
     get "/sse-test", LoopController, :sse
   end
@@ -67,9 +72,19 @@ defmodule GenMCP.TestWeb.Router do
       tools: [GenMCP.Test.Tools.ErlangHasher, GenMCP.Test.Tools.Addition],
       extensions: [],
       foo: :bar
+
+    forward "/pizza", McpPizza,
+      server_name: "Pizza Server",
+      server_version: "0.1.0",
+      extensions: [GenMCP.Test.Extensions.Pizzaz]
   end
 
-  pipeline :auth do
-    plug GenMCP.TestWeb.Router.AuthWrapper
-  end
+  # serve static assets for pizza example
+  "test/support/extensions/pizzaz/assets/*"
+  |> Path.wildcard()
+  |> Enum.filter(&Regex.match?(~r{\.(js|css|map)$}, &1))
+  |> Enum.map(fn p -> {Path.absname(p), Path.basename(p)} end)
+  |> Enum.each(fn {absname, filename} ->
+    get "/" <> filename, GenMCP.TestWeb.AssetController, :asset, assigns: %{asset_path: absname}
+  end)
 end
