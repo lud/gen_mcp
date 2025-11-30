@@ -40,7 +40,7 @@ defmodule GenMCP.Suite.Tool do
         def call(req, channel, _arg) do
           # Arguments are string keys unless using a JSV module based schema or a
           # custom validate_request function.
-          %{arguments: %{"query" => query}} = req.params
+          %{"query" => query} = req.params.arguments
 
           text = generate_text_response(query)
           {:result, MCP.call_tool_result(text: text), channel}
@@ -86,7 +86,7 @@ defmodule GenMCP.Suite.Tool do
           required(:mod) => module,
           required(:arg) => arg
         }
-  @type info_key :: :name | :title | :description | :annotations
+  @type info_key :: :name | :title | :description | :annotations | :_meta
   @type arg :: term
   @type schema :: term
   @type tag :: term
@@ -120,6 +120,7 @@ defmodule GenMCP.Suite.Tool do
 
       def info(:name, _arg), do: "search_files"
       def info(:description, _arg), do: "Searches for files matching a pattern"
+      def info(:_meta, _arg), do: %{"ui/resourceUri" => "ui://pages/some-page"}
       def info(:annotations, _arg), do: %{readOnlyHint: true}
       def info(_, _), do: nil
   """
@@ -127,6 +128,7 @@ defmodule GenMCP.Suite.Tool do
   @callback info(:description, arg) :: nil | String.t()
   @callback info(:title, arg) :: nil | String.t()
   @callback info(:annotations, arg) :: nil | tool_annotations
+  @callback info(:_meta, arg) :: nil | map()
 
   @doc """
   Returns the JSON schema defining accepted tool arguments.
@@ -231,7 +233,7 @@ defmodule GenMCP.Suite.Tool do
   Synchronous execution:
 
       def call(req, channel, _arg) do
-        %{arguments: %{"query" => query}} = req.params
+        %{"query" => query} = req.params.arguments
         entity = perform_search(query)
 
         # With structured output (entity is a map), mind the list wrapper
@@ -323,13 +325,17 @@ defmodule GenMCP.Suite.Tool do
     quote bind_quoted: binding() do
       @impl true
 
-      keys = [:name, :title, :description, :annotations]
+      keys = [:name, :title, :description, :annotations, :_meta]
 
       values =
         Enum.flat_map(keys, fn k ->
           case Keyword.fetch(infos, k) do
-            {:ok, v} -> [{k, v}]
-            :error -> []
+            {:ok, v} ->
+              GenMCP.Suite.Tool.__validate_use__(k, v)
+              [{k, v}]
+
+            :error ->
+              []
           end
         end)
 
@@ -362,6 +368,8 @@ defmodule GenMCP.Suite.Tool do
 
   defp def_validator(input_opt) do
     quote bind_quoted: [input_opt: input_opt] do
+      GenMCP.Suite.Tool.__validate_use__(:input_schema, input_opt)
+
       @jsv_input_root JSV.build!(input_opt)
 
       @impl true
@@ -453,6 +461,7 @@ defmodule GenMCP.Suite.Tool do
 
     %MCP.Tool{
       name: name,
+      _meta: mod.info(:_meta, arg),
       annotations: mod.info(:annotations, arg),
       description: mod.info(:description, arg),
       title: mod.info(:title, arg),
@@ -486,6 +495,45 @@ defmodule GenMCP.Suite.Tool do
       {:val, map} when is_map(map) -> Map.delete(map, "jsv-cast")
       other -> elem(other, 1)
     end)
+  end
+
+  @doc false
+  def __validate_use__(:name = k, value) do
+    if is_binary(value) && String.trim(value) != "" do
+      :ok
+    else
+      raise_invalid_use_info(k, value, "must be a non blank string")
+    end
+  end
+
+  def __validate_use__(k, value) when k in [:title, :description] do
+    if is_nil(value) || (is_binary(value) && String.trim(value) != "") do
+      :ok
+    else
+      raise_invalid_use_info(k, value, "must be a non blank string")
+    end
+  end
+
+  def __validate_use__(k, value) when k in [:annotations, :_meta] do
+    if is_nil(value) || is_map(value) do
+      :ok
+    else
+      raise_invalid_use_info(k, value, "must be a map")
+    end
+  end
+
+  def __validate_use__(:input_schema = k, value) do
+    if is_map(value) || (is_atom(value) && JSV.Schema.schema_module?(value)) do
+      :ok
+    else
+      raise_invalid_use_info(k, value, "must be a map")
+    end
+  end
+
+  @spec raise_invalid_use_info(atom, term, binary) :: no_return()
+  defp raise_invalid_use_info(key, value, errmsg) do
+    raise ArgumentError,
+          "option #{inspect(key)} given to `use #{inspect(__MODULE__)}` #{errmsg}, got: #{inspect(value)}"
   end
 
   @doc """

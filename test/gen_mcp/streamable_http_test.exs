@@ -255,10 +255,12 @@ defmodule GenMCP.StreamableHTTPTest do
       :title, :tool1 -> "Tool 1 title"
       :description, :tool1 -> "Tool 1 descr"
       :annotations, :tool1 -> %{title: "Tool 1 subtitle", destructiveHint: true}
+      :_meta, :tool1 -> %{"some" => "meta"}
       :name, :tool2 -> "Tool2"
       :title, :tool2 -> nil
       :description, :tool2 -> nil
       :annotations, :tool2 -> nil
+      :_meta, :tool2 -> nil
     end)
     |> stub(:input_schema, fn _ -> %{type: :object} end)
     |> stub(:output_schema, fn
@@ -278,7 +280,8 @@ defmodule GenMCP.StreamableHTTPTest do
                    "title" => "Tool 1 title",
                    "description" => "Tool 1 descr",
                    "inputSchema" => %{"type" => "object"},
-                   "outputSchema" => %{"type" => "object"}
+                   "outputSchema" => %{"type" => "object"},
+                   "_meta" => %{"some" => "meta"}
                  },
                  %{
                    "name" => "Tool2",

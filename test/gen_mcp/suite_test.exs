@@ -456,6 +456,8 @@ defmodule GenMCP.SuiteTest do
         :title, :tool2 -> nil
         :description, :tool2 -> nil
         :annotations, :tool2 -> nil
+        #
+        :_meta, arg -> %{"arg" => arg}
       end)
       |> stub(:input_schema, fn _ -> %{type: :object} end)
       |> stub(:output_schema, fn
@@ -474,6 +476,7 @@ defmodule GenMCP.SuiteTest do
                %Tool{
                  name: "Tool1",
                  title: "Tool 1 title",
+                 _meta: %{"arg" => :tool1},
                  description: "Tool 1 descr",
                  annotations: %{destructiveHint: true, title: "Tool 1 subtitle"},
                  inputSchema: %{"type" => "object"},
@@ -481,7 +484,8 @@ defmodule GenMCP.SuiteTest do
                },
                %Tool{
                  inputSchema: %{"type" => "object"},
-                 name: "Tool2"
+                 name: "Tool2",
+                 _meta: %{"arg" => :tool2}
                }
              ] = tools
     end
@@ -1698,6 +1702,8 @@ defmodule GenMCP.SuiteTest do
         :description, :ext2_tool -> "Tool from extension 2"
         :title, :ext2_tool -> nil
         :annotations, :ext2_tool -> nil
+        #
+        :_meta, arg -> %{"arg" => arg}
       end)
       |> stub(:input_schema, fn _ -> %{type: :object} end)
       |> stub(:output_schema, fn _ -> nil end)
@@ -1726,9 +1732,9 @@ defmodule GenMCP.SuiteTest do
       # Tool order is respected, self extension is first
 
       assert [
-               %{name: "DirectTool"},
-               %{name: "Ext1Tool"},
-               %{name: "Ext2Tool"}
+               %{name: "DirectTool", _meta: %{"arg" => :direct_tool}},
+               %{name: "Ext1Tool", _meta: %{"arg" => :ext1_tool}},
+               %{name: "Ext2Tool", _meta: %{"arg" => :ext2_tool}}
              ] = tools
     end
 

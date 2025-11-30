@@ -117,6 +117,90 @@ defmodule GenMCP.Suite.ToolTest do
       end
     end
 
+    test "supports _meta map in macro" do
+      defmodule UseMeta do
+        use GenMCP.Suite.Tool,
+          behaviour: false,
+          name: "foo",
+          input_schema: %{},
+          _meta: %{"securitySchemes" => [%{"type" => "noauth"}]}
+      end
+
+      assert %{"securitySchemes" => [%{"type" => "noauth"}]} == UseMeta.info(:_meta, nil)
+
+      assert %GenMCP.MCP.Tool{
+               _meta: %{"securitySchemes" => [%{"type" => "noauth"}]},
+               annotations: nil,
+               description: nil,
+               inputSchema: %{},
+               name: "foo",
+               outputSchema: nil,
+               title: nil
+             } == Tool.describe(UseMeta)
+    end
+
+    test "raises on invalid infos" do
+      # _meta
+      assert_raise ArgumentError, ~r{:_meta .* must be a map}, fn ->
+        defmodule InvalidMeta do
+          use GenMCP.Suite.Tool,
+            behaviour: false,
+            name: "foo",
+            _meta: "not a map"
+        end
+      end
+
+      # name
+      assert_raise ArgumentError, ~r{name .* must be a non blank string}, fn ->
+        defmodule InvalidName do
+          use GenMCP.Suite.Tool,
+            behaviour: false,
+            name: ""
+        end
+      end
+
+      # annotations
+      assert_raise ArgumentError, ~r{annotations .* must be a map}, fn ->
+        defmodule InvalidAnnots do
+          use GenMCP.Suite.Tool,
+            behaviour: false,
+            name: "foo",
+            annotations: "not a map"
+        end
+      end
+
+      # title
+      assert_raise ArgumentError, ~r{title .* must be a non blank string}, fn ->
+        defmodule InvalidTitle do
+          use GenMCP.Suite.Tool,
+            behaviour: false,
+            name: "foo",
+            title: ""
+        end
+      end
+
+      # description
+      assert_raise ArgumentError, ~r{description .* must be a non blank string}, fn ->
+        defmodule InvalidDescr do
+          use GenMCP.Suite.Tool,
+            behaviour: false,
+            name: "foo",
+            description: ""
+        end
+      end
+    end
+
+    test "raise on invalid input_schema" do
+      assert_raise ArgumentError, ~r{input_schema .* must be a map}, fn ->
+        defmodule InvalidInputSchema do
+          use GenMCP.Suite.Tool,
+            behaviour: false,
+            name: "foo",
+            input_schema: "not a map"
+        end
+      end
+    end
+
     test "call will receive validated arguments automatically" do
       defmodule UseInputSchema do
         use GenMCP.Suite.Tool,
@@ -356,6 +440,38 @@ defmodule GenMCP.Suite.ToolTest do
       assert_raise UndefinedFunctionError, ~r{input_schema/1 is undefined or private}, fn ->
         Tool.describe(RawAnnots)
       end
+    end
+
+    test "supports _meta map in raw module" do
+      defmodule RawMeta do
+        def info(:name, _) do
+          "foo"
+        end
+
+        def info(:_meta, _) do
+          %{"securitySchemes" => [%{"type" => "noauth"}]}
+        end
+
+        def info(_, _) do
+          nil
+        end
+
+        def input_schema(_) do
+          %{}
+        end
+      end
+
+      assert %{"securitySchemes" => [%{"type" => "noauth"}]} == RawMeta.info(:_meta, nil)
+
+      assert %GenMCP.MCP.Tool{
+               _meta: %{"securitySchemes" => [%{"type" => "noauth"}]},
+               annotations: nil,
+               description: nil,
+               inputSchema: %{},
+               name: "foo",
+               outputSchema: nil,
+               title: nil
+             } == Tool.describe(RawMeta)
     end
 
     test "validate_request is called if defined" do
