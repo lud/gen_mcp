@@ -43,6 +43,8 @@ defmodule GenMCP.Mux.SessionTest do
     %MCP.ListToolsRequest{id: :erlang.unique_integer(), params: %{}}
   end
 
+  IO.warn("timeout should call the server mock with session_timeout(state)")
+
   test "session can timeout" do
     ServerMock
     |> expect(:init, fn _, _ -> {:ok, :some_session_state} end)
@@ -68,7 +70,7 @@ defmodule GenMCP.Mux.SessionTest do
                session_timeout: session_timeout
              )
 
-    assert {:result, "foo"} = Mux.request(session_id, init_req(), chan_info())
+    assert {:result, "foo"} = Mux.request(session_id, init_req(), build_channel())
 
     # We can sleep for a bit, as long as we send requests, the session stays alive
 
@@ -78,7 +80,7 @@ defmodule GenMCP.Mux.SessionTest do
 
     Process.sleep(100)
 
-    assert {:result, _} = Mux.request(session_id, list_tools_req(), chan_info())
+    assert {:result, _} = Mux.request(session_id, list_tools_req(), build_channel())
 
     # If it waits too much, the sesssion will be down
 
@@ -140,7 +142,7 @@ defmodule GenMCP.Mux.SessionTest do
       }
     }
 
-    assert :reply_reason = Mux.request(session_id, bad_request, chan_info())
+    assert :reply_reason = Mux.request(session_id, bad_request, build_channel())
     assert_receive {:DOWN, ^ref, :process, ^pid, :exit_reason}
   end
 end

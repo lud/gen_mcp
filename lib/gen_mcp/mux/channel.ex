@@ -9,24 +9,27 @@ defmodule GenMCP.Mux.Channel do
           progress_token: nil | binary | integer,
           assigns: map()
         }
-  @type chan_info :: {:channel, module, pid}
 
-  def from_client({:channel, module, pid, assigns}, req, base_assigns) when is_pid(pid) do
-    from_client({:channel, module, pid, Map.merge(base_assigns, assigns)}, req)
-  end
-
-  def from_client({:channel, _module, pid, assigns}, req) when is_pid(pid) do
+  @doc """
+  Returns a channel identifying the calling process.
+  """
+  def from_request(req, assigns \\ %{}) do
     progress_token =
       case req do
         %{params: %{_meta: %{"progressToken" => pt}}} -> pt
         _ -> nil
       end
 
-    %__MODULE__{
-      client: pid,
-      progress_token: progress_token,
-      assigns: assigns
-    }
+    %__MODULE__{client: self(), progress_token: progress_token, assigns: assigns}
+  end
+
+  @doc false
+  def for_pid(pid, assigns \\ %{}) do
+    %__MODULE__{client: pid, progress_token: nil, assigns: assigns}
+  end
+
+  def with_default_assigns(%__MODULE__{assigns: assigns} = chan, default_assigns) do
+    %{chan | assigns: Map.merge(default_assigns, assigns)}
   end
 
   def send_progress(channel, progress, total \\ nil, message \\ nil)

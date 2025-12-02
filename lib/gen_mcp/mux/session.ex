@@ -118,10 +118,10 @@ defmodule GenMCP.Mux.Session do
   end
 
   @impl true
-  def handle_call({:"$gen_mcp", :request, req, chan_info}, _from, state) do
+  def handle_call({:"$gen_mcp", :request, req, channel}, _from, state) do
     state = refresh_session_timeout(state)
 
-    case state.server_mod.handle_request(req, chan_info, state.server_state) do
+    case state.server_mod.handle_request(req, channel, state.server_state) do
       {:reply, reply, server_state} ->
         {:reply, reply, %{state | server_state: server_state}}
 

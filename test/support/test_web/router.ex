@@ -1,11 +1,13 @@
 alias GenMCP.Support.ServerMock
 alias GenMCP.TestWeb.Router.McpMock
+alias GenMCP.TestWeb.Router.McpMockControlled
 alias GenMCP.TestWeb.Router.McpReal
 
 require GenMCP.Transport.StreamableHTTP, as: StreamableHTTP
 
 StreamableHTTP.defplug(McpMock)
 StreamableHTTP.defplug(McpReal)
+StreamableHTTP.defplug(McpMockControlled)
 
 defmodule GenMCP.TestWeb.Router.AuthWrapper do
   @moduledoc false
@@ -58,6 +60,12 @@ defmodule GenMCP.TestWeb.Router do
           assigns: %{assign_from_forward: "hello", shared_assign: "from forward"},
           copy_assigns: [:assign_from_auth, :shared_assign, :unexisting_assign]
       end
+
+      forward "/controlled", McpMockControlled,
+        server: ServerMock,
+        assigns: %{assign_from_forward: "hello", shared_assign: "from forward"},
+        copy_assigns: [:assign_from_auth, :shared_assign, :unexisting_assign],
+        session_controller: {GenMCP.Support.SessionControllerMock, :foo}
     end
 
     forward "/real", McpReal,

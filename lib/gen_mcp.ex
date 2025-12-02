@@ -17,7 +17,7 @@ defmodule GenMCP do
         end
 
         @impl true
-        def handle_request(%MCP.InitializeRequest{} = req, _chan_info, state) do
+        def handle_request(%MCP.InitializeRequest{} = req, _channel, state) do
           # Protocol version check omitted for brevity
           result = MCP.intialize_result(
             capabilities: MCP.capabilities(tools: true),
@@ -26,7 +26,7 @@ defmodule GenMCP do
           {:reply, {:result, result}, state}
         end
 
-        def handle_request(%MCP.ListToolsRequest{}, _chan_info, state) do
+        def handle_request(%MCP.ListToolsRequest{}, _channel, state) do
           result = MCP.list_tools_result([
             %MCP.Tool{
               name: "hello",
@@ -72,13 +72,6 @@ defmodule GenMCP do
 
   @type state :: term
 
-  @doc """
-  Initializes the server state.
-
-  Called when a new MCP session is established.
-  """
-  @callback init(session_id :: String.t(), init_arg :: term) :: {:ok, state} | {:stop, term}
-
   @type request ::
           MCP.InitializeRequest.t()
           | MCP.ListToolsRequest.t()
@@ -109,9 +102,16 @@ defmodule GenMCP do
   @type server_reply :: {:result, result} | :stream | {:error, term}
 
   @doc """
+  Initializes the server state.
+
+  Called when a new MCP session is established.
+  """
+  @callback init(session_id :: String.t(), init_arg :: term) :: {:ok, state} | {:stop, term}
+
+  @doc """
   Handles an incoming MCP request and returns a result or stop the server.
   """
-  @callback handle_request(request, Channel.chan_info(), state) ::
+  @callback handle_request(request, Channel.t(), state) ::
               {:reply, server_reply, state} | {:stop, reason :: term, server_reply, state}
 
   @doc """
@@ -128,6 +128,30 @@ defmodule GenMCP do
   or notification.
   """
   @callback handle_info(term, state) :: {:noreply, state}
+
+  @doc """
+  Called when a session is restored by the `GenMCP.SessionController`
+  implementation.
+
+  Your server `c:init/2` callback will have been called before, but there will
+  be no call of `c:handle_request/3` with an initialization request.
+
+  The next call will be either another request or a notification.
+  """
+  @callback session_restore(session_data :: any(), channel :: Channel.t(), state) ::
+              {:ok, state} | {:error, reason :: any()}
+
+  @doc """
+  Called when a session is deleted by the client.
+  """
+  @callback session_delete(state) :: any()
+
+  @doc """
+  Called when a session times out.
+  """
+  @callback session_timeout(state) :: any()
+
+  @optional_callbacks session_restore: 3, session_delete: 1, session_timeout: 1
 
   @doc """
   The gen_mcp application uses telemetry events to publish various application

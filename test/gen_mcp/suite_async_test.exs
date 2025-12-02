@@ -37,7 +37,7 @@ defmodule GenMCP.SuiteAsyncTest do
     }
 
     assert {:reply, {:result, _result}, state} =
-             Suite.handle_request(init_req, chan_info(init_assigns), state)
+             Suite.handle_request(init_req, build_channel(init_assigns), state)
 
     client_init_notif = %MCP.InitializedNotification{
       method: "notifications/initialized",
@@ -79,7 +79,7 @@ defmodule GenMCP.SuiteAsyncTest do
 
       # Call the tool - should return :stream since tool is async
       assert {:reply, :stream, state} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       # Deliver some response with the ref
       assert {:noreply, _state} = Suite.handle_info({ref, {:success, 42}}, state)
@@ -125,7 +125,7 @@ defmodule GenMCP.SuiteAsyncTest do
 
       # Call the tool - should return :stream since tool is async
       assert {:reply, :stream, state} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       # Wait for task to start and complete
       assert_receive :task_started
@@ -180,7 +180,7 @@ defmodule GenMCP.SuiteAsyncTest do
       }
 
       assert {:reply, :stream, state} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       assert_receive :supervised_task_started
       assert_receive {ref, {:supervised_result, 200}} when is_reference(ref)
@@ -228,7 +228,7 @@ defmodule GenMCP.SuiteAsyncTest do
       }
 
       assert {:reply, :stream, state} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       assert_receive :task_running
       assert_receive {ref, :completed} when is_reference(ref)
@@ -288,7 +288,7 @@ defmodule GenMCP.SuiteAsyncTest do
       }
 
       assert {:reply, :stream, state} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       assert_receive :about_to_fail
       downmsg = assert_receive {:DOWN, _ref, :process, _pid, :intentional_failure}
@@ -335,7 +335,7 @@ defmodule GenMCP.SuiteAsyncTest do
             }
           }
 
-          Suite.handle_request(tool_call_req, chan_info(), state)
+          Suite.handle_request(tool_call_req, build_channel(), state)
           Process.sleep(:infinity)
         end)
 
@@ -368,7 +368,7 @@ defmodule GenMCP.SuiteAsyncTest do
 
       # Initial call succeeds
       assert {:reply, :stream, state} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       # Delivering a reply: should return an error
       assert {:noreply, _state} = Suite.handle_info({ref, :some_result}, state)
@@ -408,7 +408,7 @@ defmodule GenMCP.SuiteAsyncTest do
       }
 
       assert {:reply, :stream, state} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       assert {:noreply, state} = Suite.handle_info({ref, :first_result}, state)
 
@@ -462,7 +462,7 @@ defmodule GenMCP.SuiteAsyncTest do
 
       # Initial call
       assert {:reply, :stream, state} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       # Some first result
       assert {:noreply, state} = Suite.handle_info({ref1, :step1_complete}, state)
@@ -520,7 +520,7 @@ defmodule GenMCP.SuiteAsyncTest do
 
       # Initial call
       assert {:reply, :stream, state} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       # Process first async result (success)
       assert {:noreply, state} = Suite.handle_info({ref1, :step1_ok}, state)
@@ -574,7 +574,7 @@ defmodule GenMCP.SuiteAsyncTest do
 
       # The message might already be in the mailbox before handle_request returns
       assert {:reply, :stream, state} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       # Message should be available (might have been sent before handle_request returned)
       msg = assert_receive {^ref, :instant_result}, 500
@@ -622,16 +622,16 @@ defmodule GenMCP.SuiteAsyncTest do
       test_pid = self()
 
       fake_client = fn ->
-        send(test_pid, {self(), :cinf, chan_info()})
+        send(test_pid, {self(), :chan, build_channel()})
         assert_receive {:"$gen_mcp", :result, result}
         send(test_pid, {self(), :result, result})
       end
 
       client_pid_a = spawn_link(fake_client)
-      {^client_pid_a, :cinf, chan_info_a} = assert_receive {_, :cinf, _}
+      {^client_pid_a, :chan, channel_a} = assert_receive {_, :chan, _}
 
       client_pid_b = spawn_link(fake_client)
-      {^client_pid_b, :cinf, chan_info_b} = assert_receive {_, :cinf, _}
+      {^client_pid_b, :chan, channel_b} = assert_receive {_, :chan, _}
 
       # Delivering both requests using those channel info
 
@@ -643,7 +643,7 @@ defmodule GenMCP.SuiteAsyncTest do
         }
       }
 
-      assert {:reply, :stream, state} = Suite.handle_request(req_a, chan_info_a, state)
+      assert {:reply, :stream, state} = Suite.handle_request(req_a, channel_a, state)
 
       req_b = %MCP.CallToolRequest{
         id: 1002,
@@ -653,7 +653,7 @@ defmodule GenMCP.SuiteAsyncTest do
         }
       }
 
-      assert {:reply, :stream, state} = Suite.handle_request(req_b, chan_info_b, state)
+      assert {:reply, :stream, state} = Suite.handle_request(req_b, channel_b, state)
 
       # We should be able to handle the results in any order, so let's do B
       # before A.
@@ -694,7 +694,7 @@ defmodule GenMCP.SuiteAsyncTest do
       }
 
       assert {:reply, :stream, state} =
-               Suite.handle_request(req_a, chan_info(), state)
+               Suite.handle_request(req_a, build_channel(), state)
 
       # Call tool B
       req_b = %MCP.CallToolRequest{
@@ -705,7 +705,7 @@ defmodule GenMCP.SuiteAsyncTest do
         }
       }
 
-      assert {:reply, :stream, state} = Suite.handle_request(req_b, chan_info(), state)
+      assert {:reply, :stream, state} = Suite.handle_request(req_b, build_channel(), state)
 
       # We should be able to handle the results in any order, so let's do B
       # before A.
@@ -772,7 +772,7 @@ defmodule GenMCP.SuiteAsyncTest do
       }
 
       assert {:reply, :stream, state} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       # Simulate client disconnect (implementation-specific)
       # For now, just ensure the server doesn't crash if result arrives
@@ -812,7 +812,7 @@ defmodule GenMCP.SuiteAsyncTest do
       }
 
       assert {:reply, :stream, state} =
-               Suite.handle_request(req_one, chan_info(), state)
+               Suite.handle_request(req_one, build_channel(), state)
 
       # Call tool two - should raise error about duplicate reference
       req_two = %MCP.CallToolRequest{
@@ -825,7 +825,7 @@ defmodule GenMCP.SuiteAsyncTest do
 
       # The second tool call should raise an error about duplicate reference
       assert_raise RuntimeError, ~r/duplicate/i, fn ->
-        Suite.handle_request(req_two, chan_info(), state)
+        Suite.handle_request(req_two, build_channel(), state)
       end
     end
   end
@@ -904,7 +904,7 @@ defmodule GenMCP.SuiteAsyncTest do
 
       # Initial call
       assert {:reply, :stream, state} =
-               Suite.handle_request(tool_call_req, chan_info(call_assigns), state)
+               Suite.handle_request(tool_call_req, build_channel(call_assigns), state)
 
       # Process first async result
       assert {:noreply, state} = Suite.handle_info({ref1, :step1_complete}, state)
@@ -944,7 +944,7 @@ defmodule GenMCP.SuiteAsyncTest do
       }
 
       # The tool call should exit the process with bad_return_value
-      assert catch_exit(Suite.handle_request(tool_call_req, chan_info(), state)) ==
+      assert catch_exit(Suite.handle_request(tool_call_req, build_channel(), state)) ==
                {:bad_return_value, :invalid_return_value}
     end
 
@@ -977,7 +977,7 @@ defmodule GenMCP.SuiteAsyncTest do
 
       # Initial call succeeds
       assert {:reply, :stream, state} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       assert catch_exit(Suite.handle_info({ref, :some_result}, state)) ==
                {:bad_return_value, {:bad_tuple, "oops"}}

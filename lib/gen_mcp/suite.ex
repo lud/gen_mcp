@@ -129,11 +129,11 @@ defmodule GenMCP.Suite do
   @impl true
   def handle_request(
         %MCP.InitializeRequest{} = req,
-        chan_info,
+        channel,
         {:__init__, session_id, opts} = init_state
       ) do
     with :ok <- check_protocol_version(req),
-         {:ok, state} <- initialize(req, chan_info, session_id, opts) do
+         {:ok, state} <- initialize(req, channel, session_id, opts) do
       init_result =
         MCP.intialize_result(
           capabilities: MCP.capabilities(capabilities(state)),
@@ -147,7 +147,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%MCP.InitializeRequest{} = _req, _chan_info, state) do
+  def handle_request(%MCP.InitializeRequest{} = _req, _channel, state) do
     reason = :already_initialized
     {:stop, {:shutdown, {:init_failure, reason}}, {:error, reason}, state}
   end
@@ -183,12 +183,12 @@ defmodule GenMCP.Suite do
     {:reply, {:result, MCP.list_tools_result(tools)}, state}
   end
 
-  def handle_request(%MCP.CallToolRequest{} = req, chan_info, state) do
+  def handle_request(%MCP.CallToolRequest{} = req, channel, state) do
     tool_name = req.params.name
 
     case state.tools_map do
       %{^tool_name => tool} ->
-        channel = build_channel(chan_info, req, state)
+        channel = channel_defaults(channel, state)
 
         case call_tool(req, tool, channel, state) do
           {:result, result, _chan} ->
@@ -211,7 +211,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%MCP.ListResourcesRequest{} = req, chan_info, state) do
+  def handle_request(%MCP.ListResourcesRequest{} = req, channel, state) do
     cursor =
       case req do
         %{params: %{cursor: global_cursor}} when is_binary(global_cursor) -> global_cursor
@@ -220,7 +220,7 @@ defmodule GenMCP.Suite do
 
     case decode_pagination(cursor, state) do
       {:ok, pagination} ->
-        channel = build_channel(chan_info, req, state)
+        channel = channel_defaults(channel, state)
         {resources, next_pagination} = list_resources(pagination, channel, state)
 
         result =
@@ -236,12 +236,12 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%MCP.ReadResourceRequest{} = req, chan_info, state) do
+  def handle_request(%MCP.ReadResourceRequest{} = req, channel, state) do
     uri = req.params.uri
 
     case find_resource_repo_for_uri(state, uri) do
       {:ok, repo} ->
-        channel = build_channel(chan_info, req, state)
+        channel = channel_defaults(channel, state)
 
         case ResourceRepo.read_resource(repo, uri, channel) do
           {:ok, result} -> {:reply, {:result, result}, state}
@@ -253,7 +253,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%MCP.ListResourceTemplatesRequest{}, _chan_info, state) do
+  def handle_request(%MCP.ListResourceTemplatesRequest{}, _channel, state) do
     templates =
       Enum.flat_map(state.resource_prefixes, fn prefix ->
         case Map.fetch!(state.resource_repos, prefix).template do
@@ -277,7 +277,7 @@ defmodule GenMCP.Suite do
     {:reply, {:result, result}, state}
   end
 
-  def handle_request(%MCP.ListPromptsRequest{} = req, chan_info, state) do
+  def handle_request(%MCP.ListPromptsRequest{} = req, channel, state) do
     cursor =
       case req do
         %{params: %{cursor: global_cursor}} when is_binary(global_cursor) -> global_cursor
@@ -286,7 +286,7 @@ defmodule GenMCP.Suite do
 
     case decode_pagination(cursor, state) do
       {:ok, pagination} ->
-        channel = build_channel(chan_info, req, state)
+        channel = channel_defaults(channel, state)
         {prompts, next_pagination} = list_prompts(pagination, channel, state)
 
         result =
@@ -302,7 +302,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  def handle_request(%MCP.GetPromptRequest{} = req, chan_info, state) do
+  def handle_request(%MCP.GetPromptRequest{} = req, channel, state) do
     {name, arguments} =
       case req do
         %{params: %{name: name, arguments: arguments}} when is_map(arguments) -> {name, arguments}
@@ -311,7 +311,7 @@ defmodule GenMCP.Suite do
 
     case find_prompt_repo_for_name(state, name) do
       {:ok, repo} ->
-        channel = build_channel(chan_info, req, state)
+        channel = channel_defaults(channel, state)
 
         case PromptRepo.get_prompt(repo, name, arguments, channel) do
           {:ok, result} -> {:reply, {:result, result}, state}
@@ -442,7 +442,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  defp initialize(init_req, chan_info, session_id, opts) do
+  defp initialize(init_req, channel, session_id, opts) do
     # For tools and resources we keep a list of names/prefixes to preserve the
     # original order given in the options. This is especially useful for
     # resources where prefixes can overlap.
@@ -464,7 +464,7 @@ defmodule GenMCP.Suite do
 
     # For now we keep assigns from the initialize request. This is bad since
     # they are nothing special. We should implement the SessionController stuff.
-    default_assigns = elem(chan_info, 3)
+    default_assigns = channel.assigns
 
     self_extension =
       opts
@@ -495,7 +495,7 @@ defmodule GenMCP.Suite do
       prompt_repos: %{}
     }
 
-    ext_channel = build_channel(chan_info, init_req, state)
+    ext_channel = channel_defaults(channel, state)
     state = refresh_extensions(state, ext_channel, :all)
 
     {:ok, state}
@@ -566,8 +566,8 @@ defmodule GenMCP.Suite do
     end
   end
 
-  defp build_channel(chan_info, req, state) do
-    Channel.from_client(chan_info, req, state.default_assigns)
+  defp channel_defaults(%Channel{} = channel, state) do
+    Channel.with_default_assigns(channel, state.default_assigns)
   end
 
   defp random_string(len) do

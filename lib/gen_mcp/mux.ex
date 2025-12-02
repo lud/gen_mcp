@@ -34,8 +34,8 @@ defmodule GenMCP.Mux do
 
   # -- Calling Session --------------------------------------------------------
 
-  def request(session_id, request, chan_info, timeout \\ 5000) do
-    call_session(session_id, {:"$gen_mcp", :request, request, chan_info}, timeout)
+  def request(session_id, request, channel, timeout \\ 5000) do
+    call_session(session_id, {:"$gen_mcp", :request, request, channel}, timeout)
   end
 
   def notify(session_id, notification, timeout \\ 5000) do

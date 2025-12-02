@@ -39,3 +39,8 @@ Mox.defmock(GenMCP.Support.PromptRepoMock, for: PromptRepo)
 # -- Plugs --------------------------------------------------------------------
 
 Mox.defmock(GenMCP.Support.AuthorizationMock, for: Plug)
+
+#
+# -- Session Controller -------------------------------------------------------
+
+Mox.defmock(GenMCP.Support.SessionControllerMock, for: GenMCP.SessionController)

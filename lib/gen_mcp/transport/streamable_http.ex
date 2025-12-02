@@ -45,7 +45,7 @@ defmodule GenMCP.Transport.StreamableHTTP do
 
   The default server, `GenMCP.Suite`, will accept the following options:
 
-  #{NimbleOptions.docs(GenMCP.Suite.init_opts_schema())}
+  #{GenMCP.Suite.init_opts_schema().schema |> Keyword.delete(:session_controller) |> NimbleOptions.docs()}
 
 
 
@@ -67,7 +67,7 @@ defmodule GenMCP.Transport.StreamableHTTP do
   alias GenMCP.MCP.JSONRPCError
   alias GenMCP.MCP.JSONRPCResponse
   alias GenMCP.Mux
-  alias GenMCP.Mux
+  alias GenMCP.Mux.Channel
   alias GenMCP.RpcError
   alias GenMCP.Utils.OptsValidator
   alias GenMCP.Validator
@@ -177,8 +177,8 @@ defmodule GenMCP.Transport.StreamableHTTP do
 
   defp dispatch_req(conn, msg_id, %InitializeRequest{} = req, conf) do
     with {:ok, session_id} <- Mux.start_session(conf.session_opts),
-         chan_info = channel_info(conn, req, session_id, conf),
-         {:result, %InitializeResult{} = result} <- Mux.request(session_id, req, chan_info) do
+         channel = make_channel(conn, req, session_id, conf),
+         {:result, %InitializeResult{} = result} <- Mux.request(session_id, req, channel) do
       conn
       |> with_session_id(session_id)
       |> send_result_response(200, msg_id, result)
@@ -195,7 +195,7 @@ defmodule GenMCP.Transport.StreamableHTTP do
   end
 
   defp do_dispatch_req(conn, session_id, msg_id, req, conf) do
-    case Mux.request(session_id, req, channel_info(conn, req, session_id, conf)) do
+    case Mux.request(session_id, req, make_channel(conn, req, session_id, conf)) do
       {:result, result} -> send_result_response(conn, 200, msg_id, result)
       {:error, reason} -> send_error(conn, reason, msg_id: msg_id)
       :stream -> stream_start(conn, 200, msg_id)
@@ -231,7 +231,7 @@ defmodule GenMCP.Transport.StreamableHTTP do
     end
   end
 
-  defp channel_info(conn, _req, session_id, conf) do
+  defp make_channel(conn, req, session_id, conf) do
     %{assigns: conn_assigns} = conn
 
     static_assigns = Map.put(conf.assigns, @session_id_assign_key, session_id)
@@ -245,7 +245,7 @@ defmodule GenMCP.Transport.StreamableHTTP do
         end
       end)
 
-    {:channel, __MODULE__, self(), assigns}
+    Channel.from_request(req, assigns)
   end
 
   defp send_accepted(conn) do

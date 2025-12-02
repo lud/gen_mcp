@@ -39,7 +39,7 @@ defmodule GenMCP.SuiteTest do
               client_capabilities: %{
                 __init: %MCP.ClientCapabilities{elicitation: %{"foo" => "bar"}}
               }
-            } = state} = Suite.handle_request(init_req, chan_info(init_assigns), state)
+            } = state} = Suite.handle_request(init_req, build_channel(init_assigns), state)
 
     client_init_notif = %MCP.InitializedNotification{
       method: "notifications/initialized",
@@ -68,7 +68,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_req, chan_info(), state)
+               Suite.handle_request(init_req, build_channel(), state)
 
       assert %MCP.InitializeResult{
                capabilities: %MCP.ServerCapabilities{
@@ -100,7 +100,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_req, chan_info(), state)
+               Suite.handle_request(init_req, build_channel(), state)
 
       assert %MCP.InitializeResult{
                capabilities: %MCP.ServerCapabilities{
@@ -137,7 +137,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_req, chan_info(), state)
+               Suite.handle_request(init_req, build_channel(), state)
 
       assert %MCP.InitializeResult{
                capabilities: %MCP.ServerCapabilities{
@@ -167,7 +167,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_req, chan_info(), state)
+               Suite.handle_request(init_req, build_channel(), state)
 
       assert %MCP.InitializeResult{
                capabilities: %MCP.ServerCapabilities{
@@ -202,7 +202,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_req, chan_info(), state)
+               Suite.handle_request(init_req, build_channel(), state)
 
       assert %MCP.InitializeResult{
                capabilities: %MCP.ServerCapabilities{
@@ -232,7 +232,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_req, chan_info(), state)
+               Suite.handle_request(init_req, build_channel(), state)
 
       assert %MCP.InitializeResult{
                capabilities: %MCP.ServerCapabilities{
@@ -267,7 +267,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_req, chan_info(), state)
+               Suite.handle_request(init_req, build_channel(), state)
 
       assert %MCP.InitializeResult{
                capabilities: %MCP.ServerCapabilities{
@@ -307,7 +307,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_req, chan_info(), state)
+               Suite.handle_request(init_req, build_channel(), state)
 
       assert %MCP.InitializeResult{
                capabilities: %MCP.ServerCapabilities{
@@ -333,7 +333,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_eq, chan_info(), state)
+               Suite.handle_request(init_eq, build_channel(), state)
 
       assert %MCP.InitializeResult{
                capabilities: %MCP.ServerCapabilities{},
@@ -357,7 +357,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:error, :not_initialized, _} =
-               Suite.handle_request(req, chan_info(), state)
+               Suite.handle_request(req, build_channel(), state)
 
       assert {400, %{code: -32_603, message: "Server not initialized"}} =
                check_error(:not_initialized)
@@ -379,7 +379,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, _result}, state} =
-               Suite.handle_request(init_req, chan_info(), state)
+               Suite.handle_request(init_req, build_channel(), state)
 
       tool_call_req = %MCP.CallToolRequest{
         id: 2,
@@ -390,7 +390,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:error, {:unknown_tool, "SomeTool"}}, _state} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
     end
 
     test "rejects initialization request when already initialized" do
@@ -408,7 +408,7 @@ defmodule GenMCP.SuiteTest do
 
       # Should return an error with :stop tuple since we're already initialized
       assert {:stop, stop_reason, err, _} =
-               Suite.handle_request(init_req, chan_info(), state)
+               Suite.handle_request(init_req, build_channel(), state)
 
       assert {:shutdown, {:init_failure, :already_initialized}} = stop_reason
       assert {:error, :already_initialized} = err
@@ -430,7 +430,7 @@ defmodule GenMCP.SuiteTest do
 
       # Should return an error with :stop tuple for invalid protocol version
       assert {:stop, stop_tuple, err, _} =
-               Suite.handle_request(init_req, chan_info(), state)
+               Suite.handle_request(init_req, build_channel(), state)
 
       assert {:error, {:unsupported_protocol, "2024-01-01"} = reason} = err
       assert {:shutdown, {:init_failure, ^reason}} = stop_tuple
@@ -470,7 +470,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply,
               {:result, %GenMCP.MCP.ListToolsResult{_meta: nil, nextCursor: nil, tools: tools}},
               _} =
-               Suite.handle_request(%MCP.ListToolsRequest{}, chan_info(), state)
+               Suite.handle_request(%MCP.ListToolsRequest{}, build_channel(), state)
 
       assert [
                %Tool{
@@ -504,7 +504,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:error, {:unknown_tool, "SomeTool"}} = err, _} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       assert {400, %{code: -32_602, data: %{tool: "SomeTool"}, message: "Unknown tool SomeTool"}} =
                check_error(err)
@@ -543,7 +543,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result}, _} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       assert %GenMCP.MCP.CallToolResult{
                _meta: nil,
@@ -571,7 +571,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:error, %JSV.ValidationError{}} = err, _} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       assert {400,
               %{code: -32_602, data: %{valid: false, details: []}, message: "Invalid Parameters"}} =
@@ -596,7 +596,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:error, "Something went wrong in the tool"} = err, _} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       # Should return HTTP 500 and RPC code -32603 (internal error)
       assert {500, %{code: -32_603, message: "Something went wrong in the tool"}} =
@@ -621,7 +621,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:error, {:invalid_params, :foo}} = err, _} =
-               Suite.handle_request(tool_call_req, chan_info(), state)
+               Suite.handle_request(tool_call_req, build_channel(), state)
 
       assert {400, %{code: -32_602, message: "Invalid Parameters"}} =
                check_error(err)
@@ -645,7 +645,7 @@ defmodule GenMCP.SuiteTest do
       state = init_session([resources: [{ResourceRepoMock, :repo1}]], init_assigns)
 
       assert {:reply, {:result, result}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%MCP.ListResourcesRequest{}, build_channel(), state)
 
       assert %MCP.ListResourcesResult{resources: resources, nextCursor: _} = result
       assert length(resources) == 2
@@ -682,7 +682,7 @@ defmodule GenMCP.SuiteTest do
 
       # First page
       assert {:reply, {:result, result1}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%MCP.ListResourcesRequest{}, build_channel(), state)
 
       assert %MCP.ListResourcesResult{
                resources: [%{name: "Page 1"}],
@@ -695,7 +695,7 @@ defmodule GenMCP.SuiteTest do
                  %MCP.ListResourcesRequest{
                    params: %MCP.ListResourcesRequestParams{cursor: pagination}
                  },
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -720,7 +720,7 @@ defmodule GenMCP.SuiteTest do
         )
 
       assert {:reply, {:result, result}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%MCP.ListResourcesRequest{}, build_channel(), state)
 
       assert %MCP.ListResourcesResult{resources: [], nextCursor: nil} = result
     end
@@ -749,7 +749,7 @@ defmodule GenMCP.SuiteTest do
 
       # First request returns repo1's resources with a cursor to continue to repo2
       assert {:reply, {:result, result1}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%MCP.ListResourcesRequest{}, build_channel(), state)
 
       assert %MCP.ListResourcesResult{resources: resources1, nextCursor: cursor} = result1
       assert length(resources1) == 2
@@ -763,7 +763,7 @@ defmodule GenMCP.SuiteTest do
                  %MCP.ListResourcesRequest{
                    params: %MCP.ListResourcesRequestParams{cursor: cursor}
                  },
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -799,7 +799,7 @@ defmodule GenMCP.SuiteTest do
 
       # First call should skip the empty repos and return resources from repo3
       assert {:reply, {:result, result}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%MCP.ListResourcesRequest{}, build_channel(), state)
 
       assert %MCP.ListResourcesResult{resources: resources, nextCursor: nil} = result
       assert length(resources) == 2
@@ -838,7 +838,7 @@ defmodule GenMCP.SuiteTest do
 
       # First call should skip repo1 and return repo2's resource with cursor
       assert {:reply, {:result, result1}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%MCP.ListResourcesRequest{}, build_channel(), state)
 
       assert %MCP.ListResourcesResult{
                resources: [%{name: "API"}],
@@ -853,7 +853,7 @@ defmodule GenMCP.SuiteTest do
                  %MCP.ListResourcesRequest{
                    params: %MCP.ListResourcesRequestParams{cursor: cursor}
                  },
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -874,7 +874,7 @@ defmodule GenMCP.SuiteTest do
 
       # First request succeeds and returns a valid cursor
       assert {:reply, {:result, result1}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{}, chan_info(), state)
+               Suite.handle_request(%MCP.ListResourcesRequest{}, build_channel(), state)
 
       assert %MCP.ListResourcesResult{
                resources: [%{name: "Page 1"}],
@@ -889,7 +889,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:error, error}, _} =
-               Suite.handle_request(invalid_request, chan_info(), state)
+               Suite.handle_request(invalid_request, build_channel(), state)
 
       # Verify it returns a proper error that can be cast to RPC error
       assert {400, %{code: -32_602, message: "Invalid pagination cursor"}} = check_error(error)
@@ -917,7 +917,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result}, _} =
-               Suite.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, build_channel(), state)
 
       assert %MCP.ReadResourceResult{contents: contents} = result
       assert [%MCP.TextResourceContents{uri: "file:///readme.txt", text: text}] = contents
@@ -943,7 +943,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result}, _} =
-               Suite.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, build_channel(), state)
 
       assert %MCP.ReadResourceResult{contents: [content]} = result
       assert %MCP.TextResourceContents{mimeType: "text/html", text: "<p>Hello</p>"} = content
@@ -970,7 +970,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result}, _} =
-               Suite.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, build_channel(), state)
 
       assert %MCP.ReadResourceResult{contents: [content]} = result
 
@@ -994,7 +994,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:error, {:resource_not_found, "file:///missing.txt"}} = err, _} =
-               Suite.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, build_channel(), state)
 
       # Check that it returns proper RPC error code -32002
       assert {400, %{code: -32_002}} = check_error(err)
@@ -1014,7 +1014,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:error, "Invalid file format"} = err, _} =
-               Suite.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, build_channel(), state)
 
       assert {500, %{code: -32_603, message: "Invalid file format"}} = check_error(err)
     end
@@ -1041,7 +1041,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result}, _} =
-               Suite.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, build_channel(), state)
 
       assert %MCP.ReadResourceResult{contents: [content]} = result
       assert %MCP.TextResourceContents{text: "Remote resource"} = content
@@ -1057,7 +1057,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:error, {:resource_not_found, "ftp://example.com/file"}} = err, _} =
-               Suite.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, build_channel(), state)
 
       # Check that it returns proper RPC error code -32002
       assert {400, %{code: -32_002}} = check_error(err)
@@ -1078,7 +1078,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result}, _} =
-               Suite.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, build_channel(), state)
 
       assert %MCP.ReadResourceResult{
                contents: [%MCP.TextResourceContents{text: "Hello"}]
@@ -1129,7 +1129,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result1}, _} =
-               Suite.handle_request(request1, chan_info(), state)
+               Suite.handle_request(request1, build_channel(), state)
 
       assert %MCP.ReadResourceResult{
                contents: [%MCP.TextResourceContents{text: "Secret"}]
@@ -1141,7 +1141,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result2}, _} =
-               Suite.handle_request(request2, chan_info(), state)
+               Suite.handle_request(request2, build_channel(), state)
 
       assert %MCP.ReadResourceResult{
                contents: [%MCP.TextResourceContents{text: "General"}]
@@ -1153,7 +1153,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result3}, _} =
-               Suite.handle_request(request3, chan_info(), state)
+               Suite.handle_request(request3, build_channel(), state)
 
       assert %MCP.ReadResourceResult{
                contents: [%MCP.TextResourceContents{text: "Deleted"}]
@@ -1188,7 +1188,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:result, result}, _} =
-               Suite.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, build_channel(), state)
 
       assert %MCP.ReadResourceResult{contents: [content]} = result
 
@@ -1217,7 +1217,7 @@ defmodule GenMCP.SuiteTest do
       }
 
       assert {:reply, {:error, "expected uri matching" <> _} = err, _} =
-               Suite.handle_request(request, chan_info(), state)
+               Suite.handle_request(request, build_channel(), state)
 
       assert {500, %{code: -32_603}} = check_error(err)
     end
@@ -1253,7 +1253,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(
                  %MCP.ListResourceTemplatesRequest{},
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -1298,7 +1298,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(
                  %MCP.ListResourceTemplatesRequest{},
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -1326,7 +1326,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(
                  %MCP.ListResourceTemplatesRequest{},
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -1361,7 +1361,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(
                  %MCP.ListPromptsRequest{},
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -1395,7 +1395,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, result1}, _} =
                Suite.handle_request(
                  %MCP.ListPromptsRequest{},
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -1410,7 +1410,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, result2}, _} =
                Suite.handle_request(
                  %MCP.ListPromptsRequest{params: %{cursor: cursor1}},
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -1444,7 +1444,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, result1}, _} =
                Suite.handle_request(
                  %MCP.ListPromptsRequest{},
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -1457,7 +1457,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, result2}, _} =
                Suite.handle_request(
                  %MCP.ListPromptsRequest{params: %{cursor: cursor1}},
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -1470,7 +1470,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, result3}, _} =
                Suite.handle_request(
                  %MCP.ListPromptsRequest{params: %{cursor: cursor2}},
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -1488,7 +1488,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:error, :invalid_cursor}, _} =
                Suite.handle_request(
                  %MCP.ListPromptsRequest{params: %{cursor: "invalid_token"}},
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -1502,7 +1502,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(
                  %MCP.ListPromptsRequest{},
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -1531,7 +1531,7 @@ defmodule GenMCP.SuiteTest do
                  %MCP.GetPromptRequest{
                    params: %{name: "greeting"}
                  },
-                 chan_info(),
+                 build_channel(),
                  state
                )
     end
@@ -1556,7 +1556,7 @@ defmodule GenMCP.SuiteTest do
                      arguments: %{"dataset" => "test.csv"}
                    }
                  },
-                 chan_info(),
+                 build_channel(),
                  state
                )
     end
@@ -1573,7 +1573,7 @@ defmodule GenMCP.SuiteTest do
                  %MCP.GetPromptRequest{
                    params: %{name: "unknown"}
                  },
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -1596,7 +1596,7 @@ defmodule GenMCP.SuiteTest do
                  %MCP.GetPromptRequest{
                    params: %{name: "analysis"}
                  },
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -1617,7 +1617,7 @@ defmodule GenMCP.SuiteTest do
                  %MCP.GetPromptRequest{
                    params: %{name: "analysis"}
                  },
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -1647,7 +1647,7 @@ defmodule GenMCP.SuiteTest do
                  %MCP.GetPromptRequest{
                    params: %{name: "prompt2"}
                  },
-                 chan_info(),
+                 build_channel(),
                  state
                )
     end
@@ -1725,7 +1725,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, %MCP.ListToolsResult{tools: tools}}, _} =
                Suite.handle_request(
                  %MCP.ListToolsRequest{},
-                 chan_info(),
+                 build_channel(),
                  state
                )
 
@@ -1785,19 +1785,19 @@ defmodule GenMCP.SuiteTest do
       end
 
       assert {:reply, {:result, %{resources: page1, nextCursor: cursor}}, state} =
-               Suite.handle_request(req.(nil), chan_info(), state)
+               Suite.handle_request(req.(nil), build_channel(), state)
 
       assert {:reply, {:result, %{resources: page2, nextCursor: cursor}}, state} =
-               Suite.handle_request(req.(cursor), chan_info(), state)
+               Suite.handle_request(req.(cursor), build_channel(), state)
 
       assert {:reply, {:result, %{resources: page3, nextCursor: cursor}}, state} =
-               Suite.handle_request(req.(cursor), chan_info(), state)
+               Suite.handle_request(req.(cursor), build_channel(), state)
 
       assert {:reply, {:result, %{resources: page4, nextCursor: cursor}}, state} =
-               Suite.handle_request(req.(cursor), chan_info(), state)
+               Suite.handle_request(req.(cursor), build_channel(), state)
 
       assert {:reply, {:result, %{resources: page5, nextCursor: _cursor}}, _state} =
-               Suite.handle_request(req.(cursor), chan_info(), state)
+               Suite.handle_request(req.(cursor), build_channel(), state)
 
       # should be in order. Actually we already know it because mocks
       # expectations are ordered.
@@ -1861,19 +1861,19 @@ defmodule GenMCP.SuiteTest do
       end
 
       assert {:reply, {:result, %{prompts: page1, nextCursor: cursor}}, state} =
-               Suite.handle_request(req.(nil), chan_info(), state)
+               Suite.handle_request(req.(nil), build_channel(), state)
 
       assert {:reply, {:result, %{prompts: page2, nextCursor: cursor}}, state} =
-               Suite.handle_request(req.(cursor), chan_info(), state)
+               Suite.handle_request(req.(cursor), build_channel(), state)
 
       assert {:reply, {:result, %{prompts: page3, nextCursor: cursor}}, state} =
-               Suite.handle_request(req.(cursor), chan_info(), state)
+               Suite.handle_request(req.(cursor), build_channel(), state)
 
       assert {:reply, {:result, %{prompts: page4, nextCursor: cursor}}, state} =
-               Suite.handle_request(req.(cursor), chan_info(), state)
+               Suite.handle_request(req.(cursor), build_channel(), state)
 
       assert {:reply, {:result, %{prompts: page5, nextCursor: _cursor}}, _state} =
-               Suite.handle_request(req.(cursor), chan_info(), state)
+               Suite.handle_request(req.(cursor), build_channel(), state)
 
       # should be in order. Actually we already know it because mocks
       # expectations are ordered.
