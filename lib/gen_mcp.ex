@@ -60,6 +60,7 @@ defmodule GenMCP do
 
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
+  alias GenMCP.SessionController
 
   require(Elixir.GenMCP.MCP.ModMap).require_all()
 
@@ -100,6 +101,7 @@ defmodule GenMCP do
           | MCP.ProgressNotification.t()
 
   @type server_reply :: {:result, result} | :stream | {:error, term}
+  @type server_reply_nostream :: {:result, result} | :stream | {:error, term}
 
   @doc """
   Initializes the server state.
@@ -112,7 +114,8 @@ defmodule GenMCP do
   Handles an incoming MCP request and returns a result or stop the server.
   """
   @callback handle_request(request, Channel.t(), state) ::
-              {:reply, server_reply, state} | {:stop, reason :: term, server_reply, state}
+              {:reply, server_reply, state}
+              | {:stop, reason :: term, server_reply_nostream, state}
 
   @doc """
   Handles an incoming MCP notification.
@@ -127,7 +130,7 @@ defmodule GenMCP do
   Invoked when the server process receives a message that is not an MCP request
   or notification.
   """
-  @callback handle_info(term, state) :: {:noreply, state}
+  @callback handle_info(term, state) :: {:noreply, state} | {:stop, reason :: term, state}
 
   @doc """
   Called when a session is restored by the `GenMCP.SessionController`
@@ -138,18 +141,20 @@ defmodule GenMCP do
 
   The next call will be either another request or a notification.
   """
-  @callback session_restore(session_data :: any(), channel :: Channel.t(), state) ::
-              {:ok, state} | {:error, reason :: any()}
+  @callback session_restore(SessionController.restore_data(), channel :: Channel.t(), state) ::
+              {:noreply, state} | {:stop, reason :: term, state}
 
   @doc """
   Called when a session is deleted by the client.
+
+  Return value is not checked, and the server is shut down immediately.
   """
-  @callback session_delete(state) :: any()
+  @callback session_delete(state) :: term
 
   @doc """
   Called when a session times out.
   """
-  @callback session_timeout(state) :: any()
+  @callback session_timeout(state) :: term
 
   @optional_callbacks session_restore: 3, session_delete: 1, session_timeout: 1
 

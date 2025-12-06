@@ -4,8 +4,8 @@ port = String.to_integer(System.get_env("PORT", "5000"))
 
 log_level =
   if config_env() == :test do
-    # :warning
-    :debug
+    :warning
+    # :debug
   else
     :debug
   end

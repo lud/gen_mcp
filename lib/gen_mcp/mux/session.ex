@@ -12,6 +12,8 @@ defmodule GenMCP.Mux.Session do
   # change the boot setup to avoid keeping to much in memory.
   use GenServer, restart: :temporary
 
+  import GenMCP.Utils.CallbackExt
+
   alias GenMCP.Utils.OptsValidator
 
   require Logger
@@ -84,8 +86,7 @@ defmodule GenMCP.Mux.Session do
 
         :telemetry.execute([:gen_mcp, :session, :init], %{}, %{
           session_id: session_id,
-          server: server_mod,
-          pid: self()
+          server: server_mod
         })
 
         {:ok,
@@ -121,15 +122,17 @@ defmodule GenMCP.Mux.Session do
   def handle_call({:"$gen_mcp", :request, req, channel}, _from, state) do
     state = refresh_session_timeout(state)
 
-    case state.server_mod.handle_request(req, channel, state.server_state) do
-      {:reply, reply, server_state} ->
+    callback GenMCP, state.server_mod.handle_request(req, channel, state.server_state) do
+      {:reply, reply, server_state}
+      when elem(reply, 0) == :result
+      when reply == :stream
+      when elem(reply, 0) == :error ->
         {:reply, reply, %{state | server_state: server_state}}
 
-      {:stop, reason, reply, server_state} ->
+      {:stop, reason, reply, server_state}
+      when elem(reply, 0) == :result
+      when elem(reply, 0) == :error ->
         {:stop, reason, reply, %{state | server_state: server_state}}
-
-      other ->
-        exit({:bad_return_value, other})
     end
   end
 
@@ -146,15 +149,54 @@ defmodule GenMCP.Mux.Session do
     end
   end
 
-  def handle_call({:"$gen_mcp", :stop}, _from, state) do
-    :telemetry.execute([:gen_mcp, :session, :terminate], %{}, %{
+  IO.warn(
+    """
+    todo test restore error, for now streamable http only handles session not found error
+
+    we should probably return all session restore errors as 404 anyway, otherwise
+    the client may retry the error forever
+    """,
+    []
+  )
+
+  def handle_call({:"$gen_mcp", :restore_session, session_data, channel}, _from, state) do
+    state = refresh_session_timeout(state)
+
+    :telemetry.execute([:gen_mcp, :session, :restore], %{}, %{
       session_id: state.session_id,
       server: state.server_mod,
-      reason: :client_delete,
-      pid: self()
+      session_data: session_data
     })
 
-    {:stop, {:shutdown, :mcp_stop}, :ok, state}
+    case state.server_mod.session_restore(session_data, channel, state.server_state) do
+      {:noreply, server_state} ->
+        {:reply, :ok, %{state | server_state: server_state}}
+
+      {:stop, reason, server_state} ->
+        :telemetry.execute([:gen_mcp, :session, :restore_error], %{}, %{
+          session_id: state.session_id,
+          server: state.server_mod,
+          session_data: session_data,
+          reason: reason
+        })
+
+        {:stop, {:shutdown, {:session_restore_error, reason}}, {:error, reason},
+         %{state | server_state: server_state}}
+
+      other ->
+        exit({:bad_return_value, other})
+    end
+  end
+
+  def handle_call({:"$gen_mcp", :delete_session}, _from, state) do
+    :telemetry.execute([:gen_mcp, :session, :delete], %{}, %{
+      session_id: state.session_id,
+      server: state.server_mod,
+      reason: :client_delete
+    })
+
+    _ = state.server_mod.session_delete(state.server_state)
+    {:stop, {:shutdown, :session_deleted}, :ok, state}
   end
 
   @impl true
@@ -164,8 +206,7 @@ defmodule GenMCP.Mux.Session do
         :telemetry.execute([:gen_mcp, :session, :terminate], %{}, %{
           session_id: state.session_id,
           server: state.server_mod,
-          reason: :timeout,
-          pid: self()
+          reason: :timeout
         })
 
         {:stop, {:shutdown, :session_timeout}, state}
@@ -178,12 +219,12 @@ defmodule GenMCP.Mux.Session do
   def handle_info(info, state) do
     state = refresh_session_timeout(state)
 
-    case state.server_mod.handle_info(info, state.server_state) do
+    callback GenMCP, state.server_mod.handle_info(info, state.server_state) do
       {:noreply, server_state} ->
         {:noreply, %{state | server_state: server_state}}
 
-      other ->
-        exit({:bad_return_value, other})
+      {:stop, reason, server_state} ->
+        {:stop, reason, %{state | server_state: server_state}}
     end
   end
 

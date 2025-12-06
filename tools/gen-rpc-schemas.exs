@@ -173,7 +173,7 @@ defmodule Generator do
 
       :CompleteRequest ->
         # [ rpc_request: true]
-        :skip
+        :nogen
 
       :GetPromptRequest ->
         [rpc_request: true]
@@ -201,7 +201,7 @@ defmodule Generator do
 
       :SetLevelRequest ->
         # [ rpc_request: true]
-        :skip
+        :nogen
 
       :SubscribeRequest ->
         [rpc_request: true]
@@ -216,7 +216,7 @@ defmodule Generator do
         [content_block: true]
 
       :BaseMetadata ->
-        :skip
+        :nogen
 
       :BlobResourceContents ->
         []
@@ -234,43 +234,43 @@ defmodule Generator do
         []
 
       :ClientNotification ->
-        :skip
+        :nogen
 
       :ClientRequest ->
-        :skip
+        :nogen
 
       :ClientResult ->
-        :skip
+        :nogen
 
       :CompleteResult ->
-        :skip
+        :nogen
 
       :ContentBlock ->
         []
 
       :CreateMessageRequest ->
-        :skip
+        :nogen
 
       :CreateMessageResult ->
-        :skip
+        :nogen
 
       :Cursor ->
-        :skip
+        :nogen
 
       :ElicitRequest ->
-        :skip
+        :nogen
 
       :ElicitResult ->
-        :skip
+        :nogen
 
       :EmbeddedResource ->
         [content_block: true]
 
       :EmptyResult ->
-        :skip
+        :nogen
 
       :EnumSchema ->
-        :skip
+        :nogen
 
       :GetPromptResult ->
         []
@@ -291,10 +291,10 @@ defmodule Generator do
         []
 
       :JSONRPCMessage ->
-        :skip
+        :nogen
 
       :JSONRPCNotification ->
-        :skip
+        :nogen
 
       :JSONRPCRequest ->
         []
@@ -312,40 +312,40 @@ defmodule Generator do
         []
 
       :ListRootsRequest ->
-        :skip
+        :nogen
 
       :ListRootsResult ->
-        :skip
+        :nogen
 
       :ListToolsResult ->
         []
 
       :LoggingLevel ->
-        :skip
+        :nogen
 
       :LoggingMessageNotification ->
-        :skip
+        :nogen
 
       :ModelHint ->
-        :skip
+        :nogen
 
       :ModelPreferences ->
-        :skip
+        :nogen
 
       :Notification ->
-        :skip
+        :nogen
 
       :NumberSchema ->
-        :skip
+        :nogen
 
       :PaginatedRequest ->
-        :skip
+        :nogen
 
       :PaginatedResult ->
-        :skip
+        :nogen
 
       :PrimitiveSchemaDefinition ->
-        :skip
+        :nogen
 
       :ProgressNotification ->
         []
@@ -360,19 +360,19 @@ defmodule Generator do
         []
 
       :PromptListChangedNotification ->
-        :skip
+        :nogen
 
       :PromptMessage ->
         []
 
       :PromptReference ->
-        :skip
+        :nogen
 
       :ReadResourceResult ->
         []
 
       :Request ->
-        :skip
+        :nogen
 
       :RequestId ->
         []
@@ -381,22 +381,22 @@ defmodule Generator do
         []
 
       :ResourceContents ->
-        :skip
+        :nogen
 
       :ResourceLink ->
         [content_block: true]
 
       :ResourceListChangedNotification ->
-        :skip
+        :nogen
 
       :ResourceTemplate ->
         []
 
       :ResourceTemplateReference ->
-        :skip
+        :nogen
 
       :ResourceUpdatedNotification ->
-        :skip
+        :nogen
 
       :Result ->
         []
@@ -405,28 +405,28 @@ defmodule Generator do
         []
 
       :Root ->
-        :skip
+        :nogen
 
       :RootsListChangedNotification ->
         []
 
       :SamplingMessage ->
-        :skip
+        :nogen
 
       :ServerCapabilities ->
         []
 
       :ServerNotification ->
-        :skip
+        :nogen
 
       :ServerRequest ->
-        :skip
+        :nogen
 
       :ServerResult ->
-        :skip
+        :nogen
 
       :StringSchema ->
-        :skip
+        :nogen
 
       :TextContent ->
         [content_block: true]
@@ -441,12 +441,12 @@ defmodule Generator do
         []
 
       :ToolListChangedNotification ->
-        :skip
+        :nogen
     end
   end
 
   defp skip_definition?(name) do
-    :skip == module_config(name)
+    :nogen == module_config(name)
   end
 
   defp request_params_schema?(name) do

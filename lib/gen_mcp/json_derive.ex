@@ -8,6 +8,7 @@ defmodule GenMCP.JsonDerive do
     quote do
       @before_compile unquote(__MODULE__)
 
+      @doc false
       def __normalize__(t) do
         MapExt.from_struct_no_nils(t)
       end
@@ -18,6 +19,7 @@ defmodule GenMCP.JsonDerive do
     quote do
       @before_compile unquote(__MODULE__)
 
+      @doc false
       def __normalize__(t) do
         Map.merge(MapExt.from_struct_no_nils(t), unquote(serialize_merge))
       end
@@ -41,6 +43,12 @@ defmodule GenMCP.JsonDerive do
             normal = mod.__normalize__(struct)
             Jason.Encode.map(normal, opts)
           end
+        end
+      end
+
+      defimpl JSV.Normalizer.Normalize do
+        def normalize(%mod{} = t) do
+          mod.__normalize__(t)
         end
       end
     end

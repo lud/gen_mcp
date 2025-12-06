@@ -47,6 +47,7 @@ On [hexdocs.pm](https://hexdocs.pm/gen_mcp).
 * Tools listing (no pagination)
 * Resources (with pagination)
 * Prompts (with pagination)
+* Session storage and restoration
 
 ## Roadmap
 
