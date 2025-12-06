@@ -1,7 +1,27 @@
+universal_group_doc = """
+The `c:fetch/3` callaback is handled at the transport layer in
+`#{inspect(GenMCP.Transport.StreamableHTTP)}` and is always called, regardless
+of the `GenMCP` server implemenation used.
+"""
+
+suite_specific_group_doc = """
+Callbacks in this section are called by the `GenMCP` behaviour
+implementation.
+
+The default implementation, `GenMCP.Suite`, calls all of them, and uses a
+default `GenMCP.SessionController` implementation that implements the callbacks
+with no-op code. This means there is no session persitence by default.
+
+When using custom `GenMCP`
+"""
+
 defmodule GenMCP.SessionController do
   @moduledoc """
   Behaviour for session controllers.
   """
+  @moduledoc groups: [
+               %{title: "Universally supported", description: universal_group_doc}
+             ]
 
   alias GenMCP.Mux.Channel
   alias GenMCP.Suite.PersistedClientInfo
@@ -23,6 +43,7 @@ defmodule GenMCP.SessionController do
   callback, as does `GenMCP.Suite` to allow the session controller to define
   shared assigns.
   """
+  @doc group: "Universally supported"
   @callback fetch(session_id :: String.t(), channel, arg) ::
               {:ok, restore_data}
               | {:error, :not_found}
