@@ -21,7 +21,8 @@ defmodule GenMCP.MixProject do
       modkit: modkit(),
       package: package(),
       docs: docs(),
-      versioning: versioning()
+      versioning: versioning(),
+      test_coverage: test_coverage()
     ]
   end
 
@@ -148,7 +149,10 @@ defmodule GenMCP.MixProject do
           GenMCP.Suite.Tool,
           GenMCP.Suite.PromptRepo,
           GenMCP.Suite.ResourceRepo,
-          GenMCP.Suite.Extension
+          GenMCP.Suite.Extension,
+          GenMCP.Suite.SessionController,
+          GenMCP.Suite.PersistedClientInfo,
+          ~r{^GenMCP\.Suite\.SessionController\..*}
         ],
         Sessions: [
           ~r/GenMCP\.Mux\..*/
@@ -202,6 +206,17 @@ defmodule GenMCP.MixProject do
   defp groups_for_extras do
     [
       Introduction: ~r{guides/.+}
+    ]
+  end
+
+  defp test_coverage do
+    [
+      ignore_modules: [
+        ~r{^Jason\.Encoder\.GenMCP\.MCP\.},
+        ~r{^JSON\.Encoder\.GenMCP\.MCP\.},
+        ~r{^JSV\.Normalizer\.Normalize\.GenMCP\.MCP\.},
+        ~r{^GenMCP\.MCP\.}
+      ]
     ]
   end
 

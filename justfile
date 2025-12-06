@@ -18,6 +18,9 @@ _mix_check:
 _git_status:
   git status
 
+sobelow:
+  mix sobelow --config
+
 docs:
   mix rdmx.update README.md
   rg rdmx guides -l0 | xargs -0 -n 1 mix rdmx.update

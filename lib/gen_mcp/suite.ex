@@ -34,7 +34,12 @@ defmodule GenMCP.Suite do
         provider_list.(
           "A list `GenMCP.Suite.Extension` implementations" <>
             " to add more tools, resource repositories and prompt repositories."
-        )
+        ),
+      session_controller: [
+        type: {:or, [:atom, :mod_arg]},
+        default: nil,
+        doc: "A `GenMCP.Suite.SessionController` implementation"
+      ]
     )
 
   @moduledoc """
@@ -47,16 +52,22 @@ defmodule GenMCP.Suite do
 
   @behaviour GenMCP
 
+  import GenMCP.Utils.CallbackExt
+
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
   alias GenMCP.Suite.Extension
+  alias GenMCP.Suite.PersistedClientInfo
   alias GenMCP.Suite.PromptRepo
   alias GenMCP.Suite.ResourceRepo
+  alias GenMCP.Suite.SessionController
   alias GenMCP.Suite.Tool
   alias GenMCP.Utils.OptsValidator
 
   require Logger
   require Record
+  require SessionController
+  require GenMCP
 
   @supported_protocol_versions GenMCP.supported_protocol_versions()
 
@@ -64,13 +75,18 @@ defmodule GenMCP.Suite do
     @moduledoc false
 
     @enforce_keys [
+      # Client information
+
       :client_capabilities,
-      :default_assigns,
+      :client_initialized,
       :extensions,
       :prompt_prefixes,
       :prompt_repos,
       :resource_prefixes,
       :resource_repos,
+      :sc_mod,
+      :sc_state,
+      :sc_channel,
       :server_info,
       :session_id,
       :token_key,
@@ -83,7 +99,7 @@ defmodule GenMCP.Suite do
 
   Record.defrecordp(:tracker, id: nil, tool_name: nil, channel: nil, tag: nil)
 
-  # TODO we need a new behaviour to handle listChanged notifications.
+  # TODO(doc) we need a new behaviour to handle listChanged notifications.
   #
   # * behaviour Suite.SessionController
   # * when the client listens from a GET request, we start a stream and keep the
@@ -120,6 +136,10 @@ defmodule GenMCP.Suite do
 
   @impl true
   def init(session_id, opts) do
+    pre_init(session_id, opts)
+  end
+
+  defp pre_init(session_id, opts) do
     case OptsValidator.validate_take_opts(opts, @init_opts_schema) do
       {:ok, valid_opts, _} -> {:ok, {:__init__, session_id, valid_opts}}
       {:error, reason} -> {:stop, reason}
@@ -133,7 +153,7 @@ defmodule GenMCP.Suite do
         {:__init__, session_id, opts} = init_state
       ) do
     with :ok <- check_protocol_version(req),
-         {:ok, state} <- initialize(req, channel, session_id, opts) do
+         {:ok, state} <- initialize_from_req(req, channel, session_id, opts) do
       init_result =
         MCP.intialize_result(
           capabilities: MCP.capabilities(capabilities(state)),
@@ -142,8 +162,8 @@ defmodule GenMCP.Suite do
 
       {:reply, {:result, init_result}, state}
     else
-      {:error, reason} = err ->
-        {:stop, {:shutdown, {:init_failure, reason}}, err, init_state}
+      {stoptag, reason} when stoptag in [:error, :stop] ->
+        {:stop, {:shutdown, {:init_failure, reason}}, {:error, reason}, init_state}
     end
   end
 
@@ -334,13 +354,20 @@ defmodule GenMCP.Suite do
 
   @impl true
   def handle_notification(%MCP.InitializedNotification{}, state) do
-    capabilities =
-      case state.client_capabilities do
-        %{__init: real_capas} -> real_capas
-        already_swapped -> already_swapped
-      end
+    %{sc_mod: sc_mod, sc_channel: sc_channel, sc_state: sc_state} = state
 
-    {:noreply, %{state | client_capabilities: capabilities}}
+    normalized_client_info =
+      normalized_client_info(state.client_capabilities, _ready? = true, sc_mod)
+
+    callback SessionController,
+             sc_mod.update(state.session_id, normalized_client_info, sc_channel, sc_state) do
+      {:ok, %Channel{} = sc_channel, sc_state} ->
+        {:noreply,
+         %{state | client_initialized: true, sc_channel: sc_channel, sc_state: sc_state}}
+
+      {:stop, _} = stop ->
+        stop
+    end
   end
 
   def handle_notification(%MCP.CancelledNotification{}, state) do
@@ -375,6 +402,9 @@ defmodule GenMCP.Suite do
           # No error log on stale down messages
           # TODO monitor channels and look for channel disconnection
 
+          # TODO what if the session controller wants to monitor a process?
+          # Currently we discard the message
+
           state
 
         {:ok, state} ->
@@ -385,11 +415,73 @@ defmodule GenMCP.Suite do
   end
 
   def handle_info(msg, state) do
-    log_unhandled_info(msg)
-    {:noreply, state}
+    %{sc_mod: sc_mod, sc_channel: sc_channel, sc_state: sc_state} = state
+
+    callback GenMCP, sc_mod.handle_info(msg, sc_channel, sc_state) do
+      {:noreply, %Channel{} = sc_channel, sc_state} ->
+        {:noreply, %{state | sc_channel: sc_channel, sc_state: sc_state}}
+
+      {:noreply, sc_state} ->
+        {:noreply, %{state | sc_state: sc_state}}
+
+      {:stop, reason} ->
+        {:stop, reason, %{state | sc_state: sc_state}}
+    end
   end
 
-  defp log_unhandled_info(msg) do
+  @normalized_client_root JSV.build!(PersistedClientInfo)
+
+  @impl true
+  def session_fetch(session_id, channel, opts) do
+    case pre_init(session_id, opts) do
+      {:stop, reason} ->
+        {:stop, reason}
+
+      {:ok, {:__init__, _, opts}} ->
+        {sc_mod, sc_state} = normalize_session_controller(opts)
+
+        callback SessionController, sc_mod.fetch(session_id, channel, sc_state) do
+          {:ok, data} -> {:ok, data}
+          {:error, :not_found} = err -> err
+        end
+    end
+  end
+
+  @impl true
+  def session_restore(restore_data, channel, {:__init__, session_id, opts} = state) do
+    {sc_mod, sc_state} = normalize_session_controller(opts)
+
+    callback SessionController, sc_mod.restore(restore_data, channel, sc_state) do
+      {:ok, normalized_client_info, sc_channel, sc_state} when is_map(normalized_client_info) ->
+        case JSV.validate(normalized_client_info, @normalized_client_root) do
+          {:ok, pci} ->
+            {:ok, state} =
+              initialize_from_restore(session_id, pci, sc_mod, sc_channel, sc_state, opts)
+
+            {:noreply, state}
+
+          {:error, %JSV.ValidationError{} = e} ->
+            {:stop, {:invalid_restored_client_info, e}, state}
+        end
+
+      {:stop, reason} ->
+        {:stop, reason, state}
+    end
+  end
+
+  def session_restore(_session_data, _channel, state) do
+    reason = :already_initialized
+    {:stop, {:shutdown, {:init_failure, reason}}, {:error, reason}, state}
+  end
+
+  @impl true
+  def session_delete(state) do
+    %{session_id: session_id, sc_mod: sc_mod, sc_state: sc_state} = state
+    _ = sc_mod.delete(session_id, sc_state)
+  end
+
+  @doc false
+  def log_unhandled_info(msg) do
     # This should be handled by the session controller, no need for
     # telemetry logging here
     Logger.error("unhandled info message in #{inspect(__MODULE__)}: #{inspect(msg)}")
@@ -442,12 +534,8 @@ defmodule GenMCP.Suite do
     end
   end
 
-  defp initialize(init_req, channel, session_id, opts) do
-    # For tools and resources we keep a list of names/prefixes to preserve the
-    # original order given in the options. This is especially useful for
-    # resources where prefixes can overlap.
-    #
-    # TODO document that order matters for resources.
+  defp initialize_from_req(init_req, channel, session_id, opts) do
+    client_initialized? = false
 
     %{
       params: %{
@@ -456,49 +544,99 @@ defmodule GenMCP.Suite do
         # result when we get that notification. We do not provide a struct because.
         #
         # Client capabilities are not used yet anyway.
-        capabilities: %MCP.ClientCapabilities{} = real_client_capabilities
+        capabilities: %MCP.ClientCapabilities{} = client_capabilities
       }
     } = init_req
 
-    client_capabilities = %{__init: real_client_capabilities}
+    {sc_mod, sc_state} = normalize_session_controller(opts)
 
-    # For now we keep assigns from the initialize request. This is bad since
-    # they are nothing special. We should implement the SessionController stuff.
-    default_assigns = channel.assigns
+    normalized_client_info =
+      normalized_client_info(client_capabilities, client_initialized?, sc_mod)
 
+    callback SessionController,
+             sc_mod.create(session_id, normalized_client_info, channel, sc_state) do
+      {:ok, %Channel{} = sc_channel, sc_state} ->
+        initialize_from(
+          %{
+            session_id: session_id,
+            sc_mod: sc_mod,
+            sc_state: sc_state,
+            sc_channel: sc_channel,
+            client_capabilities: client_capabilities,
+            client_initialized: client_initialized?
+          },
+          opts
+        )
+
+      {:stop, _} = stop ->
+        stop
+    end
+  end
+
+  defp initialize_from_restore(
+         session_id,
+         persisted_client_info,
+         sc_mod,
+         sc_channel,
+         sc_state,
+         opts
+       ) do
+    initialize_from(
+      %{
+        session_id: session_id,
+        sc_mod: sc_mod,
+        sc_state: sc_state,
+        sc_channel: sc_channel,
+        client_capabilities: persisted_client_info.client_capabilities,
+        client_initialized: persisted_client_info.client_initialized
+      },
+      opts
+    )
+  end
+
+  defp initialize_from(init_data, opts) do
+    state =
+      %State{
+        client_capabilities: init_data.client_capabilities,
+        client_initialized: init_data.client_initialized,
+        extensions: build_extensions(opts),
+        server_info: build_server_info(opts),
+        session_id: init_data.session_id,
+        token_key: random_string(64),
+        trackers: empty_trackers(),
+
+        # TODO(doc): Session controller channel manages assigns given to
+        # TODO(doc): This must be documented if calling third party tools
+        # tools
+        #
+        # Session Controller
+        sc_mod: init_data.sc_mod,
+        sc_state: init_data.sc_state,
+        sc_channel: init_data.sc_channel,
+
+        # Empty before first extensions call
+        tool_names: [],
+        tools_map: %{},
+        resource_prefixes: [],
+        resource_repos: %{},
+        prompt_prefixes: [],
+        prompt_repos: %{}
+      }
+
+    state = refresh_extensions(state, init_data.sc_channel, :all)
+
+    {:ok, state}
+  end
+
+  defp build_extensions(opts) do
     self_extension =
       opts
       |> Keyword.take([:tools, :resources, :prompts])
       |> __MODULE__.SelfExtension.new()
 
     extensions = Keyword.get(opts, :extensions, [])
-
     extensions = [self_extension | extensions]
-    extensions = Enum.map(extensions, &Extension.expand/1)
-
-    state = %State{
-      session_id: session_id,
-      client_capabilities: client_capabilities,
-      extensions: extensions,
-      server_info: build_server_info(opts),
-      token_key: random_string(64),
-      trackers: empty_trackers(),
-      default_assigns: default_assigns,
-
-      # Empty before first extensions call
-
-      tool_names: [],
-      tools_map: %{},
-      resource_prefixes: [],
-      resource_repos: %{},
-      prompt_prefixes: [],
-      prompt_repos: %{}
-    }
-
-    ext_channel = channel_defaults(channel, state)
-    state = refresh_extensions(state, ext_channel, :all)
-
-    {:ok, state}
+    _extensions = Enum.map(extensions, &Extension.expand/1)
   end
 
   defp capabilities(state) do
@@ -567,7 +705,7 @@ defmodule GenMCP.Suite do
   end
 
   defp channel_defaults(%Channel{} = channel, state) do
-    Channel.with_default_assigns(channel, state.default_assigns)
+    Channel.with_default_assigns(channel, state.sc_channel.assigns)
   end
 
   defp random_string(len) do
@@ -733,5 +871,24 @@ defmodule GenMCP.Suite do
       )
 
     {server_request, state}
+  end
+
+  defp normalize_session_controller(opts) do
+    case Keyword.fetch!(opts, :session_controller) do
+      {_, _} = t -> t
+      nil -> {GenMCP.Suite.SessionController.Noop, []}
+      mod -> {mod, []}
+    end
+  end
+
+  defp normalized_client_info(_capabilities, _ready?, GenMCP.Suite.SessionController.Noop) do
+    :__skip_normalization__
+  end
+
+  defp normalized_client_info(capabilities, ready?, _) do
+    JSV.Normalizer.normalize(%GenMCP.Suite.PersistedClientInfo{
+      client_capabilities: capabilities,
+      client_initialized: ready?
+    })
   end
 end

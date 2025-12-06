@@ -74,7 +74,7 @@ defmodule GenMCP.TestWeb.Router do
       server_title: "GenMCP own development server",
       tools: [GenMCP.Test.Tools.ErlangHasher, GenMCP.Test.Tools.Addition],
       extensions: [],
-      foo: :bar
+      session_controller: GenMCP.Suite.SessionController.DevSessionStore
   end
 
   pipeline :auth do

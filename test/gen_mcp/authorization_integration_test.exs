@@ -8,7 +8,6 @@ defmodule GenMCP.AuthorizationIntegrationTest do
   alias GenMCP.Mux.Channel
   alias GenMCP.Support.AuthorizationMock
   alias GenMCP.Support.ServerMock
-  alias GenMCP.Transport.StreamableHTTP
 
   # DISCLAIMER
   #

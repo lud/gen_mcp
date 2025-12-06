@@ -9,6 +9,7 @@ defmodule GenMCP.SuiteAsyncTest do
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
   alias GenMCP.Suite
+  alias GenMCP.Suite.Tool
   alias GenMCP.Support.ToolMock
 
   @moduletag :capture_log
@@ -923,8 +924,8 @@ defmodule GenMCP.SuiteAsyncTest do
   describe "behaviour contract violations" do
     test "tool returns invalid value from call/3" do
       # This test validates that when a tool violates the behaviour contract
-      # by returning an invalid value from call/3, the server exits with
-      # a {:bad_return_value, value} reason.
+      # by returning an invalid value from call/3, the server raises with
+      # CallbackReturnError
 
       ToolMock
       |> stub(:info, fn :name, :bad_tool -> "BadTool" end)
@@ -943,15 +944,18 @@ defmodule GenMCP.SuiteAsyncTest do
         }
       }
 
-      # The tool call should exit the process with bad_return_value
-      assert catch_exit(Suite.handle_request(tool_call_req, build_channel(), state)) ==
-               {:bad_return_value, :invalid_return_value}
+      # The tool call should raise
+      assert %GenMCP.CallbackReturnError{
+               behaviour: Tool,
+               mfa: {ToolMock, :call, _},
+               return_value: :invalid_return_value
+             } = catch_error(Suite.handle_request(tool_call_req, build_channel(), state))
     end
 
     test "tool returns invalid value from continue/3" do
       # This test validates that when a tool returns a valid async tuple
       # from call/3 but then violates the contract in continue/3, the
-      # server exits with a {:bad_return_value, value} reason.
+      # server raises with CallbackReturnError
 
       ref = make_ref()
 
@@ -979,8 +983,13 @@ defmodule GenMCP.SuiteAsyncTest do
       assert {:reply, :stream, state} =
                Suite.handle_request(tool_call_req, build_channel(), state)
 
-      assert catch_exit(Suite.handle_info({ref, :some_result}, state)) ==
-               {:bad_return_value, {:bad_tuple, "oops"}}
+      assert %GenMCP.CallbackReturnError{
+               behaviour: Tool,
+               mfa:
+                 {ToolMock, :continue,
+                  [{:bad_continue_tag, {:ok, :some_result}}, _, :bad_continue_tool]},
+               return_value: {:bad_tuple, "oops"}
+             } = catch_error(Suite.handle_info({ref, :some_result}, state))
     end
   end
 end

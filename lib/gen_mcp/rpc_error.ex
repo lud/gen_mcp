@@ -44,9 +44,15 @@ defmodule GenMCP.RpcError do
   # https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1442
   @mcp_unsupported_protocol_version -32_000
 
-  defcasterror :missing_session_id, :missing_session_id, 400 do
+  defcasterror :missing_session_id, @rpc_invalid_params, 400 do
     %{
       message: "Header mcp-session-id was not provided"
+    }
+  end
+
+  defcasterror :unexpected_session_id, @rpc_invalid_params, 400 do
+    %{
+      message: "Unexpected mcp-session-id header in initialize request"
     }
   end
 
@@ -152,13 +158,6 @@ defmodule GenMCP.RpcError do
     }
   end
 
-  defcasterror {:unknown_method, method} when is_binary(method), @rpc_method_not_found, 400 do
-    %{
-      data: %{method: method},
-      message: "Unknown method #{method}"
-    }
-  end
-
   defcasterror {:session_not_found, sid} when is_binary(sid), @rpc_internal_error, 404 do
     %{
       data: %{session_id: sid},
@@ -166,9 +165,28 @@ defmodule GenMCP.RpcError do
     }
   end
 
+  defcasterror {:mcp_session_restore_failure, _reason}, @rpc_internal_error, 404 do
+    %{
+      message: "Session Lost"
+    }
+  end
+
+  defcasterror {:unknown_method, method} when is_binary(method), @rpc_method_not_found, 400 do
+    %{
+      data: %{method: method},
+      message: "Unknown method #{method}"
+    }
+  end
+
   defcasterror %NimbleOptions.ValidationError{}, @rpc_internal_error, 500 do
     %{
       message: "Internal Error"
+    }
+  end
+
+  defcasterror {:mcp_error, rpc_code, status_code, message}, rpc_code, status_code do
+    %{
+      message: message
     }
   end
 
@@ -184,6 +202,10 @@ defmodule GenMCP.RpcError do
 
   if Mix.env() == :test do
     @spec unknown_error(term) :: no_return
+    def unknown_error({%ExUnit.AssertionError{} = e, stack}) do
+      :ok = IO.puts([IO.ANSI.red(), Exception.format(:error, e, stack), IO.ANSI.reset()])
+    end
+
     def unknown_error(reason) do
       raise ArgumentError, "unknown MCP error: #{inspect(reason)}"
     end

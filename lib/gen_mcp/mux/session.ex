@@ -12,8 +12,11 @@ defmodule GenMCP.Mux.Session do
   # change the boot setup to avoid keeping to much in memory.
   use GenServer, restart: :temporary
 
+  import GenMCP.Utils.CallbackExt
+
   alias GenMCP.Utils.OptsValidator
 
+  require GenMCP
   require Logger
 
   @gen_opts ~w(name timeout debug spawn_opt hibernate_after)a
@@ -43,7 +46,32 @@ defmodule GenMCP.Mux.Session do
 
   def start_link(opts) do
     {gen_opts, opts} = Keyword.split(opts, @gen_opts)
-    GenServer.start_link(__MODULE__, opts, gen_opts)
+
+    case OptsValidator.validate_take_opts(opts, @init_opts_schema) do
+      {:ok, self_opts, server_opts} ->
+        GenServer.start_link(__MODULE__, {self_opts, server_opts}, gen_opts)
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  def fetch_restore_data(session_id, channel, opts) do
+    opts = Keyword.put(opts, :session_id, session_id)
+
+    case OptsValidator.validate_take_opts(opts, @init_opts_schema) do
+      {:ok, self_opts, server_opts} ->
+        server = Keyword.fetch!(self_opts, :server)
+        {server_mod, server_arg} = normalize_server(server, server_opts)
+
+        callback GenMCP, server_mod.session_fetch(session_id, channel, server_arg) do
+          {:ok, session_data} -> {:ok, session_data}
+          {:error, :not_found} = err -> err
+        end
+
+      {:error, _} = err ->
+        err
+    end
   end
 
   @doc false
@@ -58,54 +86,50 @@ defmodule GenMCP.Mux.Session do
   end
 
   @impl true
-  def init(opts) do
-    with {:ok, conf} <- init_self(opts),
-         {:ok, server_state} <- init_server(conf) do
-      {:ok,
-       %State{
-         server_mod: conf.server_mod,
-         server_state: server_state,
-         session_id: conf.session_id,
-         session_timeout_ref: start_session_timeout(conf.session_timeout),
-         conf: conf
-       }}
-    else
-      {:stop, _} = stop -> stop
+  def init({self_opts, server_opts}) do
+    conf = init_self({self_opts, server_opts})
+
+    case init_server(conf) do
+      {:ok, server_state} ->
+        {:ok,
+         %State{
+           server_mod: conf.server_mod,
+           server_state: server_state,
+           session_id: conf.session_id,
+           session_timeout_ref: start_session_timeout(conf.session_timeout),
+           conf: conf
+         }}
+
+      {:stop, _} = stop ->
+        stop
     end
   end
 
-  defp init_self(opts) do
-    case OptsValidator.validate_take_opts(opts, @init_opts_schema) do
-      {:ok, self_opts, server_opts} ->
-        server = Keyword.fetch!(self_opts, :server)
-        session_timeout = Keyword.fetch!(self_opts, :session_timeout)
-        session_id = Keyword.fetch!(opts, :session_id)
-        {server_mod, server_arg} = normalize_server(server, server_opts)
+  defp init_self({self_opts, server_opts}) do
+    session_timeout = Keyword.fetch!(self_opts, :session_timeout)
+    session_id = Keyword.fetch!(self_opts, :session_id)
+    server = Keyword.fetch!(self_opts, :server)
+    {server_mod, server_arg} = normalize_server(server, server_opts)
 
-        :telemetry.execute([:gen_mcp, :session, :init], %{}, %{
-          session_id: session_id,
-          server: server_mod,
-          pid: self()
-        })
+    :telemetry.execute([:gen_mcp, :session, :init], %{}, %{
+      session_id: session_id,
+      server: server_mod
+    })
 
-        {:ok,
-         %{
-           session_id: session_id,
-           server_mod: server_mod,
-           server_arg: server_arg,
-           session_timeout: session_timeout
-         }}
-
-      {:error, reason} ->
-        {:stop, reason}
-    end
+    %{
+      session_id: session_id,
+      server_mod: server_mod,
+      server_arg: server_arg,
+      session_timeout: session_timeout
+    }
   end
 
   defp init_server(conf) do
-    case conf.server_mod.init(conf.session_id, conf.server_arg) do
+    require GenMCP
+
+    callback GenMCP, conf.server_mod.init(conf.session_id, conf.server_arg) do
       {:ok, server_state} -> {:ok, server_state}
       {:stop, reason} -> {:stop, {:mcp_server_init_failure, reason}}
-      other -> exit({:bad_return_value, other})
     end
   end
 
@@ -121,15 +145,17 @@ defmodule GenMCP.Mux.Session do
   def handle_call({:"$gen_mcp", :request, req, channel}, _from, state) do
     state = refresh_session_timeout(state)
 
-    case state.server_mod.handle_request(req, channel, state.server_state) do
-      {:reply, reply, server_state} ->
+    callback GenMCP, state.server_mod.handle_request(req, channel, state.server_state) do
+      {:reply, reply, server_state}
+      when elem(reply, 0) == :result
+      when reply == :stream
+      when elem(reply, 0) == :error ->
         {:reply, reply, %{state | server_state: server_state}}
 
-      {:stop, reason, reply, server_state} ->
+      {:stop, reason, reply, server_state}
+      when elem(reply, 0) == :result
+      when elem(reply, 0) == :error ->
         {:stop, reason, reply, %{state | server_state: server_state}}
-
-      other ->
-        exit({:bad_return_value, other})
     end
   end
 
@@ -137,25 +163,52 @@ defmodule GenMCP.Mux.Session do
     # TODO Handle error/noreply return ?
     state = refresh_session_timeout(state)
 
-    case state.server_mod.handle_notification(notif, state.server_state) do
+    callback GenMCP, state.server_mod.handle_notification(notif, state.server_state) do
       {:noreply, server_state} ->
         {:reply, :ack, %{state | server_state: server_state}}
-
-      other ->
-        exit({:bad_return_value, other})
     end
   end
 
-  def handle_call({:"$gen_mcp", :stop}, _from, state) do
-    :telemetry.execute([:gen_mcp, :session, :terminate], %{}, %{
+  def handle_call({:"$gen_mcp", :restore_session, session_data, channel}, _from, state) do
+    state = refresh_session_timeout(state)
+
+    :telemetry.execute([:gen_mcp, :session, :restore], %{}, %{
       session_id: state.session_id,
       server: state.server_mod,
-      reason: :client_delete,
-      pid: self()
+      session_data: session_data
     })
 
-    {:stop, {:shutdown, :mcp_stop}, :ok, state}
+    callback GenMCP,
+             state.server_mod.session_restore(session_data, channel, state.server_state) do
+      {:noreply, server_state} ->
+        {:reply, :ok, %{state | server_state: server_state}}
+
+      {:stop, reason, server_state} ->
+        :telemetry.execute([:gen_mcp, :session, :restore_error], %{}, %{
+          session_id: state.session_id,
+          server: state.server_mod,
+          session_data: session_data,
+          reason: reason
+        })
+
+        {:stop, {:shutdown, {:session_restore_error, reason}}, {:error, reason},
+         %{state | server_state: server_state}}
+    end
   end
+
+  def handle_call({:"$gen_mcp", :delete_session}, _from, state) do
+    :telemetry.execute([:gen_mcp, :session, :delete], %{}, %{
+      session_id: state.session_id,
+      server: state.server_mod,
+      reason: :client_delete
+    })
+
+    _ = state.server_mod.session_delete(state.server_state)
+    {:stop, {:shutdown, :session_deleted}, :ok, state}
+  end
+
+  # TODO session timeout should be handled by the server, so if there is any
+  # async tool in progress or GET stream it could return {:snooze, ms} | :stop
 
   @impl true
   def handle_info({:timeout, tref, :session_timeout}, state) do
@@ -164,8 +217,7 @@ defmodule GenMCP.Mux.Session do
         :telemetry.execute([:gen_mcp, :session, :terminate], %{}, %{
           session_id: state.session_id,
           server: state.server_mod,
-          reason: :timeout,
-          pid: self()
+          reason: :timeout
         })
 
         {:stop, {:shutdown, :session_timeout}, state}
@@ -178,12 +230,12 @@ defmodule GenMCP.Mux.Session do
   def handle_info(info, state) do
     state = refresh_session_timeout(state)
 
-    case state.server_mod.handle_info(info, state.server_state) do
+    callback GenMCP, state.server_mod.handle_info(info, state.server_state) do
       {:noreply, server_state} ->
         {:noreply, %{state | server_state: server_state}}
 
-      other ->
-        exit({:bad_return_value, other})
+      {:stop, reason, server_state} ->
+        {:stop, reason, %{state | server_state: server_state}}
     end
   end
 

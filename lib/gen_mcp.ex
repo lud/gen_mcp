@@ -60,6 +60,7 @@ defmodule GenMCP do
 
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
+  alias GenMCP.Suite.SessionController
 
   require(Elixir.GenMCP.MCP.ModMap).require_all()
 
@@ -71,7 +72,7 @@ defmodule GenMCP do
   end
 
   @type state :: term
-
+  @type session_id :: String.t()
   @type request ::
           MCP.InitializeRequest.t()
           | MCP.ListToolsRequest.t()
@@ -100,19 +101,21 @@ defmodule GenMCP do
           | MCP.ProgressNotification.t()
 
   @type server_reply :: {:result, result} | :stream | {:error, term}
+  @type server_reply_nostream :: {:result, result} | :stream | {:error, term}
 
   @doc """
   Initializes the server state.
 
   Called when a new MCP session is established.
   """
-  @callback init(session_id :: String.t(), init_arg :: term) :: {:ok, state} | {:stop, term}
+  @callback init(session_id, init_arg :: term) :: {:ok, state} | {:stop, term}
 
   @doc """
   Handles an incoming MCP request and returns a result or stop the server.
   """
   @callback handle_request(request, Channel.t(), state) ::
-              {:reply, server_reply, state} | {:stop, reason :: term, server_reply, state}
+              {:reply, server_reply, state}
+              | {:stop, reason :: term, server_reply_nostream, state}
 
   @doc """
   Handles an incoming MCP notification.
@@ -127,10 +130,27 @@ defmodule GenMCP do
   Invoked when the server process receives a message that is not an MCP request
   or notification.
   """
-  @callback handle_info(term, state) :: {:noreply, state}
+  @callback handle_info(term, state) :: {:noreply, state} | {:stop, reason :: term, state}
 
   @doc """
-  Called when a session is restored by the `GenMCP.SessionController`
+  This callback is called during session initialization when a
+  non-initialization request (such as a call tool request) is received and there
+  is no current OTP process tied to the session id.
+
+  > #### This is a raw callback {: .warning}
+  >
+  > The call is made from the HTTP transport process, giving raw initialization
+  > args for the server. It is called _before_ the `c:init/2` callback is called
+  > and there is no possibility to return a new state or arg.
+  >
+  > The returned data will be passed to the `c:session_restore/3` callback after
+  > server process initialization.
+  """
+  @callback session_fetch(session_id, channel :: Channel.t(), init_arg :: term) ::
+              {:ok, SessionController.restore_data()} | {:error, :not_found}
+
+  @doc """
+  Called when a session is restored by the `GenMCP.Suite.SessionController`
   implementation.
 
   Your server `c:init/2` callback will have been called before, but there will
@@ -138,18 +158,20 @@ defmodule GenMCP do
 
   The next call will be either another request or a notification.
   """
-  @callback session_restore(session_data :: any(), channel :: Channel.t(), state) ::
-              {:ok, state} | {:error, reason :: any()}
+  @callback session_restore(SessionController.restore_data(), channel :: Channel.t(), state) ::
+              {:noreply, state} | {:stop, reason :: term, state}
 
   @doc """
   Called when a session is deleted by the client.
+
+  Return value is not checked, and the server is shut down immediately.
   """
-  @callback session_delete(state) :: any()
+  @callback session_delete(state) :: term
 
   @doc """
   Called when a session times out.
   """
-  @callback session_timeout(state) :: any()
+  @callback session_timeout(state) :: term
 
   @optional_callbacks session_restore: 3, session_delete: 1, session_timeout: 1
 

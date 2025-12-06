@@ -38,6 +38,8 @@ defmodule GenMCP.Suite.PromptRepo do
         def get(_name, _args, _channel, _arg), do: {:error, :not_found}
       end
   """
+  import GenMCP.Utils.CallbackExt
+
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
 
@@ -150,19 +152,17 @@ defmodule GenMCP.Suite.PromptRepo do
   end
 
   def get_prompt(repo, name, arguments, channel) do
-    case repo.mod.get(name, arguments, channel, repo.arg) do
+    callback __MODULE__, repo.mod.get(name, arguments, channel, repo.arg) do
       {:ok, %MCP.GetPromptResult{}} = ok -> ok
       {:error, :not_found} -> {:error, {:prompt_not_found, name}}
       {:error, message} when is_binary(message) -> {:error, message}
       {:error, {:invalid_params, _reason}} = err -> err
-      other -> exit({:bad_return_value, other})
     end
   end
 
   def list_prompts(repo, cursor, channel) do
-    case repo.mod.list(cursor, channel, repo.arg) do
+    callback __MODULE__, repo.mod.list(cursor, channel, repo.arg) do
       {list, cursor} when is_list(list) -> {list, cursor}
-      other -> exit({:bad_return_value, other})
     end
   end
 end

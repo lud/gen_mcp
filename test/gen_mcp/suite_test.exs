@@ -34,22 +34,25 @@ defmodule GenMCP.SuiteTest do
       }
     }
 
-    assert {:reply, {:result, _result},
-            %{
-              client_capabilities: %{
-                __init: %MCP.ClientCapabilities{elicitation: %{"foo" => "bar"}}
-              }
-            } = state} = Suite.handle_request(init_req, build_channel(init_assigns), state)
+    assert {:reply, {:result, _result}, state} =
+             Suite.handle_request(init_req, build_channel(init_assigns), state)
+
+    assert %{
+             client_initialized: false,
+             client_capabilities: %MCP.ClientCapabilities{elicitation: %{"foo" => "bar"}}
+           } = state
 
     client_init_notif = %MCP.InitializedNotification{
       method: "notifications/initialized",
       params: %{}
     }
 
-    assert {:noreply,
-            %{client_capabilities: %MCP.ClientCapabilities{elicitation: %{"foo" => "bar"}}} =
-              state} =
-             Suite.handle_notification(client_init_notif, state)
+    assert {:noreply, state} = Suite.handle_notification(client_init_notif, state)
+
+    assert %{
+             client_initialized: true,
+             client_capabilities: %MCP.ClientCapabilities{elicitation: %{"foo" => "bar"}}
+           } = state
 
     state
   end

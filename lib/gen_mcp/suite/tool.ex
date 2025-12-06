@@ -69,6 +69,8 @@ defmodule GenMCP.Suite.Tool do
       end
   """
 
+  import GenMCP.Utils.CallbackExt
+
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
 
@@ -536,6 +538,24 @@ defmodule GenMCP.Suite.Tool do
           "option #{inspect(key)} given to `use #{inspect(__MODULE__)}` #{errmsg}, got: #{inspect(value)}"
   end
 
+  defmacrop handle_result(call) do
+    quote do
+      callback __MODULE__, unquote(call) do
+        {:result, _result, %Channel{}} = result ->
+          result
+
+        {:async, {tag, %Task{ref: ref}}, %Channel{} = chan} ->
+          {:async, {tag, ref}, chan}
+
+        {:async, {tag, ref}, %Channel{} = chan} when is_reference(ref) ->
+          {:async, {tag, ref}, chan}
+
+        {:error, _reason, %Channel{}} = err ->
+          err
+      end
+    end
+  end
+
   @doc """
   Invokes the tool's `c:call/3` callback with request validation.
 
@@ -572,10 +592,9 @@ defmodule GenMCP.Suite.Tool do
     %{mod: mod, arg: arg} = tool
 
     if function_exported?(mod, :validate_request, 2) do
-      case mod.validate_request(req, arg) do
+      callback __MODULE__, mod.validate_request(req, arg) do
         {:ok, req} -> {:ok, req}
         {:error, _} = err -> err
-        other -> exit({:bad_return_value, other})
       end
     else
       {:ok, req}
@@ -606,15 +625,5 @@ defmodule GenMCP.Suite.Tool do
   def continue(tool, {_tag, _result} = cont, channel) do
     %{mod: mod, arg: arg} = tool
     handle_result(mod.continue(cont, channel, arg))
-  end
-
-  defp handle_result(result) do
-    case result do
-      {:result, _result, %Channel{}} = result -> result
-      {:async, {tag, %Task{ref: ref}}, %Channel{} = chan} -> {:async, {tag, ref}, chan}
-      {:async, {tag, ref}, %Channel{} = chan} when is_reference(ref) -> {:async, {tag, ref}, chan}
-      {:error, _reason, %Channel{}} = err -> err
-      other -> exit({:bad_return_value, other})
-    end
   end
 end

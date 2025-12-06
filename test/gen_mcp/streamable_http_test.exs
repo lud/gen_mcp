@@ -121,8 +121,8 @@ defmodule GenMCP.StreamableHTTPTest do
 
     test "we can run the initialization" do
       ServerMock
-      |> expect(:init, fn _, _ -> {:ok, :some_session_state} end)
-      |> expect(:handle_request, fn req, channel, :some_session_state ->
+      |> expect(:init, fn _, _ -> {:ok, :some_server_state} end)
+      |> expect(:handle_request, fn req, channel, :some_server_state ->
         assert %MCP.InitializeRequest{
                  id: 123,
                  params: %MCP.InitializeRequestParams{
@@ -155,7 +155,7 @@ defmodule GenMCP.StreamableHTTPTest do
             server_info: MCP.server_info(name: "Mock Server", version: "foo", title: "stuff")
           )
 
-        {:reply, {:result, init_result}, :some_session_state_1}
+        {:reply, {:result, init_result}, :some_server_state_1}
       end)
 
       resp =
@@ -172,7 +172,7 @@ defmodule GenMCP.StreamableHTTPTest do
 
       session_id = expect_session_header(resp)
 
-      expect(ServerMock, :handle_notification, fn notif, :some_session_state_1 ->
+      expect(ServerMock, :handle_notification, fn notif, :some_server_state_1 ->
         assert %MCP.InitializedNotification{
                  method: "notifications/initialized",
                  params: %{}
@@ -189,6 +189,70 @@ defmodule GenMCP.StreamableHTTPTest do
                  params: %{}
                })
                |> expect_status(202)
+               |> body()
+    end
+
+    test "initialize request with mcp-session-id header returns 400" do
+      assert %{
+               "error" => %{
+                 "code" => -32_602,
+                 "message" => "Unexpected mcp-session-id header in initialize request"
+               }
+             } =
+               client(session_id: random_session_id(), url: @mcp_url)
+               |> post_message(%MCP.InitializeRequest{
+                 id: 123,
+                 params: %MCP.InitializeRequestParams{
+                   capabilities: %MCP.ClientCapabilities{},
+                   clientInfo: %MCP.Implementation{name: "test client", version: "0.0.0"},
+                   protocolVersion: "2025-06-18"
+                 }
+               })
+               |> expect_status(400)
+               |> body()
+    end
+
+    test "calling another request without session id header" do
+      assert %{
+               "error" => %{
+                 "code" => -32_602,
+                 "message" => "Header mcp-session-id was not provided"
+               },
+               "id" => 123,
+               "jsonrpc" => "2.0"
+             } =
+               client(url: @mcp_url)
+               |> post_message(%{
+                 jsonrpc: "2.0",
+                 id: 123,
+                 method: "tools/list",
+                 params: %{}
+               })
+               |> expect_status(400)
+               |> body()
+    end
+
+    test "initialization failure" do
+      ServerMock
+      |> expect(:init, fn _, _ -> {:ok, :some_server_state} end)
+      |> expect(:handle_request, fn _, _, state ->
+        # TODO(doc) custom mcp errors - we should also provide a protocol
+        custom_error = {:mcp_error, -3333, 502, "some message"}
+
+        {:stop, :some_stop_reason, {:error, custom_error}, state}
+      end)
+
+      assert %{"error" => %{"code" => -3333, "message" => "some message"}, "jsonrpc" => "2.0"} =
+               client(url: @mcp_url)
+               |> post_message(%MCP.InitializeRequest{
+                 id: 123,
+                 params: %MCP.InitializeRequestParams{
+                   capabilities: %MCP.ClientCapabilities{},
+                   clientInfo: %MCP.Implementation{name: "test client", version: "0.0.0"},
+                   protocolVersion: "2025-06-18"
+                 }
+               })
+               |> expect_status(502)
                |> body()
     end
   end
@@ -437,7 +501,7 @@ defmodule GenMCP.StreamableHTTPTest do
       token = "some-progress-token"
 
       ServerMock
-      |> expect(:handle_request, fn req, channel, _state ->
+      |> expect(:handle_request, fn _req, channel, _state ->
         assert %Channel{progress_token: ^token} = channel
 
         channel_as_state = channel
@@ -578,7 +642,7 @@ defmodule GenMCP.StreamableHTTPTest do
       token = "error-progress-token"
 
       ServerMock
-      |> expect(:handle_request, fn req, channel, _state ->
+      |> expect(:handle_request, fn _req, channel, _state ->
         assert %Channel{progress_token: ^token} = channel
 
         send(self(), :progress_step_1)
@@ -1306,15 +1370,21 @@ defmodule GenMCP.StreamableHTTPTest do
 
       ref = Process.monitor(GenMCP.Mux.whereis(session_id))
 
+      expect(ServerMock, :session_delete, fn _ -> :ok end)
+
       client(session_id: session_id, url: @mcp_url)
       |> Req.delete!()
       |> expect_status(204)
 
-      assert_receive {:DOWN, ^ref, :process, _, {:shutdown, :mcp_stop}}
+      assert_receive {:DOWN, ^ref, :process, _, {:shutdown, :session_deleted}}
     end
 
     test "delete unknown session is 404" do
       session_id = "#{NodeSync.node_id()}-some-unknown-session"
+
+      expect(ServerMock, :session_fetch, fn ^session_id, %Channel{}, _ ->
+        {:error, :not_found}
+      end)
 
       client(session_id: session_id, url: @mcp_url)
       |> Req.delete!()
@@ -1325,9 +1395,41 @@ defmodule GenMCP.StreamableHTTPTest do
   describe "session handling" do
     @mcp_url "/mcp/controlled"
 
+    defp random_session_id do
+      NodeSync.gen_session_id()
+    end
+
+    test "initialize relays the session_controller option to the server" do
+      ServerMock
+      |> expect(:init, fn _sesion_id, opts ->
+        assert {:ok, {SessionControllerMock, _}} = Keyword.fetch(opts, :session_controller)
+        {:ok, :some_server_state}
+      end)
+      |> expect(:handle_request, fn %MCP.InitializeRequest{}, _channel, state ->
+        init_result =
+          MCP.intialize_result(
+            capabilities: MCP.capabilities(tools: true),
+            server_info: MCP.server_info(name: "Mock Server", version: "foo", title: "stuff")
+          )
+
+        {:reply, {:result, init_result}, state}
+      end)
+
+      client(url: @mcp_url)
+      |> post_message(%MCP.InitializeRequest{
+        id: 123,
+        params: %MCP.InitializeRequestParams{
+          capabilities: %MCP.ClientCapabilities{},
+          clientInfo: %MCP.Implementation{name: "test client", version: "0.0.0"},
+          protocolVersion: "2025-06-18"
+        }
+      })
+      |> expect_status(200)
+    end
+
     test "initialize request does not call session controller" do
       ServerMock
-      |> expect(:init, fn _, _ -> {:ok, :some_session_state} end)
+      |> expect(:init, fn _, _ -> {:ok, :some_server_state} end)
       |> expect(:handle_request, fn _req, _channel, state ->
         init_result =
           MCP.intialize_result(
@@ -1366,13 +1468,14 @@ defmodule GenMCP.StreamableHTTPTest do
                |> body()
     end
 
-    @tag :skip
-    test "request without session calls fetch_session and returns 404 if not found" do
-      expect(SessionControllerMock, :fetch_session, fn "some-session-id", _channel, :foo ->
+    test "request without session calls fetch and returns 404 if not found" do
+      sid = random_session_id()
+
+      expect(ServerMock, :session_fetch, fn ^sid, _channel, _ ->
         {:error, :not_found}
       end)
 
-      client(session_id: "some-session-id", url: @mcp_url)
+      client(session_id: sid, url: @mcp_url)
       |> post_message(%{
         jsonrpc: "2.0",
         id: 123,
@@ -1382,27 +1485,25 @@ defmodule GenMCP.StreamableHTTPTest do
       |> expect_status(404)
     end
 
-    IO.warn(
-      "session fetch_session should return the channel, because the server mock will want to use them as new default assigns"
-    )
-
-    @tag :skip
-    test "request without session calls fetch_session and restores session if found" do
-      expect(SessionControllerMock, :fetch_session, fn "some-session-id", _channel, :foo ->
-        {:ok, :some_restored_data}
-      end)
+    test "request without session calls fetch and restores session if found" do
+      sid = random_session_id()
 
       ServerMock
-      |> expect(:init, fn _, _ -> {:ok, :initial_state} end)
-      |> expect(:session_restore, fn :some_restored_data, _channel, :initial_state ->
-        {:ok, :restored_state}
+      |> expect(:session_fetch, fn ^sid, _channel, _ ->
+        {:ok, :some_restored_session_data}
       end)
-      |> expect(:handle_request, fn req, _channel, :restored_state ->
+      |> expect(:init, fn _, _ -> {:ok, :initial_server_state} end)
+      |> expect(:session_restore, fn :some_restored_session_data,
+                                     _channel,
+                                     :initial_server_state ->
+        {:noreply, :restored_server_state}
+      end)
+      |> expect(:handle_request, fn req, _channel, :restored_server_state ->
         assert %MCP.ListToolsRequest{} = req
-        {:reply, {:result, MCP.list_tools_result([])}, :restored_state}
+        {:reply, {:result, MCP.list_tools_result([])}, :restored_server_state}
       end)
 
-      client(session_id: "some-session-id", url: @mcp_url)
+      client(session_id: sid, url: @mcp_url)
       |> post_message(%{
         jsonrpc: "2.0",
         id: 123,
@@ -1412,49 +1513,174 @@ defmodule GenMCP.StreamableHTTPTest do
       |> expect_status(200)
     end
 
-    @tag :skip
-    test "delete request calls session_delete" do
-      # First we need to establish a session or restore it. Let's restore it for simplicity.
-      expect(SessionControllerMock, :fetch_session, fn "some-session-id", _channel, :foo ->
-        {:ok, :some_restored_data}
+    test "notification without session calls fetch and returns 404 if not found" do
+      sid = random_session_id()
+
+      expect(ServerMock, :session_fetch, fn ^sid, _channel, _ ->
+        {:error, :not_found}
       end)
+
+      assert %{
+               "error" => %{
+                 "code" => -32_603,
+                 "message" => "Session not found"
+               },
+               "jsonrpc" => "2.0"
+             } =
+               client(session_id: sid, url: @mcp_url)
+               |> post_message(%{
+                 jsonrpc: "2.0",
+                 method: "notifications/initialized",
+                 params: %{}
+               })
+               |> expect_status(404)
+               |> body()
+    end
+
+    test "notification without session calls fetch and restores session if found" do
+      sid = random_session_id()
 
       ServerMock
-      |> expect(:init, fn _, _ -> {:ok, :initial_state} end)
-      |> expect(:session_restore, fn :some_restored_data, _channel, :initial_state ->
-        {:ok, :restored_state}
+      |> expect(:session_fetch, fn ^sid, _channel, _ ->
+        {:ok, :some_restored_session_data}
       end)
-      |> expect(:session_delete, fn :restored_state -> :ok end)
+      |> expect(:init, fn _, _ -> {:ok, :initial_server_state} end)
+      |> expect(:session_restore, fn :some_restored_session_data,
+                                     _channel,
+                                     :initial_server_state ->
+        {:noreply, :restored_server_state}
+      end)
+      |> expect(:handle_notification, fn _notif, state -> {:noreply, state} end)
 
-      client(session_id: "some-session-id", url: @mcp_url)
+      assert "" =
+               client(session_id: sid, url: @mcp_url)
+               |> post_message(%{
+                 jsonrpc: "2.0",
+                 method: "notifications/initialized",
+                 params: %{}
+               })
+               |> expect_status(202)
+               |> body()
+    end
+
+    test "delete request calls session_delete" do
+      sid = random_session_id()
+      # First we need to establish a session or restore it. Let's restore it for simplicity.
+
+      ServerMock
+      |> expect(:session_fetch, fn ^sid, _channel, _ -> {:ok, :some_restored_session_data} end)
+      |> expect(:init, fn _, _ -> {:ok, :initial_server_state} end)
+      |> expect(:session_restore, fn :some_restored_session_data,
+                                     _channel,
+                                     :initial_server_state ->
+        {:noreply, :restored_server_state}
+      end)
+      |> expect(:session_delete, fn :restored_server_state -> :ok end)
+
+      client(session_id: sid, url: @mcp_url)
       |> Req.delete!()
       |> expect_status(204)
     end
 
-    @tag :skip
-    test "initialize request with mcp-session-id header returns 400" do
-      client(session_id: "some-session-id", url: @mcp_url)
-      |> post_message(%MCP.InitializeRequest{
-        id: 123,
-        params: %MCP.InitializeRequestParams{
-          capabilities: %MCP.ClientCapabilities{},
-          clientInfo: %MCP.Implementation{name: "test client", version: "0.0.0"},
-          protocolVersion: "2025-06-18"
-        }
-      })
-      |> expect_status(400)
-      |> body()
-      |> then(fn body ->
-        assert %{
-                 "error" => %{
-                   "code" => -32_600,
-                   "message" => _
-                 }
-               } = body
+    test "delete unknown session calls the server raw callback" do
+      sid = random_session_id()
+
+      expect(ServerMock, :session_fetch, fn ^sid, _channel, _ ->
+        {:error, :not_found}
       end)
+
+      client(session_id: sid, url: @mcp_url)
+      |> Req.delete!()
+      |> expect_status(404)
     end
 
-    @tag :skip
-    test "delete unknown session should attempt to fetch it and call the delete callback on the server mock"
+    test "restore failure" do
+      sid = random_session_id()
+
+      ServerMock
+      |> expect(:session_fetch, fn ^sid, _channel, _ ->
+        {:ok, :some_sesssion_data}
+      end)
+      |> expect(:init, fn _, _ -> {:ok, :some_server_state} end)
+      |> expect(:session_restore, fn _, _, state ->
+        {:stop, :goodbye, state}
+      end)
+
+      assert %{
+               "error" => %{"code" => -32_603, "message" => "Session Lost"},
+               "id" => 456,
+               "jsonrpc" => "2.0"
+             } =
+               client(session_id: sid, url: @mcp_url)
+               |> post_message(%{
+                 jsonrpc: "2.0",
+                 id: 456,
+                 method: "tools/call",
+                 params: %{
+                   _meta: %{progressToken: "hello"},
+                   name: "SomeTool",
+                   arguments: %{some: "arg"}
+                 }
+               })
+               |> expect_status(404)
+               |> body()
+    end
+
+    @tag :capture_log
+    test "stopping from handle info" do
+      parent = self()
+
+      ServerMock
+      |> expect(:init, fn _, _ ->
+        send(parent, {:session_pid, self()})
+        {:ok, :some_server_state}
+      end)
+      |> expect(:handle_request, fn %MCP.InitializeRequest{}, _channel, state ->
+        init_result =
+          MCP.intialize_result(
+            capabilities: MCP.capabilities(tools: true),
+            server_info: MCP.server_info(name: "Mock Server", version: "foo", title: "stuff")
+          )
+
+        {:reply, {:result, init_result}, state}
+      end)
+
+      # Init is ok
+
+      assert %{
+               "id" => 123,
+               "jsonrpc" => "2.0",
+               "result" => %{}
+             } =
+               client(url: @mcp_url)
+               |> post_message(%{
+                 jsonrpc: "2.0",
+                 id: 123,
+                 method: "initialize",
+                 params: %{
+                   capabilities: %{},
+                   clientInfo: %{name: "test client", version: "0.0.0"},
+                   protocolVersion: "2025-06-18"
+                 }
+               })
+               |> expect_status(200)
+               |> body()
+
+      # And we get the pid
+
+      assert_receive {:session_pid, session_pid}
+
+      ref = Process.monitor(session_pid)
+
+      expect(ServerMock, :handle_info, fn :please_stop, state ->
+        {:stop, :okay_i_stop, state}
+      end)
+
+      send(session_pid, :please_stop)
+
+      assert_receive {:DOWN, ^ref, :process, ^session_pid, reason}
+
+      assert :okay_i_stop = reason
+    end
   end
 end

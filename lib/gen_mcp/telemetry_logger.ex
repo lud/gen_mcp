@@ -9,10 +9,12 @@ defmodule GenMCP.TelemetryLogger do
     [:gen_mcp, :cluster, :error] => :error,
     [:gen_mcp, :cluster, :status] => :debug,
 
-    # Session
+    # Session.
     [:gen_mcp, :session, :init] => :debug,
-    [:gen_mcp, :session, :terminate] => :debug,
+    [:gen_mcp, :session, :restore] => :debug,
+    [:gen_mcp, :session, :delete] => :debug,
     [:gen_mcp, :session, :start_error] => :error,
+    [:gen_mcp, :session, :restore_error] => :error,
 
     # Suite
     [:gen_mcp, :suite, :error, :unknown_request] => :error
@@ -97,16 +99,38 @@ defmodule GenMCP.TelemetryLogger do
         %{server: server, session_id: session_id},
         _
       ) do
-    log(p, "gen_mcp session starting with #{inspect(server)}", %{gen_mcp_session_id: session_id})
+    log(p, "gen_mcp session initializing with #{inspect(server)}", %{
+      gen_mcp_session_id: session_id
+    })
   end
 
   def handle_event(
-        [:gen_mcp, :session, :terminate] = p,
+        [:gen_mcp, :session, :restore] = p,
+        _,
+        %{server: server, session_id: session_id},
+        _
+      ) do
+    log(p, "gen_mcp restoring session with #{inspect(server)}", %{gen_mcp_session_id: session_id})
+  end
+
+  def handle_event(
+        [:gen_mcp, :session, :restore_error] = p,
+        _,
+        %{reason: reason, server: server, session_id: session_id},
+        _
+      ) do
+    log(p, "gen_mcp session restore error from server #{inspect(server)}: #{inspect(reason)}", %{
+      gen_mcp_session_id: session_id
+    })
+  end
+
+  def handle_event(
+        [:gen_mcp, :session, :delete] = p,
         _,
         %{reason: reason, session_id: session_id},
         _
       ) do
-    log(p, "gen_mcp session stopping for: #{inspect(reason)}", %{gen_mcp_session_id: session_id})
+    log(p, "gen_mcp delete session for: #{inspect(reason)}", %{gen_mcp_session_id: session_id})
   end
 
   def handle_event(
@@ -153,6 +177,9 @@ defmodule GenMCP.TelemetryLogger do
 
       Logger.error("""
       unhandled telemetry event #{inspect(other)} with #{inspect(meta)}
+
+      Add the following code
+      in #{__ENV__.file}:#{__ENV__.line - 11}
 
           def handle_event(#{inspect(other)} = p, _, #{keymap},_) do
             log(p, "...")

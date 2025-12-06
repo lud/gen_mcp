@@ -43,7 +43,7 @@ defmodule GenMCP.Mux.SessionTest do
     %MCP.ListToolsRequest{id: :erlang.unique_integer(), params: %{}}
   end
 
-  IO.warn("timeout should call the server mock with session_timeout(state)")
+  IO.warn("timeout should call the server mock with session_timeout(state)", [])
 
   test "session can timeout" do
     ServerMock
@@ -126,7 +126,7 @@ defmodule GenMCP.Mux.SessionTest do
     ServerMock
     |> expect(:init, fn _, _ -> {:ok, :some_session_state} end)
     |> expect(:handle_request, fn %{params: %{protocolVersion: "bad_version"}}, _, _ ->
-      {:stop, :exit_reason, :reply_reason, :some_session_state}
+      {:stop, :exit_reason, {:error, :reply_reason}, :some_session_state}
     end)
 
     assert {:ok, session_id} = Mux.start_session(server: ServerMock)
@@ -142,7 +142,7 @@ defmodule GenMCP.Mux.SessionTest do
       }
     }
 
-    assert :reply_reason = Mux.request(session_id, bad_request, build_channel())
+    assert {:error, :reply_reason} = Mux.request(session_id, bad_request, build_channel())
     assert_receive {:DOWN, ^ref, :process, ^pid, :exit_reason}
   end
 end

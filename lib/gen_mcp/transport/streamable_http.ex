@@ -34,7 +34,10 @@ defmodule GenMCP.Transport.StreamableHTTP do
 
   #{NimbleOptions.docs(plug_opts_schema)}
 
-  ### Options for the MCP session handler
+  ### Options for the MCP OTP session wrapper
+
+  Note that the `:session_controller` is managed directly by the `GenMCP`
+  behaviour implementation.
 
   #{GenMCP.Mux.Session.init_opts_schema().schema |> Keyword.delete(:session_id) |> NimbleOptions.docs()}
 
@@ -164,8 +167,8 @@ defmodule GenMCP.Transport.StreamableHTTP do
     send_error(conn, :bad_rpc)
   end
 
-  def http_delete(conn, _conf) do
-    terminate_session(conn)
+  def http_delete(conn, conf) do
+    terminate_session(conn, conf)
   end
 
   defp msg_id_from_req(body) do
@@ -176,11 +179,12 @@ defmodule GenMCP.Transport.StreamableHTTP do
   end
 
   defp dispatch_req(conn, msg_id, %InitializeRequest{} = req, conf) do
-    with {:ok, session_id} <- Mux.start_session(conf.session_opts),
+    with :ok <- reject_session_id(conn),
+         {:ok, session_id} <- Mux.start_session(conf.session_opts),
          channel = make_channel(conn, req, session_id, conf),
          {:result, %InitializeResult{} = result} <- Mux.request(session_id, req, channel) do
       conn
-      |> with_session_id(session_id)
+      |> put_resp_session_id(session_id)
       |> send_result_response(200, msg_id, result)
     else
       {:error, reason} -> send_error(conn, reason)
@@ -188,47 +192,68 @@ defmodule GenMCP.Transport.StreamableHTTP do
   end
 
   defp dispatch_req(conn, msg_id, req, conf) do
-    case fetch_session_id(conn) do
-      {:ok, session_id} -> do_dispatch_req(conn, session_id, msg_id, req, conf)
-      {:error, reason} -> send_error(conn, reason)
+    with {:ok, session_id} <- lookup_session_id(conn),
+         channel = make_channel(conn, req, session_id, conf),
+         {:ok, session_pid} <- lookup_session(session_id, channel, conf) do
+      do_dispatch_req(conn, session_pid, msg_id, req, channel)
+    else
+      {:error, reason} -> send_error(conn, reason, msg_id: msg_id)
     end
   end
 
-  defp do_dispatch_req(conn, session_id, msg_id, req, conf) do
-    case Mux.request(session_id, req, make_channel(conn, req, session_id, conf)) do
+  defp do_dispatch_req(conn, session_pid, msg_id, req, channel) do
+    case Mux.request(session_pid, req, channel) do
       {:result, result} -> send_result_response(conn, 200, msg_id, result)
       {:error, reason} -> send_error(conn, reason, msg_id: msg_id)
       :stream -> stream_start(conn, 200, msg_id)
     end
   end
 
-  defp dispatch_notif(conn, notif, _conf) do
-    with {:ok, session_id} <- fetch_session_id(conn),
-         :ack <- Mux.notify(session_id, notif) do
+  defp dispatch_notif(conn, notif, conf) do
+    with {:ok, session_id} <- lookup_session_id(conn),
+         channel = make_channel(conn, notif, session_id, conf),
+         {:ok, session_pid} <- lookup_session(session_id, channel, conf),
+         :ack <- Mux.notify(session_pid, notif) do
       send_accepted(conn)
     else
       {:error, reason} -> send_error(conn, reason)
     end
   end
 
-  defp terminate_session(conn) do
-    with {:ok, session_id} <- fetch_session_id(conn),
-         :ok <- Mux.stop_session(session_id) do
+  defp lookup_session(session_id, channel, conf) do
+    case Mux.ensure_started(session_id, channel, conf.session_opts) do
+      {:ok, pid} -> {:ok, pid}
+      {:error, _reason} = err -> err
+    end
+  end
+
+  defp lookup_session_id(conn) do
+    case List.keyfind(conn.req_headers, @session_id_header, 0) do
+      nil -> {:error, :missing_session_id}
+      {@session_id_header, session_id} -> {:ok, session_id}
+    end
+  end
+
+  defp reject_session_id(conn) do
+    case List.keyfind(conn.req_headers, @session_id_header, 0) do
+      nil -> :ok
+      {@session_id_header, _} -> {:error, :unexpected_session_id}
+    end
+  end
+
+  defp terminate_session(conn, conf) do
+    with {:ok, session_id} <- lookup_session_id(conn),
+         channel = make_channel(conn, :noreq, session_id, conf),
+         {:ok, session_pid} <- lookup_session(session_id, channel, conf),
+         :ok <- Mux.delete_session(session_pid) do
       send_resp(conn, 204, "")
     else
       {:error, reason} -> send_error(conn, reason)
     end
   end
 
-  defp with_session_id(conn, session_id) do
+  defp put_resp_session_id(conn, session_id) do
     Plug.Conn.put_resp_header(conn, @session_id_header, session_id)
-  end
-
-  defp fetch_session_id(conn) do
-    case List.keyfind(conn.req_headers, @session_id_header, 0) do
-      nil -> {:error, :missing_session_id}
-      {@session_id_header, session_id} -> {:ok, session_id}
-    end
   end
 
   defp make_channel(conn, req, session_id, conf) do
