@@ -48,7 +48,8 @@ defmodule GenMCP.Utils.CallbackExt do
          match?([_ | _], mod.behaviour_info(:callbacks)) do
       :ok
     else
-      raise ArgumentError, "#{inspect(mod)} is not a behaviour"
+      raise ArgumentError,
+            "#{inspect(mod)} is not a behaviour. `require #{inspect(mod)}` may solve the problem"
     end
   end
 

@@ -707,6 +707,33 @@ defmodule GenMCP.SuiteSessionTest do
     end
   end
 
+  describe "session fetching" do
+    test "delegates to the session controller when set" do
+      expect(SessionControllerMock, :fetch, fn @sid, channel, arg ->
+        assert nil == channel.assigns[:log]
+        assert %{log: [:arg]} == arg
+        {:ok, :some_data}
+      end)
+
+      assert {:ok, :some_data} = Suite.session_fetch(@sid, build_channel(), @default_opts)
+
+      expect(SessionControllerMock, :fetch, fn @sid, _, _ ->
+        {:error, :not_found}
+      end)
+
+      assert {:error, :not_found} = Suite.session_fetch(@sid, build_channel(), @default_opts)
+    end
+
+    test "without session_controller it's not found" do
+      opts = [
+        server_name: "Test Server",
+        server_version: "0"
+      ]
+
+      assert {:error, :not_found} = Suite.session_fetch(@sid, build_channel(), opts)
+    end
+  end
+
   @tag :skip
   # TODO we must implement channel monitoring, and channel tagging
   # this should come with the support for GET requests

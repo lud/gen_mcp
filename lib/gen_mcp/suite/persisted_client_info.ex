@@ -1,7 +1,7 @@
 defmodule GenMCP.Suite.PersistedClientInfo do
   @moduledoc """
   This module represents data that must be persisted in session storage
-  when using a `GenMCP.SessionController` implementation that persists and
+  when using a `GenMCP.Suite.SessionController` implementation that persists and
   restore long lived sessions.
 
   When starting with a restored session, the MCP server will not receive

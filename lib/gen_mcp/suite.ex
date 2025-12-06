@@ -40,7 +40,7 @@ defmodule GenMCP.Suite do
         default: nil,
         doc:
           "This option is shared with the `GenMCP` server implementation." <>
-            " At the session level it is used for the `c:GenMCP.SessionController.fetch/3` callback" <>
+            " At the session level it is used for the `c:GenMCP.Suite.SessionController.fetch/3` callback" <>
             " to restore a session whose process was terminated." <>
             " Other callbacks from that module are handled by the server implementation."
       ]
@@ -60,7 +60,7 @@ defmodule GenMCP.Suite do
 
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
-  alias GenMCP.SessionController
+  alias GenMCP.Suite.SessionController
   alias GenMCP.Suite.Extension
   alias GenMCP.Suite.PersistedClientInfo
   alias GenMCP.Suite.PromptRepo
@@ -140,6 +140,10 @@ defmodule GenMCP.Suite do
 
   @impl true
   def init(session_id, opts) do
+    pre_init(session_id, opts)
+  end
+
+  defp pre_init(session_id, opts) do
     case OptsValidator.validate_take_opts(opts, @init_opts_schema) do
       {:ok, valid_opts, _} -> {:ok, {:__init__, session_id, valid_opts}}
       {:error, reason} -> {:stop, reason}
@@ -430,6 +434,22 @@ defmodule GenMCP.Suite do
   end
 
   @normalized_client_root JSV.build!(PersistedClientInfo)
+
+  @impl true
+  def session_fetch(session_id, channel, opts) do
+    case pre_init(session_id, opts) do
+      {:stop, reason} ->
+        {:stop, reason}
+
+      {:ok, {:__init__, _, opts}} ->
+        {sc_mod, sc_state} = normalize_session_controller(opts)
+
+        callback SessionController, sc_mod.fetch(session_id, channel, sc_state) do
+          {:ok, data} -> {:ok, data}
+          {:error, :not_found} = err -> err
+        end
+    end
+  end
 
   @impl true
   def session_restore(restore_data, channel, {:__init__, session_id, opts} = state) do
@@ -860,7 +880,7 @@ defmodule GenMCP.Suite do
   defp normalize_session_controller(opts) do
     case Keyword.fetch!(opts, :session_controller) do
       {_, _} = t -> t
-      nil -> {GenMCP.SessionController.Impl.NoopSessionController, []}
+      nil -> {GenMCP.Suite.SessionController.Impl.NoopSessionController, []}
       mod -> {mod, []}
     end
   end
@@ -868,7 +888,7 @@ defmodule GenMCP.Suite do
   defp normalized_client_info(
          _capabilities,
          _ready?,
-         GenMCP.SessionController.Impl.NoopSessionController
+         GenMCP.Suite.SessionController.Impl.NoopSessionController
        ) do
     :__skip_normalization__
   end

@@ -1,6 +1,6 @@
-defmodule GenMCP.SessionController.Impl.NoopSessionController do
+defmodule GenMCP.Suite.SessionController.Impl.NoopSessionController do
   @moduledoc false
-  @behaviour GenMCP.SessionController
+  @behaviour GenMCP.Suite.SessionController
 
   require Logger
 

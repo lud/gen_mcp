@@ -1382,6 +1382,10 @@ defmodule GenMCP.StreamableHTTPTest do
     test "delete unknown session is 404" do
       session_id = "#{NodeSync.node_id()}-some-unknown-session"
 
+      expect(ServerMock, :session_fetch, fn ^session_id, %Channel{}, _ ->
+        {:error, :not_found}
+      end)
+
       client(session_id: session_id, url: @mcp_url)
       |> Req.delete!()
       |> expect_status(404)
@@ -1467,7 +1471,7 @@ defmodule GenMCP.StreamableHTTPTest do
     test "request without session calls fetch and returns 404 if not found" do
       sid = random_session_id()
 
-      expect(SessionControllerMock, :fetch, fn ^sid, _channel, :foo ->
+      expect(ServerMock, :session_fetch, fn ^sid, _channel, _ ->
         {:error, :not_found}
       end)
 
@@ -1484,11 +1488,10 @@ defmodule GenMCP.StreamableHTTPTest do
     test "request without session calls fetch and restores session if found" do
       sid = random_session_id()
 
-      expect(SessionControllerMock, :fetch, fn ^sid, _channel, :foo ->
+      ServerMock
+      |> expect(:session_fetch, fn ^sid, _channel, _ ->
         {:ok, :some_restored_session_data}
       end)
-
-      ServerMock
       |> expect(:init, fn _, _ -> {:ok, :initial_server_state} end)
       |> expect(:session_restore, fn :some_restored_session_data,
                                      _channel,
@@ -1513,7 +1516,7 @@ defmodule GenMCP.StreamableHTTPTest do
     test "notification without session calls fetch and returns 404 if not found" do
       sid = random_session_id()
 
-      expect(SessionControllerMock, :fetch, fn ^sid, _channel, :foo ->
+      expect(ServerMock, :session_fetch, fn ^sid, _channel, _ ->
         {:error, :not_found}
       end)
 
@@ -1537,11 +1540,10 @@ defmodule GenMCP.StreamableHTTPTest do
     test "notification without session calls fetch and restores session if found" do
       sid = random_session_id()
 
-      expect(SessionControllerMock, :fetch, fn ^sid, _channel, :foo ->
+      ServerMock
+      |> expect(:session_fetch, fn ^sid, _channel, _ ->
         {:ok, :some_restored_session_data}
       end)
-
-      ServerMock
       |> expect(:init, fn _, _ -> {:ok, :initial_server_state} end)
       |> expect(:session_restore, fn :some_restored_session_data,
                                      _channel,
@@ -1564,11 +1566,9 @@ defmodule GenMCP.StreamableHTTPTest do
     test "delete request calls session_delete" do
       sid = random_session_id()
       # First we need to establish a session or restore it. Let's restore it for simplicity.
-      expect(SessionControllerMock, :fetch, fn ^sid, _channel, :foo ->
-        {:ok, :some_restored_session_data}
-      end)
 
       ServerMock
+      |> expect(:session_fetch, fn ^sid, _channel, _ -> {:ok, :some_restored_session_data} end)
       |> expect(:init, fn _, _ -> {:ok, :initial_server_state} end)
       |> expect(:session_restore, fn :some_restored_session_data,
                                      _channel,
@@ -1582,10 +1582,10 @@ defmodule GenMCP.StreamableHTTPTest do
       |> expect_status(204)
     end
 
-    test "delete unknown session is an error and does not call the server" do
+    test "delete unknown session calls the server raw callback" do
       sid = random_session_id()
 
-      expect(SessionControllerMock, :fetch, fn ^sid, _channel, :foo ->
+      expect(ServerMock, :session_fetch, fn ^sid, _channel, _ ->
         {:error, :not_found}
       end)
 
@@ -1597,11 +1597,10 @@ defmodule GenMCP.StreamableHTTPTest do
     test "restore failure" do
       sid = random_session_id()
 
-      expect(SessionControllerMock, :fetch, fn ^sid, _channel, :foo ->
-        {:ok, :some_session_data}
-      end)
-
       ServerMock
+      |> expect(:session_fetch, fn ^sid, _channel, _ ->
+        {:ok, :some_sesssion_data}
+      end)
       |> expect(:init, fn _, _ -> {:ok, :some_server_state} end)
       |> expect(:session_restore, fn _, _, state ->
         {:stop, :goodbye, state}

@@ -43,4 +43,4 @@ Mox.defmock(GenMCP.Support.AuthorizationMock, for: Plug)
 #
 # -- Session Controller -------------------------------------------------------
 
-Mox.defmock(GenMCP.Support.SessionControllerMock, for: GenMCP.SessionController)
+Mox.defmock(GenMCP.Support.SessionControllerMock, for: GenMCP.Suite.SessionController)

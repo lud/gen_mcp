@@ -14,12 +14,10 @@ defmodule GenMCP.Mux.Session do
 
   import GenMCP.Utils.CallbackExt
 
-  alias GenMCP.SessionController
   alias GenMCP.Utils.OptsValidator
 
   require GenMCP
   require Logger
-  require SessionController
 
   @gen_opts ~w(name timeout debug spawn_opt hibernate_after)a
   @default_session_timeout_minutes to_timeout(minute: 2)
@@ -159,7 +157,7 @@ defmodule GenMCP.Mux.Session do
       session_data: session_data
     })
 
-    callback SessionController,
+    callback GenMCP,
              state.server_mod.session_restore(session_data, channel, state.server_state) do
       {:noreply, server_state} ->
         {:reply, :ok, %{state | server_state: server_state}}

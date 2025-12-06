@@ -6,10 +6,9 @@ defmodule GenMCP.Mux do
   alias GenMCP.Cluster.NodeSync
   alias GenMCP.Mux.Session
   alias GenMCP.Mux.SessionSupervisor
-  alias GenMCP.SessionController
   alias GenMCP.Utils.CallbackExt
 
-  require SessionController
+  require GenMCP
 
   # -- Session Initializing ---------------------------------------------------
 
@@ -69,10 +68,7 @@ defmodule GenMCP.Mux do
   end
 
   defp start_existing_session(session_id, channel, session_opts) do
-    case session_opts[:session_controller] do
-      nil ->
-        {:error, :not_found}
-
+    case session_opts[:server] do
       module when is_atom(module) ->
         do_start_existing_session(module, session_id, channel, [], session_opts)
 
@@ -93,7 +89,7 @@ defmodule GenMCP.Mux do
   end
 
   defp fetch_stored_session(module, session_id, channel, arg) do
-    callback SessionController, module.fetch(session_id, channel, arg) do
+    callback GenMCP, module.session_fetch(session_id, channel, arg) do
       {:ok, session_data} -> {:ok, session_data}
       {:error, :not_found} = err -> err
     end

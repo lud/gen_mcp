@@ -149,12 +149,12 @@ defmodule GenMCP.MixProject do
           GenMCP.Suite.Tool,
           GenMCP.Suite.PromptRepo,
           GenMCP.Suite.ResourceRepo,
-          GenMCP.Suite.Extension
+          GenMCP.Suite.Extension,
+          GenMCP.Suite.SessionController,
+          GenMCP.Suite.PersistedClientInfo
         ],
         Sessions: [
-          ~r/GenMCP\.Mux\..*/,
-          GenMCP.SessionController,
-          GenMCP.Suite.PersistedClientInfo
+          ~r/GenMCP\.Mux\..*/
         ],
         Utilities: [
           GenMCP.RpcError,
