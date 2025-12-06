@@ -46,21 +46,33 @@ defmodule GenMCP.Mux.Session do
 
   def start_link(opts) do
     {gen_opts, opts} = Keyword.split(opts, @gen_opts)
-    GenServer.start_link(__MODULE__, opts, gen_opts)
+
+    case OptsValidator.validate_take_opts(opts, @init_opts_schema) do
+      {:ok, self_opts, server_opts} ->
+        GenServer.start_link(__MODULE__, {self_opts, server_opts}, gen_opts)
+
+      {:error, _} = err ->
+        err
+    end
   end
 
-  IO.warn("todo share nimble validation code")
   IO.warn("todo handle errors")
 
   def fetch_restore_data(session_id, channel, opts) do
     opts = Keyword.put(opts, :session_id, session_id)
-    {:ok, self_opts, server_opts} = OptsValidator.validate_take_opts(opts, @init_opts_schema)
-    server = Keyword.fetch!(self_opts, :server)
-    {server_mod, server_arg} = normalize_server(server, server_opts)
 
-    callback GenMCP, server_mod.session_fetch(session_id, channel, server_arg) do
-      {:ok, session_data} -> {:ok, session_data}
-      {:error, :not_found} = err -> err
+    case OptsValidator.validate_take_opts(opts, @init_opts_schema) do
+      {:ok, self_opts, server_opts} ->
+        server = Keyword.fetch!(self_opts, :server)
+        {server_mod, server_arg} = normalize_server(server, server_opts)
+
+        callback GenMCP, server_mod.session_fetch(session_id, channel, server_arg) do
+          {:ok, session_data} -> {:ok, session_data}
+          {:error, :not_found} = err -> err
+        end
+
+      {:error, _} = err ->
+        err
     end
   end
 
@@ -76,46 +88,42 @@ defmodule GenMCP.Mux.Session do
   end
 
   @impl true
-  def init(opts) do
-    with {:ok, conf} <- init_self(opts),
-         {:ok, server_state} <- init_server(conf) do
-      {:ok,
-       %State{
-         server_mod: conf.server_mod,
-         server_state: server_state,
-         session_id: conf.session_id,
-         session_timeout_ref: start_session_timeout(conf.session_timeout),
-         conf: conf
-       }}
-    else
-      {:stop, _} = stop -> stop
+  def init({self_opts, server_opts}) do
+    conf = init_self({self_opts, server_opts})
+
+    case init_server(conf) do
+      {:ok, server_state} ->
+        {:ok,
+         %State{
+           server_mod: conf.server_mod,
+           server_state: server_state,
+           session_id: conf.session_id,
+           session_timeout_ref: start_session_timeout(conf.session_timeout),
+           conf: conf
+         }}
+
+      {:stop, _} = stop ->
+        stop
     end
   end
 
-  defp init_self(opts) do
-    case OptsValidator.validate_take_opts(opts, @init_opts_schema) do
-      {:ok, self_opts, server_opts} ->
-        session_timeout = Keyword.fetch!(self_opts, :session_timeout)
-        session_id = Keyword.fetch!(opts, :session_id)
-        server = Keyword.fetch!(self_opts, :server)
-        {server_mod, server_arg} = normalize_server(server, server_opts)
+  defp init_self({self_opts, server_opts}) do
+    session_timeout = Keyword.fetch!(self_opts, :session_timeout)
+    session_id = Keyword.fetch!(self_opts, :session_id)
+    server = Keyword.fetch!(self_opts, :server)
+    {server_mod, server_arg} = normalize_server(server, server_opts)
 
-        :telemetry.execute([:gen_mcp, :session, :init], %{}, %{
-          session_id: session_id,
-          server: server_mod
-        })
+    :telemetry.execute([:gen_mcp, :session, :init], %{}, %{
+      session_id: session_id,
+      server: server_mod
+    })
 
-        {:ok,
-         %{
-           session_id: session_id,
-           server_mod: server_mod,
-           server_arg: server_arg,
-           session_timeout: session_timeout
-         }}
-
-      {:error, reason} ->
-        {:stop, reason}
-    end
+    %{
+      session_id: session_id,
+      server_mod: server_mod,
+      server_arg: server_arg,
+      session_timeout: session_timeout
+    }
   end
 
   defp init_server(conf) do
