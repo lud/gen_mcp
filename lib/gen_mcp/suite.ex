@@ -60,11 +60,11 @@ defmodule GenMCP.Suite do
 
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
-  alias GenMCP.Suite.SessionController
   alias GenMCP.Suite.Extension
   alias GenMCP.Suite.PersistedClientInfo
   alias GenMCP.Suite.PromptRepo
   alias GenMCP.Suite.ResourceRepo
+  alias GenMCP.Suite.SessionController
   alias GenMCP.Suite.Tool
   alias GenMCP.Utils.OptsValidator
 
