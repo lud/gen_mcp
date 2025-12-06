@@ -60,6 +60,7 @@ defmodule GenMCP.Suite do
 
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
+  alias GenMCP.SessionController
   alias GenMCP.Suite.Extension
   alias GenMCP.Suite.PersistedClientInfo
   alias GenMCP.Suite.PromptRepo
@@ -424,13 +425,14 @@ defmodule GenMCP.Suite do
   def session_restore(restore_data, channel, {:__init__, session_id, opts} = state) do
     {sc_mod, sc_state} = normalize_session_controller(opts)
 
-    case sc_mod.restore(restore_data, channel, sc_state) do
+    callback SessionController, sc_mod.restore(restore_data, channel, sc_state) do
       {:ok, normalized_client_info, sc_channel, sc_state} when is_map(normalized_client_info) ->
         case JSV.validate(normalized_client_info, @normalized_client_root) do
           {:ok, pci} ->
-            case initialize_from_restore(session_id, pci, sc_mod, sc_channel, sc_state, opts) do
-              {:ok, state} -> {:noreply, state}
-            end
+            {:ok, state} =
+              initialize_from_restore(session_id, pci, sc_mod, sc_channel, sc_state, opts)
+
+            {:noreply, state}
 
           {:error, %JSV.ValidationError{} = e} ->
             {:stop, {:invalid_restored_client_info, e}, state}
@@ -438,9 +440,6 @@ defmodule GenMCP.Suite do
 
       {:stop, reason} ->
         {:stop, reason, state}
-
-      other ->
-        exit({:bad_return_value, other})
     end
   end
 

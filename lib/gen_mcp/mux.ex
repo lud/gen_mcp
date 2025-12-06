@@ -1,9 +1,12 @@
 defmodule GenMCP.Mux do
   @moduledoc false
 
+  import GenMCP.Utils.CallbackExt
+
   alias GenMCP.Cluster.NodeSync
   alias GenMCP.Mux.Session
   alias GenMCP.Mux.SessionSupervisor
+  alias GenMCP.SessionController
   alias GenMCP.Utils.CallbackExt
 
   # -- Session Initializing ---------------------------------------------------
@@ -63,34 +66,34 @@ defmodule GenMCP.Mux do
     end
   end
 
-  IO.warn("todo refactor using `with`", [])
-
   defp start_existing_session(session_id, channel, session_opts) do
     case session_opts[:session_controller] do
-      nil -> {:error, :not_found}
-      module when is_atom(module) -> module.fetch(session_id, channel, [])
-      {module, arg} when is_atom(module) -> module.fetch(session_id, channel, arg)
+      nil ->
+        {:error, :not_found}
+
+      module when is_atom(module) ->
+        do_start_existing_session(module, session_id, channel, [], session_opts)
+
+      {module, arg} when is_atom(module) ->
+        do_start_existing_session(module, session_id, channel, arg, session_opts)
     end
-    |> case do
-      {:ok, session_data} -> {:ok, session_data}
+  end
+
+  def do_start_existing_session(module, session_id, channel, arg, session_opts) do
+    with {:ok, session_data} <- fetch_stored_session(module, session_id, channel, arg),
+         {:ok, pid} <- start_as(session_id, session_opts),
+         :ok <- restore_session(pid, session_data, channel) do
+      {:ok, pid}
+    else
       {:error, :not_found} -> {:error, {:session_not_found, session_id}}
-      other -> exit({:bad_return_value, other})
+      {:error, _} = err -> err
     end
-    |> case do
-      {:ok, session_data} ->
-        case start_as(session_id, session_opts) do
-          {:ok, pid} ->
-            case restore_session(pid, session_data, channel) do
-              :ok -> {:ok, pid}
-              {:error, _} = err -> err
-            end
+  end
 
-          {:error, _} = err ->
-            err
-        end
-
-      {:error, _} = err ->
-        err
+  defp fetch_stored_session(module, session_id, channel, arg) do
+    callback SessionController, module.fetch(session_id, channel, arg) do
+      {:ok, session_data} -> {:ok, session_data}
+      {:error, :not_found} = err -> err
     end
   end
 
