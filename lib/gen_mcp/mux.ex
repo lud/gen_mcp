@@ -9,6 +9,8 @@ defmodule GenMCP.Mux do
   alias GenMCP.SessionController
   alias GenMCP.Utils.CallbackExt
 
+  require SessionController
+
   # -- Session Initializing ---------------------------------------------------
 
   def start_session(opts) do

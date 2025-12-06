@@ -202,7 +202,7 @@ defmodule GenMCP.Suite.ResourceRepoTest do
       ResourceRepo.list_resources(repo, nil, channel)
     end
 
-    test "exits with bad_return_value when list callback returns invalid format" do
+    test "raise CallbackReturnError when list callback returns invalid format" do
       ResourceRepoMock
       |> stub(:prefix, fn _ -> "file:///" end)
       |> expect(:list, fn nil, _channel, :arg ->
@@ -289,7 +289,7 @@ defmodule GenMCP.Suite.ResourceRepoTest do
       assert {:ok, ^result} = ResourceRepo.read_resource(repo, "file:///test.txt", channel)
     end
 
-    test "exits with bad_return_value when read callback returns invalid format" do
+    test "raise CallbackReturnError when read callback returns invalid format" do
       ResourceRepoMock
       |> stub(:prefix, fn _ -> "file:///" end)
       |> expect(:read, fn "file:///test.txt", _channel, :arg ->
@@ -434,7 +434,7 @@ defmodule GenMCP.Suite.ResourceRepoTest do
       assert {:ok, ^result} = ResourceRepo.read_resource(repo, "file:///data.txt", channel)
     end
 
-    test "exits with bad_return_value when parse_uri returns invalid format" do
+    test "raise CallbackReturnError when parse_uri returns invalid format" do
       ResourceRepoMockTplNoSkip
       |> stub(:prefix, fn _ -> "file:///" end)
       |> stub(:template, fn _ ->

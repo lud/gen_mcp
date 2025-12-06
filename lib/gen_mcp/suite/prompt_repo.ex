@@ -42,7 +42,6 @@ defmodule GenMCP.Suite.PromptRepo do
 
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
-  alias GenMCP.Suite.PromptRepo
 
   @type prompt_repo :: module | {module, arg} | prompt_repo_descriptor
   @type prompt_repo_descriptor :: %{
