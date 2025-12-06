@@ -1,14 +1,10 @@
 defmodule GenMCP.Mux do
   @moduledoc false
 
-  import GenMCP.Utils.CallbackExt
-
   alias GenMCP.Cluster.NodeSync
   alias GenMCP.Mux.Session
   alias GenMCP.Mux.SessionSupervisor
   alias GenMCP.Utils.CallbackExt
-
-  require GenMCP
 
   # -- Session Initializing ---------------------------------------------------
 
@@ -37,6 +33,9 @@ defmodule GenMCP.Mux do
         {:error, reason}
     end
   end
+
+  # TODO for the remote mechanism we should send the router path instead of the
+  # full options, and let the remote node fetch the options from the router
 
   def ensure_started(session_id, channel, opts) when is_binary(session_id) do
     case NodeSync.node_of(session_id) do
@@ -67,31 +66,14 @@ defmodule GenMCP.Mux do
     end
   end
 
-  defp start_existing_session(session_id, channel, session_opts) do
-    case session_opts[:server] do
-      module when is_atom(module) ->
-        do_start_existing_session(module, session_id, channel, [], session_opts)
-
-      {module, arg} when is_atom(module) ->
-        do_start_existing_session(module, session_id, channel, arg, session_opts)
-    end
-  end
-
-  def do_start_existing_session(module, session_id, channel, arg, session_opts) do
-    with {:ok, session_data} <- fetch_stored_session(module, session_id, channel, arg),
-         {:ok, pid} <- start_as(session_id, session_opts),
+  defp start_existing_session(session_id, channel, opts) do
+    with {:ok, session_data} <- Session.fetch_restore_data(session_id, channel, opts),
+         {:ok, pid} <- start_as(session_id, opts),
          :ok <- restore_session(pid, session_data, channel) do
       {:ok, pid}
     else
       {:error, :not_found} -> {:error, {:session_not_found, session_id}}
       {:error, _} = err -> err
-    end
-  end
-
-  defp fetch_stored_session(module, session_id, channel, arg) do
-    callback GenMCP, module.session_fetch(session_id, channel, arg) do
-      {:ok, session_data} -> {:ok, session_data}
-      {:error, :not_found} = err -> err
     end
   end
 

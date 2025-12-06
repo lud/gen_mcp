@@ -49,6 +49,21 @@ defmodule GenMCP.Mux.Session do
     GenServer.start_link(__MODULE__, opts, gen_opts)
   end
 
+  IO.warn("todo share nimble validation code")
+  IO.warn("todo handle errors")
+
+  def fetch_restore_data(session_id, channel, opts) do
+    opts = Keyword.put(opts, :session_id, session_id)
+    {:ok, self_opts, server_opts} = OptsValidator.validate_take_opts(opts, @init_opts_schema)
+    server = Keyword.fetch!(self_opts, :server)
+    {server_mod, server_arg} = normalize_server(server, server_opts)
+
+    callback GenMCP, server_mod.session_fetch(session_id, channel, server_arg) do
+      {:ok, session_data} -> {:ok, session_data}
+      {:error, :not_found} = err -> err
+    end
+  end
+
   @doc false
   def init_opts_schema do
     @init_opts_schema
@@ -80,9 +95,9 @@ defmodule GenMCP.Mux.Session do
   defp init_self(opts) do
     case OptsValidator.validate_take_opts(opts, @init_opts_schema) do
       {:ok, self_opts, server_opts} ->
-        server = Keyword.fetch!(self_opts, :server)
         session_timeout = Keyword.fetch!(self_opts, :session_timeout)
         session_id = Keyword.fetch!(opts, :session_id)
+        server = Keyword.fetch!(self_opts, :server)
         {server_mod, server_arg} = normalize_server(server, server_opts)
 
         :telemetry.execute([:gen_mcp, :session, :init], %{}, %{

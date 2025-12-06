@@ -29,8 +29,11 @@ config :phoenix, :logger, false
 
 config :phoenix,
        :plug_init_mode,
-       (case config_env() do
-          # this is for mocks
-          :test -> :runtime
-          _ -> :compile
-        end)
+       dbg(
+         case config_env() do
+           :test -> :runtime
+           _ -> :compile
+         end
+       )
+
+# this is for mocks
