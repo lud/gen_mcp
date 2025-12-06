@@ -57,6 +57,13 @@ defmodule GenMCP.SuiteSessionTest do
     }
   end
 
+  defp init_notif do
+    %MCP.InitializedNotification{
+      method: "notifications/initialized",
+      params: %{}
+    }
+  end
+
   # ---------------------------------------------------------------------------
   # Regular initialization
   # ---------------------------------------------------------------------------
@@ -117,25 +124,40 @@ defmodule GenMCP.SuiteSessionTest do
       assert {:reply, {:result, _}, state} =
                Suite.handle_request(init_req(), build_channel(), state)
 
+      expect(SessionControllerMock, :update, fn @sid, norm_client, channel, session_state ->
+        assert %{"client_capabilities" => %{}, "client_initialized" => true} = norm_client
+        assert [:called_create] == channel.assigns[:log]
+        assert [:called_create, :arg] == session_state.log
+
+        {:ok, assign_event(channel, :called_update), data_event(session_state, :called_update)}
+      end)
+
+      assert {:noreply, state} = Suite.handle_notification(init_notif(), state)
+
+      assert true == state.client_initialized
+
       state
     end
 
     test "extension mock receives updated channel" do
+      # Extensions init happens before notifications/initialized, we will not
+      # have the updated capabilities
+
       ExtensionMock
-      |> expect(:tools, fn channel, :foo ->
+      |> expect(:tools, fn channel, _ext_arg ->
         assert [:called_create] = channel.assigns.log
         []
       end)
-      |> expect(:resources, fn channel, :foo ->
+      |> expect(:resources, fn channel, _ext_arg ->
         assert [:called_create] = channel.assigns.log
         []
       end)
-      |> expect(:prompts, fn channel, :foo ->
+      |> expect(:prompts, fn channel, _ext_arg ->
         assert [:called_create] = channel.assigns.log
         []
       end)
 
-      state = init_initialize_create(extensions: [{ExtensionMock, :foo}])
+      state = init_initialize_create(extensions: [ExtensionMock])
 
       assert {:reply, {:result, _}, _} =
                Suite.handle_request(%MCP.ListToolsRequest{}, build_channel(), state)
@@ -155,7 +177,7 @@ defmodule GenMCP.SuiteSessionTest do
       state = init_initialize_create(tools: [ToolMock])
 
       expect(ToolMock, :call, fn _req, channel, _tool_arg ->
-        assert [:called_create] = channel.assigns.log
+        assert [:called_update, :called_create] = channel.assigns.log
         {:result, MCP.call_tool_result(text: "ok"), channel}
       end)
 
@@ -177,7 +199,7 @@ defmodule GenMCP.SuiteSessionTest do
       state = init_initialize_create(resources: [ResourceRepoMock])
 
       expect(ResourceRepoMock, :list, fn _cursor, channel, _repo_arg ->
-        assert [:called_create] = channel.assigns.log
+        assert [:called_update, :called_create] = channel.assigns.log
         {[], nil}
       end)
 
@@ -190,7 +212,7 @@ defmodule GenMCP.SuiteSessionTest do
       state = init_initialize_create(prompts: [PromptRepoMock])
 
       expect(PromptRepoMock, :list, fn _cursor, channel, _repo_arg ->
-        assert [:called_create] = channel.assigns.log
+        assert [:called_update, :called_create] = channel.assigns.log
         {[], nil}
       end)
 
@@ -202,8 +224,8 @@ defmodule GenMCP.SuiteSessionTest do
       state = init_initialize_create()
 
       expect(SessionControllerMock, :handle_info, fn :custom_info, channel, session_data ->
-        assert [:called_create] = channel.assigns.log
-        assert [:called_create, :arg] = session_data.log
+        assert [:called_update, :called_create] = channel.assigns.log
+        assert [:called_update, :called_create, :arg] == session_data.log
         {:noreply, channel, session_data}
       end)
 
@@ -214,8 +236,8 @@ defmodule GenMCP.SuiteSessionTest do
       state = init_initialize_create()
 
       expect(SessionControllerMock, :handle_info, fn :custom_info, channel, session_data ->
-        assert [:called_create] = channel.assigns.log
-        assert [:called_create, :arg] = session_data.log
+        assert [:called_update, :called_create] = channel.assigns.log
+        assert [:called_update, :called_create, :arg] == session_data.log
         {:noreply, data_event(session_data, :called_info)}
       end)
 
@@ -224,8 +246,8 @@ defmodule GenMCP.SuiteSessionTest do
       # In that case the cannel is not updated
 
       expect(SessionControllerMock, :handle_info, fn :custom_info_2, channel, session_data ->
-        assert [:called_create] = channel.assigns.log
-        assert [:called_info, :called_create, :arg] = session_data.log
+        assert [:called_update, :called_create] = channel.assigns.log
+        assert [:called_info, :called_update, :called_create, :arg] == session_data.log
         {:noreply, session_data}
       end)
 
@@ -242,8 +264,8 @@ defmodule GenMCP.SuiteSessionTest do
       state = init_initialize_create(opts)
 
       expect(SessionControllerMock, :handle_info, fn ^info_msg, channel, session_data ->
-        assert [:called_create] = channel.assigns.log
-        assert [:called_create, :arg] = session_data.log
+        assert [:called_update, :called_create] = channel.assigns.log
+        assert [:called_update, :called_create, :arg] == session_data.log
 
         {:noreply, assign_event(channel, {:called_info, info_msg}),
          data_event(session_data, {:called_info, info_msg})}
@@ -262,7 +284,7 @@ defmodule GenMCP.SuiteSessionTest do
       state = init_initialize_create_and_handle_info(:some_info, tools: [{ToolMock, :test_tool}])
 
       expect(ToolMock, :call, fn _req, channel, _tool_arg ->
-        assert [{:called_info, :some_info}, :called_create] = channel.assigns.log
+        assert [{:called_info, :some_info}, :called_update, :called_create] = channel.assigns.log
 
         {:result, MCP.call_tool_result(text: "ok"), channel}
       end)
@@ -283,8 +305,10 @@ defmodule GenMCP.SuiteSessionTest do
       state = init_initialize_create_and_handle_info(:first_info)
 
       expect(SessionControllerMock, :handle_info, fn :second_info, channel, session_data ->
-        assert [{:called_info, :first_info}, :called_create] = channel.assigns.log
-        assert [{:called_info, :first_info}, :called_create, :arg] == session_data.log
+        assert [{:called_info, :first_info}, :called_update, :called_create] = channel.assigns.log
+
+        assert [{:called_info, :first_info}, :called_update, :called_create, :arg] ==
+                 session_data.log
 
         {:noreply, assign_event(channel, :second_info), data_event(session_data, :second_info)}
       end)
@@ -294,10 +318,21 @@ defmodule GenMCP.SuiteSessionTest do
       # Another handle info to verify
 
       expect(SessionControllerMock, :handle_info, fn :second_info, channel, session_data ->
-        assert [:second_info, {:called_info, :first_info}, :called_create] =
+        assert [
+                 :second_info,
+                 {:called_info, :first_info},
+                 :called_update,
+                 :called_create
+               ] =
                  channel.assigns.log
 
-        assert [:second_info, {:called_info, :first_info}, :called_create, :arg] ==
+        assert [
+                 :second_info,
+                 {:called_info, :first_info},
+                 :called_update,
+                 :called_create,
+                 :arg
+               ] ==
                  session_data.log
 
         {:noreply, assign_event(channel, :second_info), data_event(session_data, :second_info)}
@@ -604,6 +639,29 @@ defmodule GenMCP.SuiteSessionTest do
                Suite.handle_request(init_req, build_channel(), state)
     end
 
+    test "update callback returning stop tuple stops the session" do
+      expect(SessionControllerMock, :create, fn @sid, norm_client, channel, arg ->
+        assert %{"client_capabilities" => _, "client_initialized" => false} = norm_client
+        assert nil == channel.assigns[:log]
+        assert %{log: [:arg]} == arg
+        {:ok, assign_event(channel, :called_create), data_event(arg, :called_create)}
+      end)
+
+      expect(SessionControllerMock, :update, fn @sid, norm_client, channel, session_state ->
+        assert %{"client_capabilities" => _, "client_initialized" => true} = norm_client
+        assert [:called_create] == channel.assigns[:log]
+        assert [:called_create, :arg] == session_state.log
+        {:stop, :some_custom_error}
+      end)
+
+      state = init_server()
+
+      assert {:reply, _, state} =
+               Suite.handle_request(init_req(), build_channel(), state)
+
+      assert {:stop, :some_custom_error} = Suite.handle_notification(init_notif(), state)
+    end
+
     test "restore callback returning stop tuple stops the session" do
       expect(SessionControllerMock, :restore, fn restore_data, channel, arg ->
         assert :some_restore_data == restore_data
@@ -622,8 +680,8 @@ defmodule GenMCP.SuiteSessionTest do
       state = init_initialize_create()
 
       expect(SessionControllerMock, :handle_info, fn :some_message, channel, session_data ->
-        assert [:called_create] = channel.assigns.log
-        assert [:called_create, :arg] == session_data.log
+        assert [:called_update, :called_create] = channel.assigns.log
+        assert [:called_update, :called_create, :arg] == session_data.log
         {:stop, {:shutdown, :handle_info_failed}}
       end)
 
@@ -639,7 +697,7 @@ defmodule GenMCP.SuiteSessionTest do
   describe "session delete" do
     test "delete callback is called via Suite.session_delete" do
       expect(SessionControllerMock, :delete, fn @sid, session_data ->
-        assert [:called_create, :arg] = session_data.log
+        assert [:called_update, :called_create, :arg] == session_data.log
         :ok
       end)
 

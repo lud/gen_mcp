@@ -150,16 +150,6 @@ defmodule GenMCP.Mux.Session do
     end
   end
 
-  IO.warn(
-    """
-    todo test restore error, for now streamable http only handles session not found error
-
-    we should probably return all session restore errors as 404 anyway, otherwise
-    the client may retry the error forever
-    """,
-    []
-  )
-
   def handle_call({:"$gen_mcp", :restore_session, session_data, channel}, _from, state) do
     state = refresh_session_timeout(state)
 

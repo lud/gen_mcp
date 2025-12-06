@@ -52,16 +52,15 @@ defmodule GenMCP.SessionController do
               {:ok, channel, session_state}
               | {:stop, reason :: term()}
 
-  IO.warn("todo update session when initialized notification is received", [])
-  # @doc """
-  # Called by `GenMCP.Suite` or custom implementations when a session is
-  # initialized and before the session timeout time is reached.
+  @doc """
+  Called by `GenMCP.Suite` or custom implementations when a session is
+  initialized and before the session timeout time is reached.
 
-  # Returns the updated channel with any default assigns, and the session state.
-  # """
-  # @callback update(session_id, PersistedClientInfo.normalized(), channel, arg) ::
-  #             {:ok, channel, session_state}
-  #             | {:stop, reason :: term()}
+  Returns the updated channel with any default assigns, and the session state.
+  """
+  @callback update(session_id, PersistedClientInfo.normalized(), channel, arg) ::
+              {:ok, channel, session_state}
+              | {:stop, reason :: term()}
 
   @doc """
   Called by `GenMCP.Suite` or custom implementations when a session is restored

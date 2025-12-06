@@ -352,14 +352,22 @@ defmodule GenMCP.Suite do
     {:reply, {:error, :unsupported_request, req}, state}
   end
 
-  IO.warn(
-    "we must call the session persistence once again to store the fact that the client is ready",
-    []
-  )
-
   @impl true
   def handle_notification(%MCP.InitializedNotification{}, state) do
-    {:noreply, %{state | client_initialized: true}}
+    %{sc_mod: sc_mod, sc_channel: sc_channel, sc_state: sc_state} = state
+
+    normalized_client_info =
+      normalized_client_info(state.client_capabilities, _ready? = true, sc_mod)
+
+    callback SessionController,
+             sc_mod.update(state.session_id, normalized_client_info, sc_channel, sc_state) do
+      {:ok, %Channel{} = sc_channel, sc_state} ->
+        {:noreply,
+         %{state | client_initialized: true, sc_channel: sc_channel, sc_state: sc_state}}
+
+      {:stop, _} = stop ->
+        stop
+    end
   end
 
   def handle_notification(%MCP.CancelledNotification{}, state) do
@@ -526,14 +534,8 @@ defmodule GenMCP.Suite do
 
     {sc_mod, sc_state} = normalize_session_controller(opts)
 
-    # TODO(optim): When using the NoopServer there is not need to normalize as
-    # it's going to be ignored. We should delegate to a function that will skip
-    # normalization if it detects the noop server.
     normalized_client_info =
-      JSV.Normalizer.normalize(%GenMCP.Suite.PersistedClientInfo{
-        client_capabilities: client_capabilities,
-        client_initialized: client_initialized?
-      })
+      normalized_client_info(client_capabilities, client_initialized?, sc_mod)
 
     callback SessionController,
              sc_mod.create(session_id, normalized_client_info, channel, sc_state) do
@@ -861,5 +863,20 @@ defmodule GenMCP.Suite do
       nil -> {GenMCP.SessionController.Impl.NoopSessionController, []}
       mod -> {mod, []}
     end
+  end
+
+  defp normalized_client_info(
+         _capabilities,
+         _ready?,
+         GenMCP.SessionController.Impl.NoopSessionController
+       ) do
+    :__skip_normalization__
+  end
+
+  defp normalized_client_info(capabilities, ready?, _) do
+    JSV.Normalizer.normalize(%GenMCP.Suite.PersistedClientInfo{
+      client_capabilities: capabilities,
+      client_initialized: ready?
+    })
   end
 end
