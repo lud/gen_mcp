@@ -20,7 +20,6 @@ defmodule GenMCP.SuiteIntegrationTest do
 
   @mcp_url "/mcp/real"
 
-  @tag :skip
   test "basic tool listing/calling scenario" do
     # Initialize the server
     init_resp =
@@ -36,6 +35,7 @@ defmodule GenMCP.SuiteIntegrationTest do
         }
       })
       |> expect_status(200)
+      |> dbg()
 
     session_id = expect_session_header(init_resp)
 
@@ -61,6 +61,7 @@ defmodule GenMCP.SuiteIntegrationTest do
                params: %{}
              })
              |> expect_status(202)
+             |> dbg()
              |> body()
 
     # List tools
@@ -73,6 +74,7 @@ defmodule GenMCP.SuiteIntegrationTest do
         params: %{}
       })
       |> expect_status(200)
+      |> dbg()
 
     assert %{
              "jsonrpc" => "2.0",
@@ -109,6 +111,9 @@ defmodule GenMCP.SuiteIntegrationTest do
         }
       })
       |> expect_status(200)
+      |> dbg()
+
+    expected_hash = to_string(:erlang.phash2("test string", 1000))
 
     assert %{
              "jsonrpc" => "2.0",
@@ -117,23 +122,15 @@ defmodule GenMCP.SuiteIntegrationTest do
                "content" => [
                  %{
                    "type" => "text",
-                   "text" => hash_result
+                   "text" => ^expected_hash
                  }
                ]
              }
            } = body(call_tool_resp)
 
     # Verify the hash result is a valid integer string
-    assert String.to_integer(hash_result) >= 0
-    assert String.to_integer(hash_result) < 1000
-
-    # Verify it matches the expected hash
-    expected_hash = :erlang.phash2("test string", 1000)
-    assert String.to_integer(hash_result) == expected_hash
 
     # Delete the session
-    client(session_id: session_id, url: @mcp_url)
-    |> Req.delete!()
-    |> expect_status(204)
+    client(session_id: session_id, url: @mcp_url) |> Req.delete!() |> expect_status(204) |> dbg()
   end
 end

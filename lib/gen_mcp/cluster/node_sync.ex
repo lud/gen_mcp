@@ -26,7 +26,7 @@ defmodule GenMCP.Cluster.NodeSync do
   end
 
   def gen_session_id do
-    node_id() <> "-" <> Base.url_encode64(:crypto.strong_rand_bytes(18))
+    node_id() <> "-" <> Base.url_encode64(:crypto.strong_rand_bytes(36))
   end
 
   def node_of(session_id)

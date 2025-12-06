@@ -76,10 +76,24 @@ defmodule GenMCP.Suite.SessionController.DevSessionStore do
   #   {:noreply, session_state}
   # end
 
-  # @impl true
-  # def delete(_session_id, _session_state) do
-  #   :ok
-  # end
+  @impl true
+  def delete(session_id, opts) do
+    session_path = session_path(session_id, opts)
+
+    :ok =
+      case File.rm(session_path) do
+        :ok ->
+          :ok
+
+        {:error, :enoent} ->
+          :ok
+
+        {:error, reason} ->
+          Logger.error(
+            "Could not delete persisted session in #{session_path}: #{inspect(reason)}"
+          )
+      end
+  end
 
   defp cache_dir(state_or_opts) do
     case state_or_opts[:cache_dir] do
@@ -89,7 +103,7 @@ defmodule GenMCP.Suite.SessionController.DevSessionStore do
   end
 
   defp write_file(session_path, file_contents) do
-    case session_path |> dbg() |> File.write(file_contents) do
+    case File.write(session_path, file_contents) do
       {:error, :enoent} ->
         :ok = File.mkdir_p!(Path.dirname(session_path))
         :ok = File.write!(session_path, file_contents)
@@ -102,8 +116,8 @@ defmodule GenMCP.Suite.SessionController.DevSessionStore do
     end
   end
 
-  defp session_path(session_id, opts) do
-    Path.join(cache_dir(opts), "#{session_id}.s")
+  defp session_path(session_id, opts) when is_binary(session_id) do
+    Path.join(cache_dir(opts), session_id)
   end
 
   defp encode_session(client_info) do
