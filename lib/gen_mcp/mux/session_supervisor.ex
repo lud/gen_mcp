@@ -15,6 +15,9 @@ defmodule GenMCP.Mux.SessionSupervisor do
 
   @impl true
   def init(_init_arg) do
+    # Registering a local name for debug purposes
+    Process.register(self(), __MODULE__)
+
     DynamicSupervisor.init(strategy: :one_for_one)
   end
 end

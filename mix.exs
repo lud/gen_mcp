@@ -151,7 +151,8 @@ defmodule GenMCP.MixProject do
           GenMCP.Suite.ResourceRepo,
           GenMCP.Suite.Extension,
           GenMCP.Suite.SessionController,
-          GenMCP.Suite.PersistedClientInfo
+          GenMCP.Suite.PersistedClientInfo,
+          ~r{^GenMCP\.Suite\.SessionController\..*}
         ],
         Sessions: [
           ~r/GenMCP\.Mux\..*/

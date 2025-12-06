@@ -38,11 +38,7 @@ defmodule GenMCP.Suite do
       session_controller: [
         type: {:or, [:atom, :mod_arg]},
         default: nil,
-        doc:
-          "This option is shared with the `GenMCP` server implementation." <>
-            " At the session level it is used for the `c:GenMCP.Suite.SessionController.fetch/3` callback" <>
-            " to restore a session whose process was terminated." <>
-            " Other callbacks from that module are handled by the server implementation."
+        doc: "A `GenMCP.Suite.SessionController` implementation"
       ]
     )
 
@@ -880,16 +876,12 @@ defmodule GenMCP.Suite do
   defp normalize_session_controller(opts) do
     case Keyword.fetch!(opts, :session_controller) do
       {_, _} = t -> t
-      nil -> {GenMCP.Suite.SessionController.Impl.NoopSessionController, []}
+      nil -> {GenMCP.Suite.SessionController.Noop, []}
       mod -> {mod, []}
     end
   end
 
-  defp normalized_client_info(
-         _capabilities,
-         _ready?,
-         GenMCP.Suite.SessionController.Impl.NoopSessionController
-       ) do
+  defp normalized_client_info(_capabilities, _ready?, GenMCP.Suite.SessionController.Noop) do
     :__skip_normalization__
   end
 

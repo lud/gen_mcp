@@ -1,8 +1,6 @@
-defmodule GenMCP.Suite.SessionController.Impl.NoopSessionController do
+defmodule GenMCP.Suite.SessionController.Noop do
   @moduledoc false
   @behaviour GenMCP.Suite.SessionController
-
-  require Logger
 
   @impl true
   def fetch(_session_id, _channel, _arg) do
