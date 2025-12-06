@@ -6,6 +6,7 @@ defmodule GenMCP.Utils.CallbackExt do
   # args, only literals or variables
 
   defmacro callback(behaviour, {:dbg, _, [call]}, [{:do, clauses}]) do
+    :ok = check_behaviour(behaviour, __CALLER__)
     {mod, fun, args} = Macro.decompose_call(call)
 
     quote do
@@ -17,6 +18,7 @@ defmodule GenMCP.Utils.CallbackExt do
   end
 
   defmacro callback(behaviour, call, [{:do, clauses}]) do
+    :ok = check_behaviour(behaviour, __CALLER__)
     {mod, fun, args} = Macro.decompose_call(call)
 
     quote do
@@ -34,6 +36,28 @@ defmodule GenMCP.Utils.CallbackExt do
           behaviour: unquote(behaviour),
           return_value: other
     end
+  end
+
+  defp check_behaviour(mod, %{module: mod}) when is_atom(mod) do
+    :ok
+  end
+
+  defp check_behaviour(mod, _env) when is_atom(mod) do
+    if {:module, mod} == Code.ensure_loaded(mod) and
+         function_exported?(mod, :behaviour_info, 1) and
+         match?([_ | _], mod.behaviour_info(:callbacks)) do
+      :ok
+    else
+      raise ArgumentError, "#{inspect(mod)} is not a behaviour"
+    end
+  end
+
+  defp check_behaviour({:__aliases__, _, _} = ast, env) do
+    check_behaviour(Macro.expand_literals(ast, env), env)
+  end
+
+  defp check_behaviour({:__MODULE__, _, _} = ast, env) do
+    check_behaviour(Macro.expand_literals(ast, env), env)
   end
 
   # adds a tag inside a result tuple,

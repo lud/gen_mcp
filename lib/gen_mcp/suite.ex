@@ -533,7 +533,8 @@ defmodule GenMCP.Suite do
         client_initialized: client_initialized?
       })
 
-    case sc_mod.create(session_id, normalized_client_info, channel, sc_state) do
+    callback SessionController,
+             sc_mod.create(session_id, normalized_client_info, channel, sc_state) do
       {:ok, %Channel{} = sc_channel, sc_state} ->
         initialize_from(
           %{
@@ -549,9 +550,6 @@ defmodule GenMCP.Suite do
 
       {:stop, _} = stop ->
         stop
-
-      other ->
-        exit({:bad_return_value, other})
     end
   end
 

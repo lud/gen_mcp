@@ -34,6 +34,8 @@ defmodule GenMCP.Suite.ResourceRepo do
       end
   """
 
+  import GenMCP.Utils.CallbackExt
+
   alias GenMCP.MCP
   alias GenMCP.Mux.Channel
 
@@ -208,9 +210,8 @@ defmodule GenMCP.Suite.ResourceRepo do
   @spec list_resources(resource_repo_descriptor, String.t() | nil, Channel.t()) ::
           {[resource_item], next_cursor :: term | nil}
   def list_resources(repo, cursor, channel) do
-    case repo.mod.list(cursor, channel, repo.arg) do
+    callback __MODULE__, repo.mod.list(cursor, channel, repo.arg) do
       {list, cursor} when is_list(list) -> {list, cursor}
-      other -> exit({:bad_return_value, other})
     end
   end
 
@@ -232,32 +233,32 @@ defmodule GenMCP.Suite.ResourceRepo do
           | {:error, {:resource_not_found, String.t()} | String.t()}
   def read_resource(%{template: template} = repo, uri, channel) when is_map(template) do
     with {:ok, uri_or_args} <- parse_uri(repo, uri),
-         {:ok, result} <- do_read(repo, uri_or_args, channel) do
+         {:ok, result} <- do_read(repo, uri, uri_or_args, channel) do
       {:ok, result}
     else
-      {:error, :not_found} -> {:error, {:resource_not_found, uri}}
-      {:error, message} when is_binary(message) -> {:error, message}
-      other -> exit({:bad_return_value, other})
+      {:error, _} = err -> err
     end
   end
 
   def read_resource(repo, uri, channel) when is_binary(uri) do
     # No template, pass URI directly to read callback
-    case do_read(repo, uri, channel) do
-      {:ok, %MCP.ReadResourceResult{}} = ok -> ok
-      {:error, :not_found} -> {:error, {:resource_not_found, uri}}
-      {:error, message} when is_binary(message) -> {:error, message}
-      other -> exit({:bad_return_value, other})
-    end
+    do_read(repo, uri, uri, channel)
   end
 
-  defp do_read(repo, uri_or_args, channel) do
-    repo.mod.read(uri_or_args, channel, repo.arg)
+  defp do_read(repo, original_uri, uri_or_args, channel) do
+    callback __MODULE__, repo.mod.read(uri_or_args, channel, repo.arg) do
+      {:ok, %MCP.ReadResourceResult{}} = ok -> ok
+      {:error, :not_found} -> {:error, {:resource_not_found, original_uri}}
+      {:error, message} when is_binary(message) -> {:error, message}
+    end
   end
 
   defp parse_uri(repo, uri) do
     if function_exported?(repo.mod, :parse_uri, 2) do
-      repo.mod.parse_uri(repo.arg, uri)
+      callback __MODULE__, repo.mod.parse_uri(uri, repo.arg) do
+        {:ok, v} -> {:ok, v}
+        {:error, _} = err -> err
+      end
     else
       match_uri_template(repo.template.uriTemplate, uri)
     end

@@ -213,8 +213,11 @@ defmodule GenMCP.Suite.ResourceRepoTest do
       repo = ResourceRepo.expand({ResourceRepoMock, :arg})
       channel = build_channel()
 
-      assert catch_exit(ResourceRepo.list_resources(repo, nil, channel)) ==
-               {:bad_return_value, :invalid_return}
+      assert %GenMCP.CallbackReturnError{
+               behaviour: ResourceRepo,
+               mfa: {ResourceRepoMock, :list, _},
+               return_value: :invalid_return
+             } = catch_error(ResourceRepo.list_resources(repo, nil, channel))
     end
   end
 
@@ -291,14 +294,17 @@ defmodule GenMCP.Suite.ResourceRepoTest do
       |> stub(:prefix, fn _ -> "file:///" end)
       |> expect(:read, fn "file:///test.txt", _channel, :arg ->
         # Invalid: should return {:ok, result} or {:error, _}
-        :invalid_return
+        :some_invalid_val
       end)
 
       repo = ResourceRepo.expand({ResourceRepoMock, :arg})
       channel = build_channel()
 
-      assert catch_exit(ResourceRepo.read_resource(repo, "file:///test.txt", channel)) ==
-               {:bad_return_value, :invalid_return}
+      assert %GenMCP.CallbackReturnError{
+               behaviour: ResourceRepo,
+               mfa: {ResourceRepoMock, :read, _},
+               return_value: :some_invalid_val
+             } = catch_error(ResourceRepo.read_resource(repo, "file:///test.txt", channel))
     end
   end
 
@@ -362,7 +368,7 @@ defmodule GenMCP.Suite.ResourceRepoTest do
       end)
 
       # The returned value can be anything
-      |> expect(:parse_uri, fn :arg, "file:///test.txt" ->
+      |> expect(:parse_uri, fn "file:///test.txt", :arg ->
         {:ok, :some_returned_value}
       end)
       |> expect(:read, fn :some_returned_value, _channel, :arg ->
@@ -381,7 +387,7 @@ defmodule GenMCP.Suite.ResourceRepoTest do
       |> stub(:template, fn _ ->
         %{uriTemplate: "file:///{path}", name: "FileTemplate"}
       end)
-      |> expect(:parse_uri, fn :arg, "file:///invalid" ->
+      |> expect(:parse_uri, fn "file:///invalid", :arg ->
         {:error, "Invalid URI format"}
       end)
 
@@ -434,7 +440,7 @@ defmodule GenMCP.Suite.ResourceRepoTest do
       |> stub(:template, fn _ ->
         %{uriTemplate: "file:///{path}", name: "FileTemplate"}
       end)
-      |> expect(:parse_uri, fn :arg, _ ->
+      |> expect(:parse_uri, fn _, :arg ->
         # Invalid: should return {:ok, _} or {:error, _}
         :invalid_return
       end)
@@ -442,8 +448,11 @@ defmodule GenMCP.Suite.ResourceRepoTest do
       repo = ResourceRepo.expand({ResourceRepoMockTplNoSkip, :arg})
       channel = build_channel()
 
-      assert catch_exit(ResourceRepo.read_resource(repo, "file:///test.txt", channel)) ==
-               {:bad_return_value, :invalid_return}
+      assert %GenMCP.CallbackReturnError{
+               behaviour: ResourceRepo,
+               mfa: {ResourceRepoMockTplNoSkip, :parse_uri, ["file:///test.txt", :arg]},
+               return_value: :invalid_return
+             } = catch_error(ResourceRepo.read_resource(repo, "file:///test.txt", channel))
     end
   end
 

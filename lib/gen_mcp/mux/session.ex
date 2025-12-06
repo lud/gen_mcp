@@ -14,6 +14,7 @@ defmodule GenMCP.Mux.Session do
 
   import GenMCP.Utils.CallbackExt
 
+  alias GenMCP.SessionController
   alias GenMCP.Utils.OptsValidator
 
   require Logger
@@ -103,10 +104,9 @@ defmodule GenMCP.Mux.Session do
   end
 
   defp init_server(conf) do
-    case conf.server_mod.init(conf.session_id, conf.server_arg) do
+    callback GenMCP, conf.server_mod.init(conf.session_id, conf.server_arg) do
       {:ok, server_state} -> {:ok, server_state}
       {:stop, reason} -> {:stop, {:mcp_server_init_failure, reason}}
-      other -> exit({:bad_return_value, other})
     end
   end
 
@@ -140,12 +140,9 @@ defmodule GenMCP.Mux.Session do
     # TODO Handle error/noreply return ?
     state = refresh_session_timeout(state)
 
-    case state.server_mod.handle_notification(notif, state.server_state) do
+    callback GenMCP, state.server_mod.handle_notification(notif, state.server_state) do
       {:noreply, server_state} ->
         {:reply, :ack, %{state | server_state: server_state}}
-
-      other ->
-        exit({:bad_return_value, other})
     end
   end
 
@@ -168,7 +165,8 @@ defmodule GenMCP.Mux.Session do
       session_data: session_data
     })
 
-    case state.server_mod.session_restore(session_data, channel, state.server_state) do
+    callback SessionController,
+             state.server_mod.session_restore(session_data, channel, state.server_state) do
       {:noreply, server_state} ->
         {:reply, :ok, %{state | server_state: server_state}}
 
@@ -182,9 +180,6 @@ defmodule GenMCP.Mux.Session do
 
         {:stop, {:shutdown, {:session_restore_error, reason}}, {:error, reason},
          %{state | server_state: server_state}}
-
-      other ->
-        exit({:bad_return_value, other})
     end
   end
 

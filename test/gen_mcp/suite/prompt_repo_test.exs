@@ -73,13 +73,16 @@ defmodule GenMCP.Suite.PromptRepoTest do
       repo = %{mod: PromptRepoMock, arg: []}
 
       expect(PromptRepoMock, :list, fn _, _channel, _ ->
-        :invalid
+        :some_invalid_val
       end)
 
       channel = build_channel()
 
-      assert catch_exit(PromptRepo.list_prompts(repo, nil, channel)) ==
-               {:bad_return_value, :invalid}
+      assert %GenMCP.CallbackReturnError{
+               behaviour: PromptRepo,
+               mfa: {PromptRepoMock, :list, _},
+               return_value: :some_invalid_val
+             } = catch_error(PromptRepo.list_prompts(repo, nil, channel))
     end
   end
 
@@ -148,8 +151,12 @@ defmodule GenMCP.Suite.PromptRepoTest do
 
       channel = build_channel()
 
-      assert catch_exit(PromptRepo.get_prompt(repo, "test", %{}, channel)) ==
-               {:bad_return_value, {:ok, :not_a_result}}
+      assert %GenMCP.CallbackReturnError{
+               behaviour: PromptRepo,
+               mfa: {PromptRepoMock, :get, _},
+               return_value: {:ok, :not_a_result}
+             } =
+               catch_error(PromptRepo.get_prompt(repo, "test", %{}, channel))
     end
   end
 end

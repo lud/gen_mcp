@@ -151,7 +151,9 @@ defmodule GenMCP.MixProject do
           GenMCP.Suite.Extension
         ],
         Sessions: [
-          ~r/GenMCP\.Mux\..*/
+          ~r/GenMCP\.Mux\..*/,
+          GenMCP.SessionController,
+          GenMCP.Suite.PersistedClientInfo
         ],
         Utilities: [
           GenMCP.RpcError,
