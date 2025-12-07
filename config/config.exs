@@ -33,5 +33,3 @@ config :phoenix,
           :test -> :runtime
           _ -> :compile
         end)
-
-# this is for mocks

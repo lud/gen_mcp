@@ -43,8 +43,6 @@ defmodule GenMCP.Mux.SessionTest do
     %MCP.ListToolsRequest{id: :erlang.unique_integer(), params: %{}}
   end
 
-  IO.warn("timeout should call the server mock with session_timeout(state)", [])
-
   test "session can timeout" do
     ServerMock
     |> expect(:init, fn _, _ -> {:ok, :some_session_state} end)

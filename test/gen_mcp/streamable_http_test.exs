@@ -232,6 +232,7 @@ defmodule GenMCP.StreamableHTTPTest do
                |> body()
     end
 
+    @tag :capture_log
     test "initialization failure" do
       ServerMock
       |> expect(:init, fn _, _ -> {:ok, :some_server_state} end)
@@ -1594,6 +1595,7 @@ defmodule GenMCP.StreamableHTTPTest do
       |> expect_status(404)
     end
 
+    @tag :capture_log
     test "restore failure" do
       sid = random_session_id()
 

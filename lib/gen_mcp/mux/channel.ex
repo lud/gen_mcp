@@ -1,11 +1,14 @@
 defmodule GenMCP.Mux.Channel do
   alias GenMCP.MCP.ProgressNotification
 
-  @enforce_keys [:client, :progress_token]
-  defstruct @enforce_keys ++ [:assigns]
+  @enforce_keys [:client, :progress_token, :status, :assigns]
+  defstruct @enforce_keys
+
+  @type status :: :request | :stream | :closed
 
   @type t :: %__MODULE__{
-          client: pid,
+          client: pid | nil,
+          status: status,
           progress_token: nil | binary | integer,
           assigns: map()
         }
@@ -20,16 +23,21 @@ defmodule GenMCP.Mux.Channel do
         _ -> nil
       end
 
-    %__MODULE__{client: self(), progress_token: progress_token, assigns: assigns}
+    %__MODULE__{
+      client: self(),
+      progress_token: progress_token,
+      assigns: assigns,
+      status: :request
+    }
   end
 
   @doc false
   def for_pid(pid, assigns \\ %{}) do
-    %__MODULE__{client: pid, progress_token: nil, assigns: assigns}
+    %__MODULE__{client: pid, progress_token: nil, assigns: assigns, status: :request}
   end
 
-  def with_default_assigns(%__MODULE__{assigns: assigns} = chan, default_assigns) do
-    %{chan | assigns: Map.merge(default_assigns, assigns)}
+  def with_default_assigns(%__MODULE__{assigns: assigns} = channel, default_assigns) do
+    %{channel | assigns: Map.merge(default_assigns, assigns)}
   end
 
   def send_progress(channel, progress, total \\ nil, message \\ nil)
@@ -62,5 +70,13 @@ defmodule GenMCP.Mux.Channel do
   @spec assign(t, atom, term) :: t
   def assign(%__MODULE__{assigns: assigns} = channel, key, value) when is_atom(key) do
     %{channel | assigns: Map.put(assigns, key, value)}
+  end
+
+  def set_streaming(%__MODULE__{status: :request} = t) do
+    %{t | status: :stream}
+  end
+
+  def set_streaming(%__MODULE__{status: :stream} = t) do
+    t
   end
 end

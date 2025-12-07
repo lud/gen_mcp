@@ -211,18 +211,19 @@ defmodule GenMCP.Suite do
         channel = channel_defaults(channel, state)
 
         case call_tool(req, tool, channel, state) do
-          {:result, result, _chan} ->
+          {:result, result, _channel} ->
             {:reply, {:result, result}, state}
 
-          {:error, reason, _chan} ->
+          {:error, reason, _channel} ->
             {:reply, {:error, reason}, state}
 
-          {:async, {tag, req}, chan} ->
+          {:async, {tag, req}, channel} ->
             # TODO send progress when starting async with a task without any
             # server request.
 
+            channel = Channel.set_streaming(channel)
             # the tracking process will set the ID of the request
-            {_req, state} = track_request(state, tool, tag, req, chan)
+            {_req, state} = track_request(state, tool, tag, req, channel)
             {:reply, :stream, state}
         end
 
@@ -514,20 +515,21 @@ defmodule GenMCP.Suite do
 
     case Tool.continue(tool, {tag, task_result}, channel) do
       # using the previous channel so we are sure it's the right one
-      {:result, result, _chan} ->
+      {:result, result, _channel} ->
         ^channel = Channel.send_result(channel, result)
 
         {:ok, state}
 
-      {:async, {tag, req}, chan} ->
+      {:async, {tag, req}, channel} ->
+        :stream = channel.status
         # TODO send progress when continuing async with a task without any
         # server request.
 
         # the tracking process will set the ID of the request
-        {_req, state} = track_request(state, tool, tag, req, chan)
+        {_req, state} = track_request(state, tool, tag, req, channel)
         {:ok, state}
 
-      {:error, reason, _chan} ->
+      {:error, reason, _channel} ->
         ^channel = Channel.send_error(channel, reason)
 
         {:ok, state}
@@ -845,7 +847,7 @@ defmodule GenMCP.Suite do
     []
   end
 
-  defp track_request(state, tool, tag, req, chan) do
+  defp track_request(state, tool, tag, req, channel) do
     {track_id, server_request} =
       case req do
         # TODO if an actual elicitation request we must create a new ID and bump
@@ -867,7 +869,7 @@ defmodule GenMCP.Suite do
     state =
       update_in(
         state.trackers,
-        &[tracker(id: track_id, tool_name: tool.name, channel: chan, tag: tag) | &1]
+        &[tracker(id: track_id, tool_name: tool.name, channel: channel, tag: tag) | &1]
       )
 
     {server_request, state}

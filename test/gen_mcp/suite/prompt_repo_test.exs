@@ -1,16 +1,13 @@
 defmodule GenMCP.Suite.PromptRepoTest do
   use ExUnit.Case, async: true
 
+  import GenMCP.Test.Helpers
   import Mox
 
   alias GenMCP.Suite.PromptRepo
   alias GenMCP.Support.PromptRepoMock
 
   setup :verify_on_exit!
-
-  defp build_channel do
-    %GenMCP.Mux.Channel{client: self(), progress_token: nil, assigns: %{}}
-  end
 
   describe "expand/1" do
     test "expands module atom" do

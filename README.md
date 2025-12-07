@@ -51,6 +51,7 @@ On [hexdocs.pm](https://hexdocs.pm/gen_mcp).
 
 ## Roadmap
 
+* Session timeouts handled by custom code
 * Server requests (elicitation, sampling and roots)
 * Stdio transport and burrito wrapping tools
 * Messages resumability

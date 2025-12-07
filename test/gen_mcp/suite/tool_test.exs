@@ -217,8 +217,8 @@ defmodule GenMCP.Suite.ToolTest do
         # Use does not define validate request, it is automatically implemented
         # by "use"
 
-        def call(req, chan, _) do
-          {:result, {:called_with, req.params.arguments}, chan}
+        def call(req, channel, _) do
+          {:result, {:called_with, req.params.arguments}, channel}
         end
       end
 
@@ -284,8 +284,8 @@ defmodule GenMCP.Suite.ToolTest do
           {:ok, req}
         end
 
-        def call(req, chan, _) do
-          {:result, {:called_with, req.params.arguments}, chan}
+        def call(req, channel, _) do
+          {:result, {:called_with, req.params.arguments}, channel}
         end
       end
 
@@ -504,8 +504,8 @@ defmodule GenMCP.Suite.ToolTest do
           end
         end
 
-        def call(req, chan, _) do
-          {:result, {:called_with, req.params.arguments}, chan}
+        def call(req, channel, _) do
+          {:result, {:called_with, req.params.arguments}, channel}
         end
       end
 
@@ -563,8 +563,8 @@ defmodule GenMCP.Suite.ToolTest do
           nil
         end
 
-        def call(req, chan, _) do
-          {:result, {:called_with, req.params.arguments}, chan}
+        def call(req, channel, _) do
+          {:result, {:called_with, req.params.arguments}, channel}
         end
       end
 

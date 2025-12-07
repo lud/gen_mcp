@@ -544,11 +544,11 @@ defmodule GenMCP.Suite.Tool do
         {:result, _result, %Channel{}} = result ->
           result
 
-        {:async, {tag, %Task{ref: ref}}, %Channel{} = chan} ->
-          {:async, {tag, ref}, chan}
+        {:async, {tag, %Task{ref: ref}}, %Channel{} = channel} ->
+          {:async, {tag, ref}, channel}
 
-        {:async, {tag, ref}, %Channel{} = chan} when is_reference(ref) ->
-          {:async, {tag, ref}, chan}
+        {:async, {tag, ref}, %Channel{} = channel} when is_reference(ref) ->
+          {:async, {tag, ref}, channel}
 
         {:error, _reason, %Channel{}} = err ->
           err

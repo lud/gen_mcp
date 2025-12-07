@@ -516,7 +516,7 @@ defmodule GenMCP.SuiteTest do
     test "sync tool" do
       ToolMock
       |> stub(:info, fn :name, :some_tool_arg -> "ExistingTool" end)
-      |> expect(:call, fn req, chan, arg ->
+      |> expect(:call, fn req, channel, arg ->
         # The whole request is given
 
         assert %GenMCP.MCP.CallToolRequest{
@@ -528,11 +528,10 @@ defmodule GenMCP.SuiteTest do
                  }
                } = req
 
-        # We also receive a channel struct istead of the chan info
-        assert %GenMCP.Mux.Channel{} = chan
+        assert %GenMCP.Mux.Channel{} = channel
         assert :some_tool_arg = arg
         # we can return a cast value
-        {:result, MCP.call_tool_result(text: "hello"), chan}
+        {:result, MCP.call_tool_result(text: "hello"), channel}
       end)
 
       state = init_session(tools: [{ToolMock, :some_tool_arg}])
@@ -559,8 +558,8 @@ defmodule GenMCP.SuiteTest do
     test "tool call argument validation returns error with rpc code" do
       ToolMock
       |> stub(:info, fn :name, :validated_tool -> "ValidatedTool" end)
-      |> expect(:call, fn _req, chan, _arg ->
-        {:error, JSV.ValidationError.of([]), chan}
+      |> expect(:call, fn _req, channel, _arg ->
+        {:error, JSV.ValidationError.of([]), channel}
       end)
 
       state = init_session(tools: [{ToolMock, :validated_tool}])
@@ -584,8 +583,8 @@ defmodule GenMCP.SuiteTest do
     test "tool returns error string from call callback" do
       ToolMock
       |> stub(:info, fn :name, :error_tool -> "ErrorTool" end)
-      |> expect(:call, fn _req, chan, _arg ->
-        {:error, "Something went wrong in the tool", chan}
+      |> expect(:call, fn _req, channel, _arg ->
+        {:error, "Something went wrong in the tool", channel}
       end)
 
       state = init_session(tools: [{ToolMock, :error_tool}])
@@ -609,8 +608,8 @@ defmodule GenMCP.SuiteTest do
     test "tool returns {:invalid_params, _} string from call callback" do
       ToolMock
       |> stub(:info, fn :name, :error_tool -> "ErrorTool" end)
-      |> expect(:call, fn _req, chan, _arg ->
-        {:error, {:invalid_params, :foo}, chan}
+      |> expect(:call, fn _req, channel, _arg ->
+        {:error, {:invalid_params, :foo}, channel}
       end)
 
       state = init_session(tools: [{ToolMock, :error_tool}])

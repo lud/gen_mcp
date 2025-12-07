@@ -61,11 +61,13 @@ defmodule GenMCP.SuiteAsyncTest do
 
       ToolMock
       |> stub(:info, fn :name, :async_tool -> "AsyncTool" end)
-      |> expect(:call, fn _req, chan, _arg ->
-        {:async, {:my_tag, ref}, chan}
+      |> expect(:call, fn _req, channel, _arg ->
+        assert :request = channel.status
+        {:async, {:my_tag, ref}, channel}
       end)
-      |> expect(:continue, fn {:my_tag, {:ok, {:success, 42}}}, chan, _arg ->
-        {:result, MCP.call_tool_result(text: "Result: 42"), chan}
+      |> expect(:continue, fn {:my_tag, {:ok, {:success, 42}}}, channel, _arg ->
+        assert :stream = channel.status
+        {:result, MCP.call_tool_result(text: "Result: 42"), channel}
       end)
 
       state = init_session(tools: [{ToolMock, :async_tool}])
@@ -101,17 +103,17 @@ defmodule GenMCP.SuiteAsyncTest do
 
       ToolMock
       |> stub(:info, fn :name, :async_task_tool -> "AsyncTaskTool" end)
-      |> expect(:call, fn _req, chan, _arg ->
+      |> expect(:call, fn _req, channel, _arg ->
         task =
           Task.async(fn ->
             send(test_pid, :task_started)
             {:computed, 100}
           end)
 
-        {:async, {:calculation_tag, task}, chan}
+        {:async, {:calculation_tag, task}, channel}
       end)
-      |> expect(:continue, fn {:calculation_tag, {:ok, {:computed, 100}}}, chan, _arg ->
-        {:result, MCP.call_tool_result(text: "Computed: 100"), chan}
+      |> expect(:continue, fn {:calculation_tag, {:ok, {:computed, 100}}}, channel, _arg ->
+        {:result, MCP.call_tool_result(text: "Computed: 100"), channel}
       end)
 
       state = init_session(tools: [{ToolMock, :async_task_tool}])
@@ -157,17 +159,19 @@ defmodule GenMCP.SuiteAsyncTest do
 
       ToolMock
       |> stub(:info, fn :name, :supervised_tool -> "SupervisedTool" end)
-      |> expect(:call, fn _req, chan, _arg ->
+      |> expect(:call, fn _req, channel, _arg ->
         task =
           Task.Supervisor.async(task_sup, fn ->
             send(test_pid, :supervised_task_started)
             {:supervised_result, 200}
           end)
 
-        {:async, {:supervised_tag, task}, chan}
+        {:async, {:supervised_tag, task}, channel}
       end)
-      |> expect(:continue, fn {:supervised_tag, {:ok, {:supervised_result, 200}}}, chan, _arg ->
-        {:result, MCP.call_tool_result(text: "Supervised: 200"), chan}
+      |> expect(:continue, fn {:supervised_tag, {:ok, {:supervised_result, 200}}},
+                              channel,
+                              _arg ->
+        {:result, MCP.call_tool_result(text: "Supervised: 200"), channel}
       end)
 
       state = init_session(tools: [{ToolMock, :supervised_tool}])
@@ -205,17 +209,17 @@ defmodule GenMCP.SuiteAsyncTest do
 
       ToolMock
       |> stub(:info, fn :name, :down_test_tool -> "DownTestTool" end)
-      |> expect(:call, fn _req, chan, _arg ->
+      |> expect(:call, fn _req, channel, _arg ->
         task =
           Task.async(fn ->
             send(test_pid, :task_running)
             :completed
           end)
 
-        {:async, {:down_tag, task}, chan}
+        {:async, {:down_tag, task}, channel}
       end)
-      |> expect(:continue, fn {:down_tag, {:ok, :completed}}, chan, _arg ->
-        {:result, MCP.call_tool_result(text: "Completed"), chan}
+      |> expect(:continue, fn {:down_tag, {:ok, :completed}}, channel, _arg ->
+        {:result, MCP.call_tool_result(text: "Completed"), channel}
       end)
 
       state = init_session(tools: [{ToolMock, :down_test_tool}])
@@ -265,17 +269,17 @@ defmodule GenMCP.SuiteAsyncTest do
 
       ToolMock
       |> stub(:info, fn :name, :failing_tool -> "FailingTool" end)
-      |> expect(:call, fn _req, chan, _arg ->
+      |> expect(:call, fn _req, channel, _arg ->
         task =
           Task.Supervisor.async_nolink(task_sup, fn ->
             send(test_pid, :about_to_fail)
             exit(:intentional_failure)
           end)
 
-        {:async, {:failing_tag, task}, chan}
+        {:async, {:failing_tag, task}, channel}
       end)
-      |> expect(:continue, fn {:failing_tag, {:error, :intentional_failure}}, chan, _arg ->
-        {:result, MCP.call_tool_result(text: "Handled failure", error: true), chan}
+      |> expect(:continue, fn {:failing_tag, {:error, :intentional_failure}}, channel, _arg ->
+        {:result, MCP.call_tool_result(text: "Handled failure", error: true), channel}
       end)
 
       state = init_session(tools: [{ToolMock, :failing_tool}])
@@ -314,16 +318,16 @@ defmodule GenMCP.SuiteAsyncTest do
         spawn_monitor(fn ->
           ToolMock
           |> stub(:info, fn :name, :error_tool -> "ErrorTool" end)
-          |> expect(:call, fn _req, chan, _arg ->
+          |> expect(:call, fn _req, channel, _arg ->
             task = Task.async(fn -> raise RuntimeError, "Something went wrong" end)
 
-            {:async, {:error_tag, task}, chan}
+            {:async, {:error_tag, task}, channel}
           end)
           |> expect(:continue, fn {:error_tag,
                                    {:error, {:exception, %RuntimeError{}, _stacktrace}}},
-                                  chan,
+                                  channel,
                                   _arg ->
-            {:result, MCP.call_tool_result(text: "Caught exception"), chan}
+            {:result, MCP.call_tool_result(text: "Caught exception"), channel}
           end)
 
           state = init_session(tools: [{ToolMock, :error_tool}])
@@ -350,11 +354,11 @@ defmodule GenMCP.SuiteAsyncTest do
 
       ToolMock
       |> stub(:info, fn :name, :error_continue_tool -> "ErrorContinueTool" end)
-      |> expect(:call, fn _req, chan, _arg ->
-        {:async, {:error_continue_tag, ref}, chan}
+      |> expect(:call, fn _req, channel, _arg ->
+        {:async, {:error_continue_tag, ref}, channel}
       end)
-      |> expect(:continue, fn {:error_continue_tag, {:ok, :some_result}}, chan, _arg ->
-        {:error, "Error from continue callback", chan}
+      |> expect(:continue, fn {:error_continue_tag, {:ok, :some_result}}, channel, _arg ->
+        {:error, "Error from continue callback", channel}
       end)
 
       state = init_session(tools: [{ToolMock, :error_continue_tool}])
@@ -391,11 +395,11 @@ defmodule GenMCP.SuiteAsyncTest do
 
       ToolMock
       |> stub(:info, fn :name, :stale_tool -> "StaleTool" end)
-      |> expect(:call, fn _req, chan, _arg ->
-        {:async, {:stale_tag, ref}, chan}
+      |> expect(:call, fn _req, channel, _arg ->
+        {:async, {:stale_tag, ref}, channel}
       end)
-      |> expect(:continue, 1, fn {:stale_tag, {:ok, :first_result}}, chan, _arg ->
-        {:result, MCP.call_tool_result(text: "First result"), chan}
+      |> expect(:continue, 1, fn {:stale_tag, {:ok, :first_result}}, channel, _arg ->
+        {:result, MCP.call_tool_result(text: "First result"), channel}
       end)
 
       state = init_session(tools: [{ToolMock, :stale_tool}])
@@ -441,14 +445,14 @@ defmodule GenMCP.SuiteAsyncTest do
 
       ToolMock
       |> stub(:info, fn :name, :chain_tool -> "ChainTool" end)
-      |> expect(:call, fn _req, chan, _arg ->
-        {:async, {:chain_step1, ref1}, chan}
+      |> expect(:call, fn _req, channel, _arg ->
+        {:async, {:chain_step1, ref1}, channel}
       end)
-      |> expect(:continue, fn {:chain_step1, {:ok, :step1_complete}}, chan, _arg ->
-        {:async, {:chain_step2, ref2}, chan}
+      |> expect(:continue, fn {:chain_step1, {:ok, :step1_complete}}, channel, _arg ->
+        {:async, {:chain_step2, ref2}, channel}
       end)
-      |> expect(:continue, fn {:chain_step2, {:ok, :step2_complete}}, chan, _arg ->
-        {:result, MCP.call_tool_result(text: "Chain complete"), chan}
+      |> expect(:continue, fn {:chain_step2, {:ok, :step2_complete}}, channel, _arg ->
+        {:result, MCP.call_tool_result(text: "Chain complete"), channel}
       end)
 
       state = init_session(tools: [{ToolMock, :chain_tool}])
@@ -491,10 +495,10 @@ defmodule GenMCP.SuiteAsyncTest do
 
       ToolMock
       |> stub(:info, fn :name, :chain_error_tool -> "ChainErrorTool" end)
-      |> expect(:call, fn _req, chan, _arg ->
-        {:async, {:chain_err_step1, ref1}, chan}
+      |> expect(:call, fn _req, channel, _arg ->
+        {:async, {:chain_err_step1, ref1}, channel}
       end)
-      |> expect(:continue, fn {:chain_err_step1, {:ok, :step1_ok}}, chan, _arg ->
+      |> expect(:continue, fn {:chain_err_step1, {:ok, :step1_ok}}, channel, _arg ->
         # Second step will fail - use supervised task to prevent crashing test process
         task =
           Task.Supervisor.async_nolink(task_sup, fn ->
@@ -502,11 +506,11 @@ defmodule GenMCP.SuiteAsyncTest do
             exit(:step2_failure)
           end)
 
-        {:async, {:chain_err_step2, task}, chan}
+        {:async, {:chain_err_step2, task}, channel}
       end)
-      |> expect(:continue, fn {:chain_err_step2, {:error, :step2_failure}}, chan, _arg ->
+      |> expect(:continue, fn {:chain_err_step2, {:error, :step2_failure}}, channel, _arg ->
         # Tool handles the error and returns a result
-        {:result, MCP.call_tool_result(text: "Recovered from step2 failure"), chan}
+        {:result, MCP.call_tool_result(text: "Recovered from step2 failure"), channel}
       end)
 
       state = init_session(tools: [{ToolMock, :chain_error_tool}])
@@ -550,17 +554,17 @@ defmodule GenMCP.SuiteAsyncTest do
 
       ToolMock
       |> stub(:info, fn :name, :rapid_tool -> "RapidTool" end)
-      |> expect(:call, fn _req, chan, _arg ->
+      |> expect(:call, fn _req, channel, _arg ->
         # Task completes immediately
         send(self(), {ref, :instant_result})
 
         # And for some reason, updating the Basic state takes some time.
         Process.sleep(200)
 
-        {:async, {:rapid_tag, ref}, chan}
+        {:async, {:rapid_tag, ref}, channel}
       end)
-      |> expect(:continue, fn {:rapid_tag, {:ok, :instant_result}}, chan, _arg ->
-        {:result, MCP.call_tool_result(text: "Rapid result"), chan}
+      |> expect(:continue, fn {:rapid_tag, {:ok, :instant_result}}, channel, _arg ->
+        {:result, MCP.call_tool_result(text: "Rapid result"), channel}
       end)
 
       state = init_session(tools: [{ToolMock, :rapid_tool}])
@@ -604,15 +608,15 @@ defmodule GenMCP.SuiteAsyncTest do
         :name, :tool_b -> "ToolB"
       end)
       |> expect(:call, 2, fn
-        _req, chan, :tool_a -> {:async, {:tag_a, ref_a}, chan}
-        _req, chan, :tool_b -> {:async, {:tag_b, ref_b}, chan}
+        _req, channel, :tool_a -> {:async, {:tag_a, ref_a}, channel}
+        _req, channel, :tool_b -> {:async, {:tag_b, ref_b}, channel}
       end)
       |> expect(:continue, 2, fn
-        {:tag_a, {:ok, :result_a}}, chan, :tool_a ->
-          {:result, MCP.call_tool_result(text: "Result from A"), chan}
+        {:tag_a, {:ok, :result_a}}, channel, :tool_a ->
+          {:result, MCP.call_tool_result(text: "Result from A"), channel}
 
-        {:tag_b, {:ok, :result_b}}, chan, :tool_b ->
-          {:result, MCP.call_tool_result(text: "Result from B"), chan}
+        {:tag_b, {:ok, :result_b}}, channel, :tool_b ->
+          {:result, MCP.call_tool_result(text: "Result from B"), channel}
       end)
 
       state = init_session(tools: [{ToolMock, :tool_a}, {ToolMock, :tool_b}])
@@ -623,16 +627,16 @@ defmodule GenMCP.SuiteAsyncTest do
       test_pid = self()
 
       fake_client = fn ->
-        send(test_pid, {self(), :chan, build_channel()})
+        send(test_pid, {self(), :channel, build_channel()})
         assert_receive {:"$gen_mcp", :result, result}
         send(test_pid, {self(), :result, result})
       end
 
       client_pid_a = spawn_link(fake_client)
-      {^client_pid_a, :chan, channel_a} = assert_receive {_, :chan, _}
+      {^client_pid_a, :channel, channel_a} = assert_receive {_, :channel, _}
 
       client_pid_b = spawn_link(fake_client)
-      {^client_pid_b, :chan, channel_b} = assert_receive {_, :chan, _}
+      {^client_pid_b, :channel, channel_b} = assert_receive {_, :channel, _}
 
       # Delivering both requests using those channel info
 
@@ -675,12 +679,12 @@ defmodule GenMCP.SuiteAsyncTest do
       ToolMock
       |> stub(:info, fn :name, _ -> "SomeTool" end)
       |> expect(:call, 2, fn
-        %{params: %{arguments: %{"callname" => callname}}}, chan, _ ->
-          {:async, {:some_tag, Task.async(fn -> {:callname, callname} end)}, chan}
+        %{params: %{arguments: %{"callname" => callname}}}, channel, _ ->
+          {:async, {:some_tag, Task.async(fn -> {:callname, callname} end)}, channel}
       end)
       |> expect(:continue, 2, fn
-        {:some_tag, {:ok, {:callname, callname}}}, chan, _ ->
-          {:result, MCP.call_tool_result(text: "Result from #{callname}"), chan}
+        {:some_tag, {:ok, {:callname, callname}}}, channel, _ ->
+          {:result, MCP.call_tool_result(text: "Result from #{callname}"), channel}
       end)
 
       state = init_session(tools: [{ToolMock, :tool_a}, {ToolMock, :tool_b}])
@@ -754,8 +758,8 @@ defmodule GenMCP.SuiteAsyncTest do
 
       ToolMock
       |> stub(:info, fn :name, :disconnect_tool -> "DisconnectTool" end)
-      |> expect(:call, fn _req, chan, _arg ->
-        {:async, {:disconnect_tag, ref}, chan}
+      |> expect(:call, fn _req, channel, _arg ->
+        {:async, {:disconnect_tag, ref}, channel}
       end)
 
       # Don't expect continue to be called if task is cancelled
@@ -799,7 +803,7 @@ defmodule GenMCP.SuiteAsyncTest do
 
       ToolMock
       |> stub(:info, fn :name, _ -> "SomeTool" end)
-      |> expect(:call, 2, fn _req, chan, _ -> {:async, {:some_tag, ref}, chan} end)
+      |> expect(:call, 2, fn _req, channel, _ -> {:async, {:some_tag, ref}, channel} end)
 
       state = init_session(tools: [{ToolMock, :tool_one}, {ToolMock, :tool_two}])
 
@@ -861,36 +865,40 @@ defmodule GenMCP.SuiteAsyncTest do
       ref2 = make_ref()
 
       ToolMock
-      |> expect(:call, fn _req, chan, _arg ->
+      |> expect(:call, fn _req, channel, _arg ->
+        assert :request = channel.status
+
         assert %{
                  from_initialize: true,
                  from_call: true,
                  shared_assign: "from_call"
-               } = chan.assigns
+               } = channel.assigns
 
         # Tool adds its own assigns and overrides one
-        chan = Channel.assign(chan, :from_call_step1, true)
-        chan = Channel.assign(chan, :shared_assign, "from_tool_step1")
+        channel = Channel.assign(channel, :from_call_step1, true)
+        channel = Channel.assign(channel, :shared_assign, "from_tool_step1")
 
-        {:async, {:step1, ref1}, chan}
+        {:async, {:step1, ref1}, channel}
       end)
       |> expect(:continue, 2, fn
-        {:step1, {:ok, :step1_complete}}, chan, _arg ->
+        {:step1, {:ok, :step1_complete}}, channel, _arg ->
+          assert :stream = channel.status
+
           # Verify all assigns from first call
           assert %{
                    from_initialize: true,
                    from_call: true,
                    from_call_step1: true,
                    shared_assign: "from_tool_step1"
-                 } = chan.assigns
+                 } = channel.assigns
 
           # Tool adds more assigns for next step
-          chan = Channel.assign(chan, :from_continue_step1, true)
-          chan = Channel.assign(chan, :shared_assign, "from_continue_step1")
+          channel = Channel.assign(channel, :from_continue_step1, true)
+          channel = Channel.assign(channel, :shared_assign, "from_continue_step1")
 
-          {:async, {:step2, ref2}, chan}
+          {:async, {:step2, ref2}, channel}
 
-        {:step2, {:ok, :step2_complete}}, chan, _arg ->
+        {:step2, {:ok, :step2_complete}}, channel, _arg ->
           # Verify all assigns including the new ones from continue
           assert %{
                    from_initialize: true,
@@ -898,9 +906,9 @@ defmodule GenMCP.SuiteAsyncTest do
                    from_call_step1: true,
                    from_continue_step1: true,
                    shared_assign: "from_continue_step1"
-                 } = chan.assigns
+                 } = channel.assigns
 
-          {:result, MCP.call_tool_result(text: "Assigns verified"), chan}
+          {:result, MCP.call_tool_result(text: "Assigns verified"), channel}
       end)
 
       # Initial call
@@ -929,7 +937,7 @@ defmodule GenMCP.SuiteAsyncTest do
 
       ToolMock
       |> stub(:info, fn :name, :bad_tool -> "BadTool" end)
-      |> expect(:call, fn _req, _chan, _arg ->
+      |> expect(:call, fn _req, _channel, _arg ->
         # Return completely invalid value
         :invalid_return_value
       end)
@@ -961,10 +969,10 @@ defmodule GenMCP.SuiteAsyncTest do
 
       ToolMock
       |> stub(:info, fn :name, :bad_continue_tool -> "BadContinueTool" end)
-      |> expect(:call, fn _req, chan, _arg ->
-        {:async, {:bad_continue_tag, ref}, chan}
+      |> expect(:call, fn _req, channel, _arg ->
+        {:async, {:bad_continue_tag, ref}, channel}
       end)
-      |> expect(:continue, fn {:bad_continue_tag, {:ok, :some_result}}, _chan, _arg ->
+      |> expect(:continue, fn {:bad_continue_tag, {:ok, :some_result}}, _channel, _arg ->
         # Return invalid value from continue
         {:bad_tuple, "oops"}
       end)
