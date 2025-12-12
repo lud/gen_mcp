@@ -52,9 +52,7 @@ defmodule GenMCP.Suite.SessionController.DevSessionStore do
 
   @impl true
   def create(session_id, client_info, channel, opts) do
-    session_path = session_path(session_id, opts)
-    file_contents = encode_session(client_info)
-    write_file(session_path, file_contents)
+    session_path = write_session!(session_id, client_info, opts)
     Logger.debug("Created persisted session in #{session_path}", gen_mcp_session_id: session_id)
 
     {:ok, channel, opts}
@@ -62,12 +60,17 @@ defmodule GenMCP.Suite.SessionController.DevSessionStore do
 
   @impl true
   def update(session_id, client_info, channel, opts) do
-    session_path = session_path(session_id, opts)
-    file_contents = encode_session(client_info)
-    write_file(session_path, file_contents)
+    session_path = write_session!(session_id, client_info, opts)
     Logger.debug("Updated persisted session in #{session_path}", gen_mcp_session_id: session_id)
 
     {:ok, channel, opts}
+  end
+
+  defp write_session!(session_id, client_info, opts) do
+    session_path = session_path(session_id, opts)
+    file_contents = encode_session(client_info)
+    :ok = write_file!(session_path, file_contents)
+    session_path
   end
 
   @impl true
@@ -111,18 +114,9 @@ defmodule GenMCP.Suite.SessionController.DevSessionStore do
   end
 
   # sobelow_skip ["Traversal.FileModule"]
-  defp write_file(session_path, file_contents) do
-    case File.write(session_path, file_contents) do
-      {:error, :enoent} ->
-        :ok = File.mkdir_p!(Path.dirname(session_path))
-        :ok = File.write!(session_path, file_contents)
-
-      :ok ->
-        :ok
-
-      {:error, reason} ->
-        Logger.error("Could not write session to #{session_path}: #{inspect(reason)}")
-    end
+  defp write_file!(session_path, file_contents) do
+    File.mkdir_p!(Path.dirname(session_path))
+    File.write!(session_path, file_contents)
   end
 
   defp session_path(session_id, opts) when is_binary(session_id) do
