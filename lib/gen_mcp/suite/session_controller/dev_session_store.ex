@@ -15,8 +15,16 @@ defmodule GenMCP.Suite.SessionController.DevSessionStore do
   >
   > **It is _not_ suited for production environments.**
 
-  To use this controller, provide it as the `:session_controller` option to the
-  transport plug. Optionally with a custom directory.
+
+  To use this controller, make sure that the ID of your Elixir node is constant.
+  Fetching the node is the first step to retrieve a session, so the node id in
+  the session token must match your current node.
+
+      # config/dev.exs
+      config :gen_mcp, node_id: "dev"
+
+  Then, provide it as the `:session_controller` option to the transport plug.
+  Optionally with a custom directory:
 
       forward "/real", McpReal,
         server_name: "Real Server",

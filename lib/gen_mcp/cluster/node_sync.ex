@@ -65,7 +65,7 @@ defmodule GenMCP.Cluster.NodeSync do
 
             _ ->
               raise ArgumentError,
-                    "expected config :gen_mcp/:node_id to be an alphanumeric string or '_', got: #{inspect(id)}"
+                    "expected config :gen_mcp/:node_id to be only letters, digits and '_', got: #{inspect(id)}"
           end
 
         {:ok, :random} ->
