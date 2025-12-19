@@ -36,10 +36,6 @@ defmodule GenMCP.Mux.Channel do
     %__MODULE__{client: pid, progress_token: nil, assigns: assigns, status: :request}
   end
 
-  def with_default_assigns(%__MODULE__{assigns: assigns} = channel, default_assigns) do
-    %{channel | assigns: Map.merge(default_assigns, assigns)}
-  end
-
   def send_progress(channel, progress, total \\ nil, message \\ nil)
 
   def send_progress(%{status: :closed}, _, _, _) do

@@ -346,55 +346,81 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
   defp stream_start(conn, 200, msg_id) do
     conn = put_resp_header(conn, "content-type", "text/event-stream")
     conn = send_chunked(conn, 200)
-    stream_loop(conn, msg_id, start_keepalive())
+
+    conn =
+      conn
+      |> Plug.Conn.put_private(:gen_mcp_client_request_id, msg_id)
+      |> start_keepalive()
+
+    stream_loop(conn)
   end
 
-  defp start_keepalive do
-    :erlang.start_timer(@stream_keepalive_timeout, self(), {__MODULE__, :keepalive})
+  defp start_keepalive(conn) do
+    tref = :erlang.start_timer(@stream_keepalive_timeout, self(), {__MODULE__, :keepalive})
+    Plug.Conn.put_private(conn, :gen_mcp_keepalive, tref)
   end
 
-  defp reset_keepalive(old_ref) do
-    :ok = :erlang.cancel_timer(old_ref, async: true, info: false)
-    _new_ref = start_keepalive()
+  defp reset_keepalive(conn) do
+    :ok = :erlang.cancel_timer(conn.private.gen_mcp_keepalive, async: true, info: false)
+    _conn = start_keepalive(conn)
   end
 
-  defp stream_loop(conn, msg_id, keepalive_ref) do
+  defp stream_loop(conn) do
     receive do
-      {:timeout, ^keepalive_ref, {__MODULE__, :keepalive}} ->
-        IO.puts("keepalive")
-        {:ok, conn} = chunk(conn, ":keepalive\n")
-        stream_loop(conn, msg_id, start_keepalive())
+      message when elem(message, 0) == :"$gen_mcp" ->
+        handle_message(conn, message)
 
-      {:timeout, _stale_ref, {__MODULE__, :keepalive}} ->
-        IO.puts("stale keepalive")
-        stream_loop(conn, msg_id, keepalive_ref)
+      {:timeout, tref, {__MODULE__, :keepalive}} ->
+        case conn.private.gen_mcp_keepalive do
+          ^tref ->
+            case chunk(conn, ":keepalive\n") do
+              {:ok, conn} -> conn |> start_keepalive() |> stream_loop()
+              {:error, :closed} -> stream_closed(conn)
+            end
 
-      # On result we will stop the stream
-      {:"$gen_mcp", :result, result} ->
-        {:ok, conn} = send_result_response_chunk(conn, msg_id, result)
-        stream_end(conn)
-
-      # On error we will stop the stream
-      {:"$gen_mcp", :error, reason} ->
-        {:ok, conn} = send_error_response_chunk(conn, msg_id, reason)
-        stream_end(conn)
-
-      {:"$gen_mcp", :notification, notification} ->
-        {:ok, conn} = send_notification_chunk(conn, notification)
-        stream_loop(conn, msg_id, reset_keepalive(keepalive_ref))
-
-      {:"$gen_mcp", :raw_message, data} ->
-        {:ok, conn} = send_stream_message(conn, data)
-        stream_loop(conn, msg_id, reset_keepalive(keepalive_ref))
-
-      {:"$gen_mcp", :close} ->
-        stream_end(conn)
+          _ ->
+            stream_loop(conn)
+        end
 
       other
       when other != {:plug_conn, :sent} and not (is_tuple(other) and elem(other, 0) == :bandit) ->
         unexpected_message(other)
-        stream_loop(conn, msg_id, keepalive_ref)
+        stream_loop(conn)
     end
+  end
+
+  # On result we will stop the stream
+  defp handle_message(conn, {:"$gen_mcp", :result, result}) do
+    case send_result_response_chunk(conn, result) do
+      {:ok, conn} -> stream_end(conn)
+      {:error, :closed} -> stream_closed(conn)
+    end
+  end
+
+  # On error we will stop the stream
+  defp handle_message(conn, {:"$gen_mcp", :error, reason}) do
+    case send_error_response_chunk(conn, reason) do
+      {:ok, conn} -> stream_end(conn)
+      {:error, :closed} -> stream_closed(conn)
+    end
+  end
+
+  defp handle_message(conn, {:"$gen_mcp", :notification, notification}) do
+    case send_notification_chunk(conn, notification) do
+      {:ok, conn} -> conn |> reset_keepalive() |> stream_loop()
+      {:error, :closed} -> stream_closed(conn)
+    end
+  end
+
+  defp handle_message(conn, {:"$gen_mcp", :raw_message, data}) do
+    case send_stream_message(conn, data) do
+      {:ok, conn} -> conn |> reset_keepalive() |> stream_loop()
+      {:error, :closed} -> stream_closed(conn)
+    end
+  end
+
+  defp handle_message(conn, {:"$gen_mcp", :close}) do
+    stream_end(conn)
   end
 
   if Mix.env() == :test do
@@ -409,20 +435,29 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
   end
 
   defp stream_end(conn) do
+    # Nothing to do on stream end for now. TODO remove this function if unused
     conn
   end
 
-  defp send_result_response_chunk(conn, msg_id, result) do
+  defp stream_closed(conn) do
+    # Stream was closed by remote, there is nothing much to do either
+    conn
+  end
+
+  defp send_result_response_chunk(conn, result) do
+    msg_id = conn.private.gen_mcp_client_request_id
+
     payload = %JSONRPCResponse{
       id: msg_id,
       jsonrpc: "2.0",
       result: result
     }
 
-    {:ok, _conn} = send_stream_message(conn, json_encode(payload))
+    send_stream_message(conn, json_encode(payload))
   end
 
-  defp send_error_response_chunk(conn, msg_id, reason) do
+  defp send_error_response_chunk(conn, reason) do
+    msg_id = conn.private.gen_mcp_client_request_id
     {_status, error_payload} = RpcError.cast_error(reason)
 
     payload = %JSONRPCError{
@@ -431,16 +466,16 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
       jsonrpc: "2.0"
     }
 
-    {:ok, _conn} = send_stream_message(conn, json_encode(payload))
+    send_stream_message(conn, json_encode(payload))
   end
 
   defp send_notification_chunk(conn, notification) do
-    {:ok, _conn} = send_stream_message(conn, json_encode(notification))
+    send_stream_message(conn, json_encode(notification))
   end
 
   defp send_stream_message(conn, data) do
     event = "event: message\ndata: #{data}\n\n"
-    {:ok, _conn} = chunk(conn, event)
+    chunk(conn, event)
   end
 
   defp json_encode(payload, pretty? \\ false) do

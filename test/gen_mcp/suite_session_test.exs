@@ -9,10 +9,7 @@ defmodule GenMCP.SuiteSessionTest do
   alias GenMCP.Mux.Channel
   alias GenMCP.Suite
   alias GenMCP.Support.ExtensionMock
-  alias GenMCP.Support.PromptRepoMock
-  alias GenMCP.Support.ResourceRepoMock
   alias GenMCP.Support.SessionControllerMock
-  alias GenMCP.Support.ToolMock
 
   setup [:set_mox_global, :verify_on_exit!]
 
@@ -66,10 +63,6 @@ defmodule GenMCP.SuiteSessionTest do
     }
   end
 
-  # ---------------------------------------------------------------------------
-  # Regular initialization
-  # ---------------------------------------------------------------------------
-
   describe "regular initialization" do
     test "session controller create callback is called on initialization request" do
       state = init_server()
@@ -102,11 +95,7 @@ defmodule GenMCP.SuiteSessionTest do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # With initialization - channel default assigns
-  # ---------------------------------------------------------------------------
-
-  describe "with initialization - channel default assigns" do
+  describe "with initialization" do
     # suite is initialized with a regular initialize request, which triggers the
     # session creation
     #
@@ -115,7 +104,7 @@ defmodule GenMCP.SuiteSessionTest do
     defp init_initialize_create(opts \\ []) do
       expect(SessionControllerMock, :create, fn @sid, norm_client, channel, arg ->
         assert %{"client_capabilities" => %{}, "client_initialized" => false} = norm_client
-        assert nil == channel.assigns[:log]
+
         assert %{log: [:arg]} == arg
 
         {:ok, assign_event(channel, :called_create), data_event(arg, :called_create)}
@@ -166,57 +155,6 @@ defmodule GenMCP.SuiteSessionTest do
 
       assert {:reply, {:result, _}, _} =
                Suite.handle_request(%MCP.ListResourcesRequest{}, build_channel(), state)
-
-      assert {:reply, {:result, _}, _} =
-               Suite.handle_request(%MCP.ListPromptsRequest{}, build_channel(), state)
-    end
-
-    test "tool mock receives updated channel on CallToolRequest" do
-      ToolMock
-      |> stub(:info, fn :name, _tool_arg -> "TestTool" end)
-      |> stub(:input_schema, fn _ -> %{type: :object} end)
-
-      state = init_initialize_create(tools: [ToolMock])
-
-      expect(ToolMock, :call, fn _req, channel, _tool_arg ->
-        assert [:called_update, :called_create] = channel.assigns.log
-        {:result, MCP.call_tool_result(text: "ok"), channel}
-      end)
-
-      tool_call_req = %MCP.CallToolRequest{
-        id: 1,
-        params: %MCP.CallToolRequestParams{
-          name: "TestTool",
-          arguments: %{}
-        }
-      }
-
-      assert {:reply, {:result, _}, _} =
-               Suite.handle_request(tool_call_req, build_channel(), state)
-    end
-
-    test "resource repo mock receives updated channel on list resources" do
-      stub(ResourceRepoMock, :prefix, fn _repo_arg -> "file:///" end)
-
-      state = init_initialize_create(resources: [ResourceRepoMock])
-
-      expect(ResourceRepoMock, :list, fn _cursor, channel, _repo_arg ->
-        assert [:called_update, :called_create] = channel.assigns.log
-        {[], nil}
-      end)
-
-      assert {:reply, {:result, _}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{}, build_channel(), state)
-    end
-
-    test "prompt repo mock receives updated channel on list prompts" do
-      stub(PromptRepoMock, :prefix, fn _repo_arg -> "test_" end)
-      state = init_initialize_create(prompts: [PromptRepoMock])
-
-      expect(PromptRepoMock, :list, fn _cursor, channel, _repo_arg ->
-        assert [:called_update, :called_create] = channel.assigns.log
-        {[], nil}
-      end)
 
       assert {:reply, {:result, _}, _} =
                Suite.handle_request(%MCP.ListPromptsRequest{}, build_channel(), state)
@@ -278,31 +216,6 @@ defmodule GenMCP.SuiteSessionTest do
       state
     end
 
-    test "tool mock receives cumulative assigns and latest arg on CallToolRequest" do
-      ToolMock
-      |> stub(:info, fn :name, :test_tool -> "TestTool" end)
-      |> stub(:input_schema, fn _ -> %{type: :object} end)
-
-      state = init_initialize_create_and_handle_info(:some_info, tools: [{ToolMock, :test_tool}])
-
-      expect(ToolMock, :call, fn _req, channel, _tool_arg ->
-        assert [{:called_info, :some_info}, :called_update, :called_create] = channel.assigns.log
-
-        {:result, MCP.call_tool_result(text: "ok"), channel}
-      end)
-
-      tool_call_req = %MCP.CallToolRequest{
-        id: 1,
-        params: %MCP.CallToolRequestParams{
-          name: "TestTool",
-          arguments: %{}
-        }
-      }
-
-      assert {:reply, {:result, _}, _} =
-               Suite.handle_request(tool_call_req, build_channel(), state)
-    end
-
     test "session controller receives latest data on subsequent handle_info" do
       state = init_initialize_create_and_handle_info(:first_info)
 
@@ -344,10 +257,6 @@ defmodule GenMCP.SuiteSessionTest do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # Session restore
-  # ---------------------------------------------------------------------------
-
   defp normalized_client do
     %{
       "client_capabilities" => %{
@@ -363,9 +272,6 @@ defmodule GenMCP.SuiteSessionTest do
       expect(SessionControllerMock, :restore, fn restore_data, channel, arg ->
         # restore data given to session_restore is given
         assert :some_restore_data == restore_data
-
-        # Channel is fresh
-        assert nil == channel.assigns[:log]
 
         # we get the arg from the :session_controller option
         assert %{log: [:arg]} == arg
@@ -384,9 +290,6 @@ defmodule GenMCP.SuiteSessionTest do
         # restore data given to session_restore is given
         assert :some_restore_data == restore_data
 
-        # Channel is fresh
-        assert nil == channel.assigns[:log]
-
         # we get the arg from the :session_controller option
         assert %{log: [:arg]} == arg
         {:ok, %{}, channel, :foo}
@@ -399,15 +302,11 @@ defmodule GenMCP.SuiteSessionTest do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # With restore - channel default assigns
-  # ---------------------------------------------------------------------------
-
-  describe "with restore - channel default assigns" do
+  describe "with restore" do
     defp init_with_restore(opts \\ []) do
       expect(SessionControllerMock, :restore, fn restore_data, channel, arg ->
         assert :some_restore_data == restore_data
-        assert nil == channel.assigns[:log]
+
         assert %{log: [:arg]} == arg
 
         {
@@ -451,57 +350,6 @@ defmodule GenMCP.SuiteSessionTest do
                Suite.handle_request(%MCP.ListPromptsRequest{}, build_channel(), state)
     end
 
-    test "tool mock receives updated channel on CallToolRequest" do
-      ToolMock
-      |> stub(:info, fn :name, _ -> "TestTool" end)
-      |> stub(:input_schema, fn _ -> %{type: :object} end)
-
-      state = init_with_restore(tools: [ToolMock])
-
-      expect(ToolMock, :call, fn _req, channel, _tool_arg ->
-        assert [:called_restore] = channel.assigns.log
-        {:result, MCP.call_tool_result(text: "ok"), channel}
-      end)
-
-      tool_call_req = %MCP.CallToolRequest{
-        id: 1,
-        params: %MCP.CallToolRequestParams{
-          name: "TestTool",
-          arguments: %{}
-        }
-      }
-
-      assert {:reply, {:result, _}, _} =
-               Suite.handle_request(tool_call_req, build_channel(), state)
-    end
-
-    test "resource repo mock receives updated channel on list resources" do
-      stub(ResourceRepoMock, :prefix, fn _ -> "file:///" end)
-      state = init_with_restore(resources: [ResourceRepoMock])
-
-      expect(ResourceRepoMock, :list, fn _cursor, channel, _repo_arg ->
-        assert [:called_restore] = channel.assigns.log
-        {[], nil}
-      end)
-
-      assert {:reply, {:result, _}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{}, build_channel(), state)
-    end
-
-    test "prompt repo mock receives updated channel on list prompts" do
-      stub(PromptRepoMock, :prefix, fn _ -> "test_" end)
-
-      state = init_with_restore(prompts: [PromptRepoMock])
-
-      expect(PromptRepoMock, :list, fn _cursor, channel, _repo_arg ->
-        assert [:called_restore] = channel.assigns.log
-        {[], nil}
-      end)
-
-      assert {:reply, {:result, _}, _} =
-               Suite.handle_request(%MCP.ListPromptsRequest{}, build_channel(), state)
-    end
-
     test "session controller handle_info callback is called with new arg" do
       state = init_with_restore()
 
@@ -537,10 +385,6 @@ defmodule GenMCP.SuiteSessionTest do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # With restore - updated info
-  # ---------------------------------------------------------------------------
-
   describe "with restore - updated info" do
     defp init_with_restore_and_handle_info(info_msg, opts \\ []) do
       state = init_with_restore(opts)
@@ -558,31 +402,6 @@ defmodule GenMCP.SuiteSessionTest do
 
       {:noreply, state} = Suite.handle_info(info_msg, state)
       state
-    end
-
-    test "tool mock receives cumulative assigns and latest arg on CallToolRequest" do
-      ToolMock
-      |> stub(:info, fn :name, _ -> "TestTool" end)
-      |> stub(:input_schema, fn _ -> %{type: :object} end)
-
-      state = init_with_restore_and_handle_info(:hello, tools: [ToolMock])
-
-      expect(ToolMock, :call, fn _req, channel, _tool_arg ->
-        assert [{:called_info, :hello}, :called_restore] = channel.assigns.log
-
-        {:result, MCP.call_tool_result(text: "ok"), channel}
-      end)
-
-      tool_call_req = %MCP.CallToolRequest{
-        id: 1,
-        params: %MCP.CallToolRequestParams{
-          name: "TestTool",
-          arguments: %{}
-        }
-      }
-
-      assert {:reply, {:result, _}, _} =
-               Suite.handle_request(tool_call_req, build_channel(), state)
     end
 
     test "session controller receives latest data on subsequent handle_info" do
@@ -612,15 +431,11 @@ defmodule GenMCP.SuiteSessionTest do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # Session callback error handling
-  # ---------------------------------------------------------------------------
-
   describe "session callback error handling" do
     test "create callback returning stop tuple stops the session" do
-      expect(SessionControllerMock, :create, fn @sid, norm_client, channel, arg ->
+      expect(SessionControllerMock, :create, fn @sid, norm_client, _channel, arg ->
         assert %{"client_capabilities" => _, "client_initialized" => _} = norm_client
-        assert nil == channel.assigns[:log]
+
         assert %{log: [:arg]} == arg
         {:stop, :some_custom_error}
       end)
@@ -644,7 +459,7 @@ defmodule GenMCP.SuiteSessionTest do
     test "update callback returning stop tuple stops the session" do
       expect(SessionControllerMock, :create, fn @sid, norm_client, channel, arg ->
         assert %{"client_capabilities" => _, "client_initialized" => false} = norm_client
-        assert nil == channel.assigns[:log]
+
         assert %{log: [:arg]} == arg
         {:ok, assign_event(channel, :called_create), data_event(arg, :called_create)}
       end)
@@ -665,9 +480,9 @@ defmodule GenMCP.SuiteSessionTest do
     end
 
     test "restore callback returning stop tuple stops the session" do
-      expect(SessionControllerMock, :restore, fn restore_data, channel, arg ->
+      expect(SessionControllerMock, :restore, fn restore_data, _channel, arg ->
         assert :some_restore_data == restore_data
-        assert nil == channel.assigns[:log]
+
         assert %{log: [:arg]} == arg
         {:stop, {:shutdown, :restore_failed}}
       end)
@@ -692,10 +507,6 @@ defmodule GenMCP.SuiteSessionTest do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # Session delete
-  # ---------------------------------------------------------------------------
-
   describe "session delete" do
     test "delete callback is called via Suite.session_delete" do
       expect(SessionControllerMock, :delete, fn @sid, session_data ->
@@ -711,8 +522,7 @@ defmodule GenMCP.SuiteSessionTest do
 
   describe "session fetching" do
     test "delegates to the session controller when set" do
-      expect(SessionControllerMock, :fetch, fn @sid, channel, arg ->
-        assert nil == channel.assigns[:log]
+      expect(SessionControllerMock, :fetch, fn @sid, _channel, arg ->
         assert %{log: [:arg]} == arg
         {:ok, :some_data}
       end)
@@ -736,17 +546,6 @@ defmodule GenMCP.SuiteSessionTest do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  #                              Listener Change
-  # ---------------------------------------------------------------------------
-
-  # To test listener changes we will send requests from tasks so they have their
-  # own pid, and they exit, letting the suite server receive monitor down
-  # messages.
-  #
-  # Also to test OTP processes in real environments we cannot just call the
-  # Suite callbacks, we need to start a real session.
-
   defp init_session do
     {:ok, session_id} = Mux.start_session(@default_opts)
     session_id
@@ -759,6 +558,13 @@ defmodule GenMCP.SuiteSessionTest do
   end
 
   describe "listener change events" do
+    # To test listener changes we will send requests from tasks so they have
+    # their own pid, and they exit, letting the suite server receive monitor
+    # down messages.
+    #
+    # Also to test OTP processes in real environments we cannot just call the
+    # Suite callbacks, we need to start a real session.
+
     test "session controller receives listener change event on init request down" do
       #
       # Server is first initialized
@@ -798,8 +604,6 @@ defmodule GenMCP.SuiteSessionTest do
         assert %{status: :request, client: p} = channel
         assert is_pid(p)
         send(test, :listener_change_on_open)
-        # assert [:called_change_init] = channel.assigns.log
-        # assert [:called_change_init, :arg] == session_data.log
 
         {:ok, channel} = Channel.send_message(channel, "hello")
         {:ok, channel} = Channel.close(channel)
@@ -810,8 +614,6 @@ defmodule GenMCP.SuiteSessionTest do
       |> expect(:listener_change, fn channel, session_data ->
         assert %{status: :closed, client: nil} = channel
         send(test, :listener_change_on_close)
-        # assert [:called_change_open, :called_change_init] = channel.assigns.log
-        # assert [:called_change_open, :called_change_init, :arg] == session_data.log
 
         {:ok, assign_event(channel, :called_change_closed),
          data_event(session_data, :called_change_closed)}
@@ -833,20 +635,66 @@ defmodule GenMCP.SuiteSessionTest do
 
       assert :ok = GenServer.stop(Mux.whereis(session_id))
     end
+
+    test "session controller receives listener change event on restore with any request" do
+      session_id = random_session_id()
+      test = self()
+
+      SessionControllerMock
+      |> expect(:fetch, fn ^session_id, _channel, _arg ->
+        {:ok, :some_restore_data}
+      end)
+      |> expect(:restore, fn :some_restore_data, channel, arg ->
+        {:ok, normalized_client(), channel, arg}
+      end)
+      |> expect(:listener_change, fn channel, _session_data ->
+        assert %{status: :closed, client: nil} = channel
+        send(test, :listener_change_on_restore_request)
+        {:ok, channel}
+      end)
+
+      run_async(fn ->
+        channel = build_channel()
+        {:ok, session_pid} = Mux.ensure_started(session_id, channel, @default_opts)
+        Mux.request(session_pid, %MCP.ListToolsRequest{}, channel)
+      end)
+
+      assert_receive :listener_change_on_restore_request
+      assert :ok = GenServer.stop(Mux.whereis(session_id))
+    end
+
+    test "session controller receives listener change event on restore with any notification" do
+      session_id = random_session_id()
+      test = self()
+
+      SessionControllerMock
+      |> expect(:fetch, fn ^session_id, _channel, _arg ->
+        {:ok, :some_restore_data}
+      end)
+      |> expect(:restore, fn :some_restore_data, channel, arg ->
+        {:ok, normalized_client(), channel, arg}
+      end)
+      |> expect(:listener_change, fn channel, _session_data ->
+        assert %{status: :closed, client: nil} = channel
+        send(test, :listener_change_on_restore_notification)
+        {:ok, channel}
+      end)
+
+      run_async(fn ->
+        channel = build_channel()
+        {:ok, session_pid} = Mux.ensure_started(session_id, channel, @default_opts)
+
+        Mux.notify(
+          session_pid,
+          %MCP.CancelledNotification{
+            method: "notifications/cancelled",
+            params: %MCP.CancelledNotificationParams{requestId: "123", reason: "test"}
+          }
+        )
+      end)
+
+      assert_receive :listener_change_on_restore_notification
+      assert :ok = GenServer.stop(Mux.whereis(session_id))
+    end
   end
-
-  @tag :skip
-  test "session restore calls the controller with any request channel"
-
-  @tag :skip
-  test "session restore calls the controller from a notification"
-
-  @tag :skip
-  # TODO we must implement channel monitoring, and channel tagging
-  # this should come with the support for GET requests
-  test "after initialize http process :DOWN," <>
-         " session controller receives a disabled channel in handle_info"
-
-  @tag :skip
-  test "session controller is called on session timeout"
 end

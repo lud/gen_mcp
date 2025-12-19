@@ -271,6 +271,9 @@ defmodule GenMCP.Suite.Tool do
   tasks). Returns same result types as `c:call/3`. Can chain another async
   operation by returning `{:async, {new_tag, new_ref}, channel}`.
 
+  The tag is generally an atom to be matched on if you implement multiple
+  conitinuation callbacks but it can be any term.
+
   ## Examples
 
   Basic continuation:

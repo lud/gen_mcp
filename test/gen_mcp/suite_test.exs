@@ -22,7 +22,7 @@ defmodule GenMCP.SuiteTest do
     server_version: "0"
   ]
 
-  defp init_session(server_opts \\ [], init_assigns \\ %{}) do
+  defp init_session(server_opts \\ []) do
     assert {:ok, state} = Suite.init("some-session-id", Keyword.merge(@server_info, server_opts))
 
     init_req = %MCP.InitializeRequest{
@@ -35,7 +35,7 @@ defmodule GenMCP.SuiteTest do
     }
 
     assert {:reply, {:result, _result}, state} =
-             Suite.handle_request(init_req, build_channel(init_assigns), state)
+             Suite.handle_request(init_req, build_channel(), state)
 
     assert %{
              client_initialized: false,
@@ -634,17 +634,14 @@ defmodule GenMCP.SuiteTest do
     test "lists resources from a direct resource repository" do
       ResourceRepoMock
       |> stub(:prefix, fn :repo1 -> "file:///" end)
-      |> expect(:list, fn nil, channel, :repo1 ->
-        %{some_assign: "some_assign"} = channel.assigns
-
+      |> expect(:list, fn nil, _channel, :repo1 ->
         {[
            %{uri: "file:///readme.txt", name: "README", description: "Project readme"},
            %{uri: "file:///config.json", name: "Config"}
          ], nil}
       end)
 
-      init_assigns = %{some_assign: "some_assign"}
-      state = init_session([resources: [{ResourceRepoMock, :repo1}]], init_assigns)
+      state = init_session(resources: [{ResourceRepoMock, :repo1}])
 
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(%MCP.ListResourcesRequest{}, build_channel(), state)
@@ -668,19 +665,14 @@ defmodule GenMCP.SuiteTest do
     test "lists resources with pagination" do
       ResourceRepoMock
       |> stub(:prefix, fn :repo1 -> "file:///" end)
-      |> expect(:list, fn nil, channel, :repo1 ->
-        assert %{some_assign: "some_assign"} = channel.assigns
-
+      |> expect(:list, fn nil, _channel, :repo1 ->
         {[%{uri: "file:///page1.txt", name: "Page 1"}], "next-token"}
       end)
-      |> expect(:list, fn "next-token", channel, :repo1 ->
-        assert %{some_assign: "some_assign"} = channel.assigns
-
+      |> expect(:list, fn "next-token", _channel, :repo1 ->
         {[%{uri: "file:///page2.txt", name: "Page 2"}], nil}
       end)
 
-      init_assigns = %{some_assign: "some_assign"}
-      state = init_session([resources: [{ResourceRepoMock, :repo1}]], init_assigns)
+      state = init_session(resources: [{ResourceRepoMock, :repo1}])
 
       # First page
       assert {:reply, {:result, result1}, _} =
@@ -1351,14 +1343,11 @@ defmodule GenMCP.SuiteTest do
 
       PromptRepoMock
       |> expect(:prefix, fn :arg -> "some_prefix" end)
-      |> expect(:list, fn nil, channel, :arg ->
-        %{some_assign: "some_assign"} = channel.assigns
-
+      |> expect(:list, fn nil, _channel, :arg ->
         {prompts, nil}
       end)
 
-      init_assigns = %{some_assign: "some_assign"}
-      state = init_session([prompts: [{PromptRepoMock, :arg}]], init_assigns)
+      state = init_session(prompts: [{PromptRepoMock, :arg}])
 
       assert {:reply, {:result, result}, _} =
                Suite.handle_request(
@@ -1379,19 +1368,14 @@ defmodule GenMCP.SuiteTest do
 
       PromptRepoMock
       |> expect(:prefix, fn :repo1 -> "some_prefix" end)
-      |> expect(:list, fn nil, channel, :repo1 ->
-        %{some_assign: "some_assign"} = channel.assigns
-
+      |> expect(:list, fn nil, _channel, :repo1 ->
         {page1, "repo_cursor_2"}
       end)
-      |> expect(:list, fn "repo_cursor_2", channel, :repo1 ->
-        %{some_assign: "some_assign"} = channel.assigns
-
+      |> expect(:list, fn "repo_cursor_2", _channel, :repo1 ->
         {page2, nil}
       end)
 
-      init_assigns = %{some_assign: "some_assign"}
-      state = init_session([prompts: [{PromptRepoMock, :repo1}]], init_assigns)
+      state = init_session(prompts: [{PromptRepoMock, :repo1}])
 
       # First page
       assert {:reply, {:result, result1}, _} =

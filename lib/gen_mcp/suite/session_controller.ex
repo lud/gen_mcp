@@ -16,12 +16,10 @@ defmodule GenMCP.Suite.SessionController do
   Retrieves an existing stored session.
 
   A channel is given to be able to compare authenticated channels with session
-  ownership, but the channel cannot be altered at this step, so the callback
-  does not return it.
+  ownership, but the channel cannot be altered at this step.
 
-  The `GenMCP` server implementation should call the `c:restore/3`
-  callback, as does `GenMCP.Suite` to allow the session controller to define
-  shared assigns.
+  The resoted data will be passed to `c:restore/3` in the execution context of
+  the session process.
   """
   @callback fetch(session_id :: String.t(), channel, arg) ::
               {:ok, restore_data}
@@ -31,7 +29,7 @@ defmodule GenMCP.Suite.SessionController do
   Called by `GenMCP.Suite` or custom implementations when a new session is
   created during initialization.
 
-  Returns the updated channel with any default assigns, and the session state.
+  Returns the updated channel new assigns and the session state.
   """
   @callback create(session_id, PersistedClientInfo.normalized(), channel, arg) ::
               {:ok, channel, session_state}
@@ -41,7 +39,7 @@ defmodule GenMCP.Suite.SessionController do
   Called by `GenMCP.Suite` or custom implementations when a session is
   initialized and before the session timeout time is reached.
 
-  Returns the updated channel with any default assigns, and the session state.
+  Returns the updated channel new assigns and the session state.
   """
   @callback update(session_id, PersistedClientInfo.normalized(), channel, arg) ::
               {:ok, channel, session_state}
@@ -84,8 +82,10 @@ defmodule GenMCP.Suite.SessionController do
               | {:stop, reason :: term()}
 
   @doc """
-  Called by `GenMCP.Suite` or custom implementations when the listener channel
-  change.
+  Called by `GenMCP.Suite` or custom implementations when the client closes or
+  opens a listener channel.
+
+  In the case of a new open channel, all previous assigns are lost.
 
   A listener channel is typically representing the HTTP request streaming from
   GET request to the MCP endpoint, used to send notifications and requests to
@@ -97,12 +97,6 @@ defmodule GenMCP.Suite.SessionController do
   `status` property is `:closed` and `:client` property is `nil` (instead of the
   HTTP request controller pid).
 
-  To initialize the session controller with a closed channel after session
-  initialization, this callback is also called immediately after the
-  InitializeRequest is handled by the MCP server. In general this will happen
-  before the InitializedNotification is received, so before the `c:update/4`
-  callback is called, but it may depend on the client implementation.
-
   This callback is the right place to setup/teardown subscriptions to pubsub,
   GenStage, etc.
 
@@ -110,6 +104,13 @@ defmodule GenMCP.Suite.SessionController do
   assigns.
 
   ### Sequence diagram
+
+  To initialize the session controller with a closed channel after session
+  initialization, this callback is also called immediately after the
+  InitializeRequest is handled by the MCP server. In general this will happen
+  before the InitializedNotification is received, so before the `c:update/4`
+  callback is called, but it may depend on the client implementation.
+
 
   <div class="mermaid">
   sequenceDiagram

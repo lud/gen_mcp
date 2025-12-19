@@ -100,35 +100,6 @@ defmodule GenMCP.Suite do
 
   Record.defrecordp(:tracker, id: nil, data: nil, channel: nil, mref: nil)
 
-  # TODO(doc) we need a new behaviour to handle listChanged notifications.
-  #
-  # * behaviour Suite.SessionController
-  # * when the client listens from a GET request, we start a stream and keep the
-  #   channel
-  # * unknown messages from handle_info are given to the session controller with
-  #   that channel.
-  # * handle_info messages should be delivered even if there is no GET stream,
-  #   but the channel would be a special channel struct that just ignores
-  #   notifications given to it.
-  # * the session controller callback should return a {:noreply, channel},
-  #   {:noreply, channel, actions} or {:stop, reason, channel} tuple. Actions
-  #   are for refreshing tools/repos.
-  # * assigns from that returned channel would replace the default_assigns
-  #   (which are still overriden by copied conn assigns). Currently the the
-  #   default_assigns are taken from the initialize request. We should call a
-  #   on_initialize callback on the session controller instead.
-  # * to not have those assigns overriden by the :assigns option of the
-  #   transport plug, that option must not be used by the plug anymore, and just
-  #   forwared to the server implementation. The server would initialize with
-  #   that as the default assigns (+ gen_mcp_session_id)
-  # * the session controller SHOULD NOT send notifications to the channel for
-  #   list changedlike list changed (for tools, resources, etc), but rather
-  #   return actions such as [:refresh_tools, :refresh_all]. This would make the
-  #   Suite server recompute extensions to get new tools/repos lists and send
-  #   the notification itself.
-  # * the session controller should send the resources updated notifications
-  #   itself.
-
   @init_opts_schema init_opts_schema
   @doc false
   def init_opts_schema do
@@ -209,8 +180,6 @@ defmodule GenMCP.Suite do
 
     case state.tools_map do
       %{^tool_name => tool} ->
-        channel = channel_defaults(channel, state)
-
         case call_tool(req, tool, channel, state) do
           {:result, result, _channel} ->
             {:reply, {:result, result}, state}
@@ -242,7 +211,6 @@ defmodule GenMCP.Suite do
 
     case decode_pagination(cursor, state) do
       {:ok, pagination} ->
-        channel = channel_defaults(channel, state)
         {resources, next_pagination} = list_resources(pagination, channel, state)
 
         result =
@@ -263,8 +231,6 @@ defmodule GenMCP.Suite do
 
     case find_resource_repo_for_uri(state, uri) do
       {:ok, repo} ->
-        channel = channel_defaults(channel, state)
-
         case ResourceRepo.read_resource(repo, uri, channel) do
           {:ok, result} -> {:reply, {:result, result}, state}
           {:error, reason} -> {:reply, {:error, reason}, state}
@@ -308,7 +274,6 @@ defmodule GenMCP.Suite do
 
     case decode_pagination(cursor, state) do
       {:ok, pagination} ->
-        channel = channel_defaults(channel, state)
         {prompts, next_pagination} = list_prompts(pagination, channel, state)
 
         result =
@@ -333,8 +298,6 @@ defmodule GenMCP.Suite do
 
     case find_prompt_repo_for_name(state, name) do
       {:ok, repo} ->
-        channel = channel_defaults(channel, state)
-
         case PromptRepo.get_prompt(repo, name, arguments, channel) do
           {:ok, result} -> {:reply, {:result, result}, state}
           {:error, reason} -> {:reply, {:error, reason}, state}
@@ -430,6 +393,13 @@ defmodule GenMCP.Suite do
       {:ok, state} -> {:noreply, state}
       {:stop, reason, state} -> {:stop, reason, state}
     end
+  end
+
+  # TODO :CHAN_DOWN is received when we track a server request (or an async tool
+  # result executing a Task). We should mark the channel as closed in the
+  # tracker.
+  def handle_info({:CHAN_DOWN, _mref, :process, _pid, _reason}, state) do
+    {:noreply, state}
   end
 
   def handle_info(msg, state) do
@@ -765,10 +735,6 @@ defmodule GenMCP.Suite do
       %{params: %{protocolVersion: version}} when version in @supported_protocol_versions -> :ok
       %{params: %{protocolVersion: version}} -> {:error, {:unsupported_protocol, version}}
     end
-  end
-
-  defp channel_defaults(%Channel{} = channel, state) do
-    Channel.with_default_assigns(channel, state.sc_channel.assigns)
   end
 
   defp random_string(len) do

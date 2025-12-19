@@ -7,7 +7,6 @@ defmodule GenMCP.SuiteAsyncTest do
   import Mox
 
   alias GenMCP.MCP
-  alias GenMCP.Mux.Channel
   alias GenMCP.Suite
   alias GenMCP.Suite.Tool
   alias GenMCP.Support.ToolMock
@@ -832,100 +831,6 @@ defmodule GenMCP.SuiteAsyncTest do
       assert_raise RuntimeError, ~r/duplicate/i, fn ->
         Suite.handle_request(req_two, build_channel(), state)
       end
-    end
-  end
-
-  describe "assigns transmission" do
-    test "assigns from initialize, tool call, and tool modifications flow through async callbacks" do
-      stub(ToolMock, :info, fn
-        :name, _ -> "AssignsTool"
-        _, _ -> nil
-      end)
-
-      # session init
-
-      init_assigns = %{from_initialize: true, shared_assign: "from_init"}
-
-      state = init_session([tools: [ToolMock]], init_assigns)
-
-      # 1st tool call
-
-      tool_call_req = %MCP.CallToolRequest{
-        id: 1001,
-        params: %MCP.CallToolRequestParams{
-          name: "AssignsTool",
-          arguments: {}
-        }
-      }
-
-      # Call request assigns override initialize assigns
-      call_assigns = %{from_call: true, shared_assign: "from_call"}
-
-      ref1 = make_ref()
-      ref2 = make_ref()
-
-      ToolMock
-      |> expect(:call, fn _req, channel, _arg ->
-        assert :request = channel.status
-
-        assert %{
-                 from_initialize: true,
-                 from_call: true,
-                 shared_assign: "from_call"
-               } = channel.assigns
-
-        # Tool adds its own assigns and overrides one
-        channel = Channel.assign(channel, :from_call_step1, true)
-        channel = Channel.assign(channel, :shared_assign, "from_tool_step1")
-
-        {:async, {:step1, ref1}, channel}
-      end)
-      |> expect(:continue, 2, fn
-        {:step1, {:ok, :step1_complete}}, channel, _arg ->
-          assert :stream = channel.status
-
-          # Verify all assigns from first call
-          assert %{
-                   from_initialize: true,
-                   from_call: true,
-                   from_call_step1: true,
-                   shared_assign: "from_tool_step1"
-                 } = channel.assigns
-
-          # Tool adds more assigns for next step
-          channel = Channel.assign(channel, :from_continue_step1, true)
-          channel = Channel.assign(channel, :shared_assign, "from_continue_step1")
-
-          {:async, {:step2, ref2}, channel}
-
-        {:step2, {:ok, :step2_complete}}, channel, _arg ->
-          # Verify all assigns including the new ones from continue
-          assert %{
-                   from_initialize: true,
-                   from_call: true,
-                   from_call_step1: true,
-                   from_continue_step1: true,
-                   shared_assign: "from_continue_step1"
-                 } = channel.assigns
-
-          {:result, MCP.call_tool_result(text: "Assigns verified"), channel}
-      end)
-
-      # Initial call
-      assert {:reply, :stream, state} =
-               Suite.handle_request(tool_call_req, build_channel(call_assigns), state)
-
-      # Process first async result
-      assert {:noreply, state} = Suite.handle_info({ref1, :step1_complete}, state)
-
-      # Process second async result
-      assert {:noreply, _state} = Suite.handle_info({ref2, :step2_complete}, state)
-
-      # Assert final result is delivered to client
-      assert_receive {:"$gen_mcp", :result,
-                      %MCP.CallToolResult{
-                        content: [%MCP.TextContent{text: "Assigns verified"}]
-                      }}
     end
   end
 
