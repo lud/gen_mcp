@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2025-12-19
+
+### 🚀 Features
+
+- Added support for tools/list _meta in Suite
+- Channels are now created by the HTTP client directly
+- Added session controller support in suite
+- Prepare channel struct for status indicator
+- Pass listener channel to the session controller
+- [**breaking**] Session controller channel assigns are not merged in all requests anymore
+
+### 🚜 Refactor
+
+- Do not handle file write errors in DevSessionStore
+
+### 📚 Documentation
+
+- Document need for constant node_id for DevSessionStore
+
 ## [0.4.2] - 2025-11-29
 
 ### 📚 Documentation
