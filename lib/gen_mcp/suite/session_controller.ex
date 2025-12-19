@@ -75,10 +75,58 @@ defmodule GenMCP.Suite.SessionController do
   # TODO maybe we should find another name, because handle_info is typically a
   # 2-arity function
 
+  IO.warn(":ok instead of noreply")
+
   @callback handle_info(info :: term(), channel, session_state) ::
               {:noreply, channel, session_state}
               | {:noreply, session_state}
               | {:stop, reason :: term()}
+
+  @doc """
+  Called by `GenMCP.Suite` or custom implementations when the listener channel
+  change.
+
+  A listener channel is typically representing the HTTP request streaming from
+  GET request to the MCP endpoint, used to send notifications and requests to
+  the client that are not related to any client request.
+
+  Channels can be open and closed at any time by the client. GenMCP will only
+  allow one listener channel to be open at the same time. When the channel is
+  closed by the client, this callback will be called with a channel whose
+  `status` property is `:closed` and `:client` property is `nil` (instead of the
+  HTTP request controller pid).
+
+  To initialize the session controller with a closed channel after session
+  initialization, this callback is also called immediately after the
+  InitializeRequest is handled by the MCP server. In general this will happen
+  before the InitializedNotification is received, so before the `c:update/3`
+  callback is called, but it may depend on the client implementation.
+
+  Returns the updated session state and optionally the channel updated with
+  assigns.
+
+  ### Sequence diagram
+
+  <div class="mermaid">
+  sequenceDiagram
+    Client ->> Suite: POST InitializeRequest
+    Suite ->> SessionController: create/3
+    par client initialization DOWN
+        Client ->> Suite: DOWN (InitializeRequest)
+        Suite ->> SessionController: listener_change/3 (closed)
+    and notification
+        Client ->> Suite: POST InitializedNotification
+        Suite ->> SessionController: update/3
+    end
+    Client ->> Suite: GET ListenerRequest
+    Suite ->> SessionController: listener_change/3 (stream)
+    Client ->> Suite: DOWN (ListenerRequest)
+    Suite ->> SessionController: listener_change/3 (closed)
+  </div>
+  """
+
+  @callback listener_change(channel, session_state) ::
+              {:ok, channel, session_state} | {:ok, session_state}
 
   @doc """
   Called by `GenMCP.Suite` or custom implementations when a session is being

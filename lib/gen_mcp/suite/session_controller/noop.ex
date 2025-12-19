@@ -33,4 +33,9 @@ defmodule GenMCP.Suite.SessionController.Noop do
   def delete(_session_id, _session_state) do
     :ok
   end
+
+  @impl true
+  def listener_change(channel, session_state) do
+    {:ok, channel, session_state}
+  end
 end

@@ -91,14 +91,15 @@ defmodule GenMCP.Mux.Session do
 
     case init_server(conf) do
       {:ok, server_state} ->
-        {:ok,
-         %State{
-           server_mod: conf.server_mod,
-           server_state: server_state,
-           session_id: conf.session_id,
-           session_timeout_ref: start_session_timeout(conf.session_timeout),
-           conf: conf
-         }}
+        state = %State{
+          server_mod: conf.server_mod,
+          server_state: server_state,
+          session_id: conf.session_id,
+          session_timeout_ref: start_session_timeout(conf.session_timeout),
+          conf: conf
+        }
+
+        {:ok, state}
 
       {:stop, _} = stop ->
         stop

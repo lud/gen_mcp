@@ -72,7 +72,11 @@ defmodule GenMCP.TestWeb.Router do
       server_name: "Real Server",
       server_version: "0.0.1",
       server_title: "GenMCP own development server",
-      tools: [GenMCP.Test.Tools.ErlangHasher, GenMCP.Test.Tools.Addition],
+      tools: [
+        GenMCP.Test.Tools.ErlangHasher,
+        GenMCP.Test.Tools.ErlangHasherAsync,
+        GenMCP.Test.Tools.Addition
+      ],
       extensions: [],
       session_controller: GenMCP.Suite.SessionController.DevSessionStore
   end

@@ -1,27 +1,34 @@
 defmodule GenMCP.JsonDerive do
   @moduledoc false
-  alias JSV.Helpers.MapExt
 
-  defmacro auto(serialize_merge \\ nil)
-
-  defmacro auto(nil = _serialize_merge) do
-    quote do
-      @before_compile unquote(__MODULE__)
-
-      @doc false
-      def __normalize__(t) do
-        MapExt.from_struct_no_nils(t)
-      end
-    end
+  def skip_nil_values(%_{} = struct, keep) do
+    struct
+    |> Map.from_struct()
+    |> Map.filter(fn {k, v} -> v != nil or k in keep end)
   end
 
-  defmacro auto(serialize_merge) do
+  defmacro auto(serialize_merge \\ nil, keep_nils \\ [])
+
+  defmacro auto(serialize_merge, keep_nils) do
     quote do
       @before_compile unquote(__MODULE__)
+      @keep_nils unquote(keep_nils)
 
+      serialize_merge = unquote(serialize_merge)
       @doc false
-      def __normalize__(t) do
-        Map.merge(MapExt.from_struct_no_nils(t), unquote(serialize_merge))
+      case map_size(serialize_merge) do
+        0 ->
+          def __normalize__(t) do
+            unquote(__MODULE__).skip_nil_values(t, @keep_nils)
+          end
+
+        _ ->
+          def __normalize__(t) do
+            Map.merge(
+              unquote(__MODULE__).skip_nil_values(t, @keep_nils),
+              unquote(serialize_merge)
+            )
+          end
       end
     end
   end

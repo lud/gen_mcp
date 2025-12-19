@@ -1,10 +1,11 @@
 defmodule GenMCP.SuiteSessionTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import GenMCP.Test.Helpers
   import Mox
 
   alias GenMCP.MCP
+  alias GenMCP.Mux
   alias GenMCP.Mux.Channel
   alias GenMCP.Suite
   alias GenMCP.Support.ExtensionMock
@@ -13,13 +14,14 @@ defmodule GenMCP.SuiteSessionTest do
   alias GenMCP.Support.SessionControllerMock
   alias GenMCP.Support.ToolMock
 
-  setup :verify_on_exit!
+  setup [:set_mox_global, :verify_on_exit!]
 
   @sid "ABCD-some-session-id"
 
   @default_opts [
     server_name: "Test Server",
     server_version: "0",
+    server: Suite,
 
     # All tests start with the same mock data when not restored
     session_controller: {SessionControllerMock, %{log: [:arg]}}
@@ -733,6 +735,111 @@ defmodule GenMCP.SuiteSessionTest do
       assert {:error, :not_found} = Suite.session_fetch(@sid, build_channel(), opts)
     end
   end
+
+  # ---------------------------------------------------------------------------
+  #                              Listener Change
+  # ---------------------------------------------------------------------------
+
+  # To test listener changes we will send requests from tasks so they have their
+  # own pid, and they exit, letting the suite server receive monitor down
+  # messages.
+  #
+  # Also to test OTP processes in real environments we cannot just call the
+  # Suite callbacks, we need to start a real session.
+
+  defp init_session do
+    {:ok, session_id} = Mux.start_session(@default_opts)
+    session_id
+  end
+
+  defp run_async(fun) do
+    fun
+    |> Task.async()
+    |> Task.await()
+  end
+
+  describe "listener change events" do
+    test "session controller receives listener change event on init request down" do
+      #
+      # Server is first initialized
+
+      session_id = init_session()
+      test = self()
+      # We should expect a session create event on initialization
+      # We should get a channel change event as well
+
+      SessionControllerMock
+      |> expect(:create, fn ^session_id, _norm_client, channel, _arg ->
+        assert :request = channel.status
+        {:ok, assign_event(channel, :called_create), data_event(%{log: [:arg]}, :called_create)}
+      end)
+      |> expect(:listener_change, fn channel, session_data ->
+        assert %{status: :closed, client: nil} = channel
+        send(test, :listener_change_on_init)
+
+        {:ok, assign_event(channel, :called_change_init),
+         data_event(session_data, :called_change_init)}
+      end)
+
+      assert {:result, %MCP.InitializeResult{}} =
+               run_async(fn -> Mux.request(session_id, init_req(), build_channel()) end)
+
+      assert_receive :listener_change_on_init
+
+      #
+      # A new listener opens
+      #
+      # The callback will be called when the channel opens, it will send a
+      # message and then close it, so the callback will be called again with a
+      # closed channel
+
+      SessionControllerMock
+      |> expect(:listener_change, fn channel, session_data ->
+        assert %{status: :request, client: p} = channel
+        assert is_pid(p)
+        send(test, :listener_change_on_open)
+        # assert [:called_change_init] = channel.assigns.log
+        # assert [:called_change_init, :arg] == session_data.log
+
+        {:ok, channel} = Channel.send_message(channel, "hello")
+        {:ok, channel} = Channel.close(channel)
+
+        {:ok, assign_event(channel, :called_change_open),
+         data_event(session_data, :called_change_open)}
+      end)
+      |> expect(:listener_change, fn channel, session_data ->
+        assert %{status: :closed, client: nil} = channel
+        send(test, :listener_change_on_close)
+        # assert [:called_change_open, :called_change_init] = channel.assigns.log
+        # assert [:called_change_open, :called_change_init, :arg] == session_data.log
+
+        {:ok, assign_event(channel, :called_change_closed),
+         data_event(session_data, :called_change_closed)}
+      end)
+
+      :ok =
+        run_async(fn ->
+          assert :stream = Mux.request(session_id, %MCP.ListenerRequest{}, build_channel())
+
+          assert_receive {:"$gen_mcp", :raw_message, "hello"}
+          assert_receive {:"$gen_mcp", :close}
+          :ok
+        end)
+
+      assert_receive :listener_change_on_open
+      assert_receive :listener_change_on_close
+      # We should be able to stop the session as our callbacks return correct
+      # values and will not crash the session
+
+      assert :ok = GenServer.stop(Mux.whereis(session_id))
+    end
+  end
+
+  @tag :skip
+  test "session restore calls the controller with any request channel"
+
+  @tag :skip
+  test "session restore calls the controller from a notification"
 
   @tag :skip
   # TODO we must implement channel monitoring, and channel tagging

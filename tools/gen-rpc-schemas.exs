@@ -565,6 +565,15 @@ defmodule Generator do
         }
       end
     end
+
+    defmodule #{inspect(module_name("ListenerRequest"))} do
+      @moduledoc \"""
+      Represents a GET request from the StreamableHTTP client.
+      \"""
+
+      defstruct []
+      @type t :: %__MODULE__{}
+    end
     """
   end
 
@@ -835,7 +844,13 @@ defmodule Generator do
     IO.puts("generating #{name}")
     module = module_name(name)
     skip_keys = Keyword.get(opts, :skip_keys, nil)
-    serialize_merge = Keyword.get(opts, :serialize_merge, nil)
+    serialize_merge = Keyword.get(opts, :serialize_merge, %{})
+
+    serialize_keep =
+      case schema do
+        %{required: [_ | _] = keys} -> keys -- (skip_keys || [])
+        _ -> []
+      end
 
     case kind do
       :struct ->
@@ -843,7 +858,7 @@ defmodule Generator do
         defmodule #{inspect(module)} do
           use JSV.Schema
 
-          JsonDerive.auto(#{serialize_merge && inspect(serialize_merge)})
+          JsonDerive.auto(#{inspect(serialize_merge)}, #{inspect(serialize_keep)})
 
           #{skip_keys && "@skip_keys #{inspect(skip_keys)}"}
 

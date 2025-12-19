@@ -54,6 +54,15 @@ defmodule GenMCP.Test.Client do
     post(client, data, req_opts, _validate_req? = true)
   end
 
+  def get_stream(client, handler) do
+    resp = Req.get!(client, into: :self)
+
+    resp
+    |> expect_status(200)
+    |> stream_chunks()
+    |> Stream.map(handler)
+  end
+
   def post_invalid_message(client, data, req_opts \\ []) do
     post(client, data, req_opts, _validate_req? = false)
   end
@@ -74,11 +83,19 @@ defmodule GenMCP.Test.Client do
       Expected status #{status} but got #{resp.status}
 
       Response body:
-      #{inspect(resp.body, pretty: true, limit: :infinity)}
+      #{inspect_or_print(resp.body)}
       """)
     end
 
     resp
+  end
+
+  defp inspect_or_print(str) when is_binary(str) do
+    str
+  end
+
+  defp inspect_or_print(other) do
+    inspect(other, pretty: true, limit: :infinity)
   end
 
   def expect_session_header(resp) do
@@ -106,6 +123,14 @@ defmodule GenMCP.Test.Client do
         {:ok, [:done]} -> nil
         {:ok, [data: data]} -> {data, resp}
       end
+    end)
+  end
+
+  def parse_stream(stream) do
+    Stream.map(stream, fn item ->
+      _ = assert ["event: " <> event, "data: " <> data, "", ""] = String.split(item, "\n")
+
+      %{event: event, data: JSV.Codec.decode!(data)}
     end)
   end
 end

@@ -8,4 +8,4 @@ Application.stop(:logger)
 
 {:ok, _} = Application.ensure_all_started(:gen_mcp, mode: :concurrent)
 
-ExUnit.start(assert_receive_timeout: 100)
+ExUnit.start(assert_receive_timeout: 1000)

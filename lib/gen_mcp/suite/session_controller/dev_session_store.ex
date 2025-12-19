@@ -142,4 +142,9 @@ defmodule GenMCP.Suite.SessionController.DevSessionStore do
   defp default_cache_dir do
     Path.join(System.tmp_dir!(), "gen-mcp-dev-session-store-cache")
   end
+
+  @impl true
+  def listener_change(channel, opts) do
+    {:ok, channel, opts}
+  end
 end

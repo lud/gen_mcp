@@ -87,6 +87,7 @@ defmodule GenMCP.Suite do
       :sc_mod,
       :sc_state,
       :sc_channel,
+      :sc_channel_mref,
       :server_info,
       :session_id,
       :token_key,
@@ -97,7 +98,7 @@ defmodule GenMCP.Suite do
     defstruct @enforce_keys
   end
 
-  Record.defrecordp(:tracker, id: nil, tool_name: nil, channel: nil, tag: nil)
+  Record.defrecordp(:tracker, id: nil, data: nil, channel: nil, mref: nil)
 
   # TODO(doc) we need a new behaviour to handle listChanged notifications.
   #
@@ -223,7 +224,7 @@ defmodule GenMCP.Suite do
 
             channel = Channel.set_streaming(channel)
             # the tracking process will set the ID of the request
-            {_req, state} = track_request(state, tool, tag, req, channel)
+            state = track_tool_server_request(state, tool, tag, req, channel)
             {:reply, :stream, state}
         end
 
@@ -344,6 +345,13 @@ defmodule GenMCP.Suite do
     end
   end
 
+  def handle_request(%MCP.ListenerRequest{}, sc_channel, state) do
+    case session_listener_channel_change(state, {:open, sc_channel}) do
+      {:ok, state} -> {:reply, :stream, state}
+      {:stop, reason, state} -> {:stop, reason, state}
+    end
+  end
+
   def handle_request(req, _, state) do
     :telemetry.execute([:gen_mcp, :suite, :error, :unknown_request], %{}, %{
       session_id: state.session_id,
@@ -415,6 +423,15 @@ defmodule GenMCP.Suite do
     {:noreply, state}
   end
 
+  def handle_info({:SC_CHAN_DOWN, mref, :process, _pid, _reason}, state) do
+    ^mref = state.sc_channel_mref
+
+    case session_listener_channel_change(state, :close) do
+      {:ok, state} -> {:noreply, state}
+      {:stop, reason, state} -> {:stop, reason, state}
+    end
+  end
+
   def handle_info(msg, state) do
     %{sc_mod: sc_mod, sc_channel: sc_channel, sc_state: sc_state} = state
 
@@ -481,6 +498,41 @@ defmodule GenMCP.Suite do
     _ = sc_mod.delete(session_id, sc_state)
   end
 
+  defp session_listener_channel_change(state, event) do
+    %{
+      sc_mod: sc_mod,
+      sc_channel: old_sc_channel,
+      sc_state: sc_state,
+      sc_channel_mref: current_mref
+    } = state
+
+    {mref, sc_channel} =
+      case event do
+        {:open, new_sc_channel} ->
+          # forget the old channel
+          if current_mref do
+            Process.demonitor(current_mref, [:flush])
+          end
+
+          mref = monitor_sc_channel(new_sc_channel)
+          {mref, new_sc_channel}
+
+        :close ->
+          {_mref = nil, Channel.as_closed(old_sc_channel)}
+      end
+
+    callback SessionController, sc_mod.listener_change(sc_channel, sc_state) do
+      {:ok, %Channel{} = sc_channel_2, sc_state} ->
+        {:ok, %{state | sc_channel: sc_channel_2, sc_state: sc_state, sc_channel_mref: mref}}
+
+      {:ok, sc_state} ->
+        {:ok, %{state | sc_channel: sc_channel, sc_state: sc_state, sc_channel_mref: mref}}
+
+      {:stop, reason} ->
+        {:stop, reason, %{state | sc_channel: sc_channel, sc_channel_mref: mref}}
+    end
+  end
+
   @doc false
   def log_unhandled_info(msg) do
     # This should be handled by the session controller, no need for
@@ -509,14 +561,14 @@ defmodule GenMCP.Suite do
   end
 
   defp handle_task_continuation(tracker, new_trackers, task_result, state) do
-    tracker(tool_name: tool_name, channel: channel, tag: tag) = tracker
+    tracker(data: {:server_req, tool_name, tag}, channel: channel) = tracker
     state = %{state | trackers: new_trackers}
     tool = Map.fetch!(state.tools_map, tool_name)
 
     case Tool.continue(tool, {tag, task_result}, channel) do
       # using the previous channel so we are sure it's the right one
       {:result, result, _channel} ->
-        ^channel = Channel.send_result(channel, result)
+        {:ok, ^channel} = Channel.send_result(channel, result)
 
         {:ok, state}
 
@@ -526,11 +578,11 @@ defmodule GenMCP.Suite do
         # server request.
 
         # the tracking process will set the ID of the request
-        {_req, state} = track_request(state, tool, tag, req, channel)
+        state = track_tool_server_request(state, tool, tag, req, channel)
         {:ok, state}
 
       {:error, reason, _channel} ->
-        ^channel = Channel.send_error(channel, reason)
+        {:ok, ^channel} = Channel.send_error(channel, reason)
 
         {:ok, state}
     end
@@ -567,6 +619,7 @@ defmodule GenMCP.Suite do
             client_capabilities: client_capabilities,
             client_initialized: client_initialized?
           },
+          channel,
           opts
         )
 
@@ -592,11 +645,14 @@ defmodule GenMCP.Suite do
         client_capabilities: persisted_client_info.client_capabilities,
         client_initialized: persisted_client_info.client_initialized
       },
+      sc_channel,
       opts
     )
   end
 
-  defp initialize_from(init_data, opts) do
+  # Init channel is generally the InitializationRequest channel but in the case
+  # of a session restore it can be any request, or notification
+  defp initialize_from(init_data, init_channel, opts) do
     state =
       %State{
         client_capabilities: init_data.client_capabilities,
@@ -615,6 +671,7 @@ defmodule GenMCP.Suite do
         sc_mod: init_data.sc_mod,
         sc_state: init_data.sc_state,
         sc_channel: init_data.sc_channel,
+        sc_channel_mref: monitor_sc_channel(init_channel),
 
         # Empty before first extensions call
         tool_names: [],
@@ -628,6 +685,10 @@ defmodule GenMCP.Suite do
     state = refresh_extensions(state, init_data.sc_channel, :all)
 
     {:ok, state}
+  end
+
+  defp monitor_sc_channel(%Channel{client: pid}) when is_pid(pid) do
+    _mref = :erlang.monitor(:process, pid, tag: :SC_CHAN_DOWN)
   end
 
   defp build_extensions(opts) do
@@ -847,32 +908,39 @@ defmodule GenMCP.Suite do
     []
   end
 
-  defp track_request(state, tool, tag, req, channel) do
-    {track_id, server_request} =
-      case req do
-        # TODO if an actual elicitation request we must create a new ID and bump
-        # it in the state (or use erlang.unique_integer)
-        task_ref when is_reference(task_ref) -> {task_ref, nil}
-      end
+  defp track_tool_server_request(state, tool, tag, server_req, channel) do
+    tracker = make_tracker(channel, {:server_req, tool.name, tag, server_req})
+    _state = put_tracker(state, tracker)
+  end
 
+  defp put_tracker(state, tracker) do
     # storing the request in the trackers. If for some reason a tool returns the
-    # same reference twice, we do not support it
+    # same reference twice, we do not support it. This is not a problem as
+    # tracked are popped before continuing a tool, so there will be no duplicate.
+
+    track_id = tracker(tracker, :id)
 
     case List.keymember?(state.trackers, track_id, tracker(:id)) do
       true ->
-        raise "duplicated track request #{inspect(track_id)} returned from tool #{inspect(tool.name)}"
+        raise "duplicated track request #{inspect(track_id)} for tracker #{inspect(tracker(tracker, :data))}"
 
       false ->
         :ok
     end
 
-    state =
-      update_in(
-        state.trackers,
-        &[tracker(id: track_id, tool_name: tool.name, channel: channel, tag: tag) | &1]
-      )
+    update_in(state.trackers, &[tracker | &1])
+  end
 
-    {server_request, state}
+  defp make_tracker(channel, info) when is_pid(channel.client) do
+    mref = :erlang.monitor(:process, channel.client, tag: :CHAN_DOWN)
+
+    {track_id, data} =
+      case info do
+        {:server_req, tool_name, tag, ref} when is_reference(ref) ->
+          {ref, {:server_req, tool_name, tag}}
+      end
+
+    tracker(id: track_id, data: data, channel: channel, mref: mref)
   end
 
   defp normalize_session_controller(opts) do

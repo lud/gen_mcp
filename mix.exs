@@ -170,7 +170,17 @@ defmodule GenMCP.MixProject do
         ]
       ],
       extras: doc_extras(),
-      groups_for_extras: groups_for_extras()
+      groups_for_extras: groups_for_extras(),
+      before_closing_body_tag: fn
+        :html ->
+          """
+          <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+          <script>mermaid.initialize({startOnLoad: true, theme: 'neutral'})</script>
+          """
+
+        _ ->
+          ""
+      end
     ]
   end
 

@@ -28,6 +28,15 @@ defmodule GenMCP.MCP.RequestMeta do
   end
 end
 
+defmodule GenMCP.MCP.ListenerRequest do
+  @moduledoc """
+  Represents a GET request from the StreamableHTTP client.
+  """
+
+  defstruct []
+  @type t :: %__MODULE__{}
+end
+
 defmodule GenMCP.MCP.ModMap do
   defmacro require_all do
     Enum.map(json_schema().definitions, fn {_, mod} ->
@@ -107,7 +116,7 @@ end
 defmodule GenMCP.MCP.Annotations do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [])
 
   defschema %{
     description: ~SD"""
@@ -160,7 +169,7 @@ end
 defmodule GenMCP.MCP.AudioContent do
   use JSV.Schema
 
-  JsonDerive.auto(%{type: "audio"})
+  JsonDerive.auto(%{type: "audio"}, [:data, :mimeType])
 
   @skip_keys [:type]
 
@@ -190,7 +199,7 @@ end
 defmodule GenMCP.MCP.BlobResourceContents do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:blob, :uri])
 
   defschema %{
     properties: %{
@@ -215,7 +224,7 @@ end
 defmodule GenMCP.MCP.BooleanSchema do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:type])
 
   defschema %{
     properties: %{
@@ -235,7 +244,7 @@ end
 defmodule GenMCP.MCP.CallToolRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "tools/call", jsonrpc: "2.0"})
+  JsonDerive.auto(%{method: "tools/call", jsonrpc: "2.0"}, [:params])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -260,7 +269,7 @@ end
 defmodule GenMCP.MCP.CallToolRequestParams do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:name])
 
   defschema %{
     properties: %{
@@ -279,7 +288,7 @@ end
 defmodule GenMCP.MCP.CallToolResult do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:content])
 
   defschema %{
     description: "The server's response to a tool call.",
@@ -330,7 +339,7 @@ end
 defmodule GenMCP.MCP.CancelledNotification do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:method, :params])
 
   defschema %{
     description: ~SD"""
@@ -361,7 +370,7 @@ end
 defmodule GenMCP.MCP.CancelledNotificationParams do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:requestId])
 
   defschema %{
     properties: %{
@@ -386,7 +395,7 @@ end
 defmodule GenMCP.MCP.ClientCapabilities do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [])
 
   defschema %{
     description: ~SD"""
@@ -463,7 +472,7 @@ end
 defmodule GenMCP.MCP.EmbeddedResource do
   use JSV.Schema
 
-  JsonDerive.auto(%{type: "resource"})
+  JsonDerive.auto(%{type: "resource"}, [:resource])
 
   @skip_keys [:type]
 
@@ -494,7 +503,7 @@ end
 defmodule GenMCP.MCP.GetPromptRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "prompts/get", jsonrpc: "2.0"})
+  JsonDerive.auto(%{method: "prompts/get", jsonrpc: "2.0"}, [:params])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -519,7 +528,7 @@ end
 defmodule GenMCP.MCP.GetPromptRequestParams do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:name])
 
   defschema %{
     properties: %{
@@ -542,7 +551,7 @@ end
 defmodule GenMCP.MCP.GetPromptResult do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:messages])
 
   defschema %{
     description: ~SD"""
@@ -564,7 +573,7 @@ end
 defmodule GenMCP.MCP.ImageContent do
   use JSV.Schema
 
-  JsonDerive.auto(%{type: "image"})
+  JsonDerive.auto(%{type: "image"}, [:data, :mimeType])
 
   @skip_keys [:type]
 
@@ -594,7 +603,7 @@ end
 defmodule GenMCP.MCP.Implementation do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:name, :version])
 
   defschema %{
     description: ~SD"""
@@ -634,7 +643,7 @@ end
 defmodule GenMCP.MCP.InitializeRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "initialize", jsonrpc: "2.0"})
+  JsonDerive.auto(%{method: "initialize", jsonrpc: "2.0"}, [:params])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -660,7 +669,7 @@ end
 defmodule GenMCP.MCP.InitializeRequestParams do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:capabilities, :clientInfo, :protocolVersion])
 
   defschema %{
     properties: %{
@@ -686,7 +695,7 @@ end
 defmodule GenMCP.MCP.InitializeResult do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:capabilities, :protocolVersion, :serverInfo])
 
   defschema %{
     description: ~SD"""
@@ -728,7 +737,7 @@ end
 defmodule GenMCP.MCP.InitializedNotification do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:method])
 
   defschema %{
     description: ~SD"""
@@ -754,7 +763,7 @@ end
 defmodule GenMCP.MCP.JSONRPCError do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:error, :id, :jsonrpc])
 
   defschema %{
     description: ~SD"""
@@ -796,7 +805,7 @@ end
 defmodule GenMCP.MCP.JSONRPCRequest do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:id, :jsonrpc, :method])
 
   defschema %{
     description: "A request that expects a response.",
@@ -831,7 +840,7 @@ end
 defmodule GenMCP.MCP.JSONRPCResponse do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:id, :jsonrpc, :result])
 
   defschema %{
     description: "A successful (non-error) response to a request.",
@@ -851,7 +860,7 @@ end
 defmodule GenMCP.MCP.ListPromptsRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "prompts/list", jsonrpc: "2.0"})
+  JsonDerive.auto(%{method: "prompts/list", jsonrpc: "2.0"}, [])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -877,7 +886,7 @@ end
 defmodule GenMCP.MCP.ListPromptsRequestParams do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [])
 
   defschema %{
     properties: %{
@@ -900,7 +909,7 @@ end
 defmodule GenMCP.MCP.ListPromptsResult do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:prompts])
 
   defschema %{
     description: ~SD"""
@@ -928,7 +937,7 @@ end
 defmodule GenMCP.MCP.ListResourceTemplatesRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "resources/templates/list", jsonrpc: "2.0"})
+  JsonDerive.auto(%{method: "resources/templates/list", jsonrpc: "2.0"}, [])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -954,7 +963,7 @@ end
 defmodule GenMCP.MCP.ListResourceTemplatesRequestParams do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [])
 
   defschema %{
     properties: %{
@@ -977,7 +986,7 @@ end
 defmodule GenMCP.MCP.ListResourceTemplatesResult do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:resourceTemplates])
 
   defschema %{
     description: ~SD"""
@@ -1006,7 +1015,7 @@ end
 defmodule GenMCP.MCP.ListResourcesRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "resources/list", jsonrpc: "2.0"})
+  JsonDerive.auto(%{method: "resources/list", jsonrpc: "2.0"}, [])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -1031,7 +1040,7 @@ end
 defmodule GenMCP.MCP.ListResourcesRequestParams do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [])
 
   defschema %{
     properties: %{
@@ -1054,7 +1063,7 @@ end
 defmodule GenMCP.MCP.ListResourcesResult do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:resources])
 
   defschema %{
     description: ~SD"""
@@ -1082,7 +1091,7 @@ end
 defmodule GenMCP.MCP.ListToolsRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "tools/list", jsonrpc: "2.0"})
+  JsonDerive.auto(%{method: "tools/list", jsonrpc: "2.0"}, [])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -1118,7 +1127,7 @@ end
 defmodule GenMCP.MCP.ListToolsResult do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:tools])
 
   defschema %{
     description: ~SD"""
@@ -1146,7 +1155,7 @@ end
 defmodule GenMCP.MCP.PingRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "ping", jsonrpc: "2.0"})
+  JsonDerive.auto(%{method: "ping", jsonrpc: "2.0"}, [])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -1187,7 +1196,7 @@ end
 defmodule GenMCP.MCP.ProgressNotification do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:method, :params])
 
   defschema %{
     description: ~SD"""
@@ -1250,7 +1259,7 @@ end
 defmodule GenMCP.MCP.Prompt do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:name])
 
   defschema %{
     description: ~SD"""
@@ -1302,7 +1311,7 @@ end
 defmodule GenMCP.MCP.PromptArgument do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:name])
 
   defschema %{
     description: "Describes an argument that a prompt can accept.",
@@ -1340,7 +1349,7 @@ end
 defmodule GenMCP.MCP.PromptMessage do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:content, :role])
 
   defschema %{
     description: ~SD"""
@@ -1361,7 +1370,7 @@ end
 defmodule GenMCP.MCP.ReadResourceRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "resources/read", jsonrpc: "2.0"})
+  JsonDerive.auto(%{method: "resources/read", jsonrpc: "2.0"}, [:params])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -1386,7 +1395,7 @@ end
 defmodule GenMCP.MCP.ReadResourceRequestParams do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:uri])
 
   defschema %{
     properties: %{
@@ -1410,7 +1419,7 @@ end
 defmodule GenMCP.MCP.ReadResourceResult do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:contents])
 
   defschema %{
     description: ~SD"""
@@ -1446,7 +1455,7 @@ end
 defmodule GenMCP.MCP.Resource do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:name, :uri])
 
   defschema %{
     description: ~SD"""
@@ -1507,7 +1516,7 @@ end
 defmodule GenMCP.MCP.ResourceLink do
   use JSV.Schema
 
-  JsonDerive.auto(%{type: "resource_link"})
+  JsonDerive.auto(%{type: "resource_link"}, [:name, :uri])
 
   @skip_keys [:type]
 
@@ -1575,7 +1584,7 @@ end
 defmodule GenMCP.MCP.ResourceTemplate do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:name, :uriTemplate])
 
   defschema %{
     description: ~SD"""
@@ -1639,7 +1648,7 @@ end
 defmodule GenMCP.MCP.Result do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [])
 
   defschema %{
     additionalProperties: %{},
@@ -1662,7 +1671,7 @@ end
 defmodule GenMCP.MCP.RootsListChangedNotification do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:method])
 
   defschema %{
     description: ~SD"""
@@ -1690,7 +1699,7 @@ end
 defmodule GenMCP.MCP.ServerCapabilities do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [])
 
   defschema %{
     description: ~SD"""
@@ -1784,7 +1793,7 @@ end
 defmodule GenMCP.MCP.SubscribeRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "resources/subscribe", jsonrpc: "2.0"})
+  JsonDerive.auto(%{method: "resources/subscribe", jsonrpc: "2.0"}, [:params])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -1822,7 +1831,7 @@ end
 defmodule GenMCP.MCP.TextContent do
   use JSV.Schema
 
-  JsonDerive.auto(%{type: "text"})
+  JsonDerive.auto(%{type: "text"}, [:text])
 
   @skip_keys [:type]
 
@@ -1845,7 +1854,7 @@ end
 defmodule GenMCP.MCP.TextResourceContents do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:text, :uri])
 
   defschema %{
     properties: %{
@@ -1871,7 +1880,7 @@ end
 defmodule GenMCP.MCP.Tool do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [:inputSchema, :name])
 
   defschema %{
     description: "Definition for a tool the client can call.",
@@ -1957,7 +1966,7 @@ end
 defmodule GenMCP.MCP.ToolAnnotations do
   use JSV.Schema
 
-  JsonDerive.auto()
+  JsonDerive.auto(%{}, [])
 
   defschema %{
     description: ~SD"""
@@ -2024,7 +2033,7 @@ end
 defmodule GenMCP.MCP.UnsubscribeRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "resources/unsubscribe", jsonrpc: "2.0"})
+  JsonDerive.auto(%{method: "resources/unsubscribe", jsonrpc: "2.0"}, [:params])
 
   @skip_keys [:method, :jsonrpc]
 

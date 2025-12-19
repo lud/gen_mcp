@@ -72,6 +72,7 @@ defmodule GenMCP.Transport.StreamableHTTP do
   alias GenMCP.Mux
   alias GenMCP.Mux.Channel
   alias GenMCP.RpcError
+  alias GenMCP.Transport.StreamableHTTP.Impl
   alias GenMCP.Utils.OptsValidator
   alias GenMCP.Validator
   alias JSV.Codec
@@ -90,15 +91,15 @@ defmodule GenMCP.Transport.StreamableHTTP do
   plug :dispatch
 
   get "/" do
-    http_get(conn, conn.assigns.gen_mcp_streamable_http_opts)
+    Impl.http_get(conn, conn.assigns.gen_mcp_streamable_http_opts)
   end
 
   post "/" do
-    http_post(conn, conn.assigns.gen_mcp_streamable_http_opts)
+    Impl.http_post(conn, conn.assigns.gen_mcp_streamable_http_opts)
   end
 
   delete "/" do
-    http_delete(conn, conn.assigns.gen_mcp_streamable_http_opts)
+    Impl.http_delete(conn, conn.assigns.gen_mcp_streamable_http_opts)
   end
 
   match _ do
@@ -132,8 +133,25 @@ defmodule GenMCP.Transport.StreamableHTTP do
 
     mod
   end
+end
 
-  # -- Internal ---------------------------------------------------------------
+# Separate modules so we do not get bad stacktraces because of Plug
+
+defmodule GenMCP.Transport.StreamableHTTP.Impl do
+  @moduledoc false
+
+  import Plug.Conn
+
+  alias GenMCP.MCP.InitializeRequest
+  alias GenMCP.MCP.InitializeResult
+  alias GenMCP.MCP.JSONRPCError
+  alias GenMCP.MCP.JSONRPCResponse
+  alias GenMCP.Mux
+  alias GenMCP.Mux.Channel
+  alias GenMCP.RpcError
+  alias GenMCP.Utils.OptsValidator
+  alias GenMCP.Validator
+  alias JSV.Codec
 
   @stream_keepalive_timeout to_timeout(second: 25)
   @session_id_assign_key :gen_mcp_session_id
@@ -142,14 +160,14 @@ defmodule GenMCP.Transport.StreamableHTTP do
   # TODO(doc) the :assigns option has less precedence than :copy_assigns.
   # Assigns copied from the conn will overwrite static assigns.
 
-  def http_get(conn, _conf) do
-    send_resp(conn, 405, "Method Not Allowed")
+  def http_get(conn, conf) do
+    dispatch_listener(conn, conf)
   end
 
   def http_post(%{body_params: %{"jsonrpc" => "2.0"} = body_params} = conn, conf) do
     case Validator.validate_request(body_params) do
       {:error, jsv_err} ->
-        send_error(conn, jsv_err, msg_id: msg_id_from_req(body_params))
+        send_error(conn, jsv_err, msg_id_from_req(body_params))
 
       {:ok, :request, %{id: msg_id} = req} ->
         dispatch_req(conn, msg_id, req, conf)
@@ -160,11 +178,11 @@ defmodule GenMCP.Transport.StreamableHTTP do
   end
 
   def http_post(%{body_params: %{"jsonrpc" => _}} = conn, _conf) do
-    send_error(conn, :bad_rpc_version)
+    send_error(conn, :bad_rpc_version, _msg_id = nil)
   end
 
   def http_post(conn, _conf) do
-    send_error(conn, :bad_rpc)
+    send_error(conn, :bad_rpc, _msg_id = nil)
   end
 
   def http_delete(conn, conf) do
@@ -178,6 +196,23 @@ defmodule GenMCP.Transport.StreamableHTTP do
     end
   end
 
+  defp dispatch_listener(conn, conf) do
+    req = %GenMCP.MCP.ListenerRequest{}
+    msg_id = nil
+
+    with {:ok, session_id} <- lookup_session_id(conn),
+         channel = make_channel(conn, req, session_id, conf),
+         {:ok, session_pid} <- ensure_started_session(session_id, channel, conf) do
+      case Mux.request(session_pid, req, channel) do
+        {:result, result} -> send_result_response(conn, 200, msg_id, result)
+        {:error, reason} -> send_error(conn, reason, _msg_id = nil)
+        :stream -> stream_start(conn, 200, msg_id)
+      end
+    else
+      {:error, reason} -> send_error(conn, reason, _msg_id = nil)
+    end
+  end
+
   defp dispatch_req(conn, msg_id, %InitializeRequest{} = req, conf) do
     with :ok <- reject_session_id(conn),
          {:ok, session_id} <- Mux.start_session(conf.session_opts),
@@ -187,24 +222,24 @@ defmodule GenMCP.Transport.StreamableHTTP do
       |> put_resp_session_id(session_id)
       |> send_result_response(200, msg_id, result)
     else
-      {:error, reason} -> send_error(conn, reason)
+      {:error, reason} -> send_error(conn, reason, msg_id)
     end
   end
 
   defp dispatch_req(conn, msg_id, req, conf) do
     with {:ok, session_id} <- lookup_session_id(conn),
          channel = make_channel(conn, req, session_id, conf),
-         {:ok, session_pid} <- lookup_session(session_id, channel, conf) do
+         {:ok, session_pid} <- ensure_started_session(session_id, channel, conf) do
       do_dispatch_req(conn, session_pid, msg_id, req, channel)
     else
-      {:error, reason} -> send_error(conn, reason, msg_id: msg_id)
+      {:error, reason} -> send_error(conn, reason, msg_id)
     end
   end
 
   defp do_dispatch_req(conn, session_pid, msg_id, req, channel) do
     case Mux.request(session_pid, req, channel) do
       {:result, result} -> send_result_response(conn, 200, msg_id, result)
-      {:error, reason} -> send_error(conn, reason, msg_id: msg_id)
+      {:error, reason} -> send_error(conn, reason, msg_id)
       :stream -> stream_start(conn, 200, msg_id)
     end
   end
@@ -212,15 +247,15 @@ defmodule GenMCP.Transport.StreamableHTTP do
   defp dispatch_notif(conn, notif, conf) do
     with {:ok, session_id} <- lookup_session_id(conn),
          channel = make_channel(conn, notif, session_id, conf),
-         {:ok, session_pid} <- lookup_session(session_id, channel, conf),
+         {:ok, session_pid} <- ensure_started_session(session_id, channel, conf),
          :ack <- Mux.notify(session_pid, notif) do
       send_accepted(conn)
     else
-      {:error, reason} -> send_error(conn, reason)
+      {:error, reason} -> send_error(conn, reason, _msg_id = nil)
     end
   end
 
-  defp lookup_session(session_id, channel, conf) do
+  defp ensure_started_session(session_id, channel, conf) do
     case Mux.ensure_started(session_id, channel, conf.session_opts) do
       {:ok, pid} -> {:ok, pid}
       {:error, _reason} = err -> err
@@ -243,12 +278,12 @@ defmodule GenMCP.Transport.StreamableHTTP do
 
   defp terminate_session(conn, conf) do
     with {:ok, session_id} <- lookup_session_id(conn),
-         channel = make_channel(conn, :noreq, session_id, conf),
-         {:ok, session_pid} <- lookup_session(session_id, channel, conf),
+         channel = make_channel(conn, nil, session_id, conf),
+         {:ok, session_pid} <- ensure_started_session(session_id, channel, conf),
          :ok <- Mux.delete_session(session_pid) do
       send_resp(conn, 204, "")
     else
-      {:error, reason} -> send_error(conn, reason)
+      {:error, reason} -> send_error(conn, reason, _msg_id = nil)
     end
   end
 
@@ -295,12 +330,12 @@ defmodule GenMCP.Transport.StreamableHTTP do
     |> send_resp(status, body)
   end
 
-  defp send_error(conn, reason, opts \\ []) do
+  defp send_error(conn, reason, msg_id) do
     case RpcError.cast_error(reason) do
       {status, payload} ->
         payload = %JSONRPCError{
           error: payload,
-          id: opts[:msg_id],
+          id: msg_id,
           jsonrpc: "2.0"
         }
 
@@ -346,8 +381,14 @@ defmodule GenMCP.Transport.StreamableHTTP do
 
       {:"$gen_mcp", :notification, notification} ->
         {:ok, conn} = send_notification_chunk(conn, notification)
-
         stream_loop(conn, msg_id, reset_keepalive(keepalive_ref))
+
+      {:"$gen_mcp", :raw_message, data} ->
+        {:ok, conn} = send_stream_message(conn, data)
+        stream_loop(conn, msg_id, reset_keepalive(keepalive_ref))
+
+      {:"$gen_mcp", :close} ->
+        stream_end(conn)
 
       other
       when other != {:plug_conn, :sent} and not (is_tuple(other) and elem(other, 0) == :bandit) ->
@@ -378,7 +419,7 @@ defmodule GenMCP.Transport.StreamableHTTP do
       result: result
     }
 
-    {:ok, _conn} = send_stream_data(conn, payload)
+    {:ok, _conn} = send_stream_message(conn, json_encode(payload))
   end
 
   defp send_error_response_chunk(conn, msg_id, reason) do
@@ -390,16 +431,15 @@ defmodule GenMCP.Transport.StreamableHTTP do
       jsonrpc: "2.0"
     }
 
-    {:ok, _conn} = send_stream_data(conn, payload)
+    {:ok, _conn} = send_stream_message(conn, json_encode(payload))
   end
 
   defp send_notification_chunk(conn, notification) do
-    {:ok, _conn} = send_stream_data(conn, notification)
+    {:ok, _conn} = send_stream_message(conn, json_encode(notification))
   end
 
-  defp send_stream_data(conn, payload) do
-    json = json_encode(payload)
-    event = "data: #{json}\n\n"
+  defp send_stream_message(conn, data) do
+    event = "event: message\ndata: #{data}\n\n"
     {:ok, _conn} = chunk(conn, event)
   end
 

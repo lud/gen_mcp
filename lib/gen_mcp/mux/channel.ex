@@ -42,8 +42,12 @@ defmodule GenMCP.Mux.Channel do
 
   def send_progress(channel, progress, total \\ nil, message \\ nil)
 
-  def send_progress(%{progress_token: nil} = channel, _, _, _) do
-    channel
+  def send_progress(%{status: :closed}, _, _, _) do
+    {:error, :closed}
+  end
+
+  def send_progress(%{progress_token: nil}, _, _, _) do
+    {:error, :no_progress_token}
   end
 
   def send_progress(%{progress_token: token} = channel, progress, total, message) do
@@ -54,17 +58,55 @@ defmodule GenMCP.Mux.Channel do
       }
 
     send(channel.client, {:"$gen_mcp", :notification, payload})
-    channel
+    {:ok, channel}
+  end
+
+  def send_result(%{status: :closed}, _payload) do
+    {:error, :closed}
   end
 
   def send_result(channel, payload) do
     send(channel.client, {:"$gen_mcp", :result, payload})
-    channel
+    {:ok, channel}
+  end
+
+  def send_error(%{status: :closed}, _error) do
+    {:error, :closed}
   end
 
   def send_error(channel, error) do
     send(channel.client, {:"$gen_mcp", :error, error})
-    channel
+    {:ok, channel}
+  end
+
+  @doc """
+  Sends a message event with the given `data`, a binary that will be sent as-is
+  to the client.
+
+  To be a valid SSE event, the data must not contain any newlines.
+  """
+  def send_message(%{status: :closed}, data) when is_binary(data) do
+    {:error, :closed}
+  end
+
+  def send_message(channel, data) when is_binary(data) do
+    send(channel.client, {:"$gen_mcp", :raw_message, data})
+    {:ok, channel}
+  end
+
+  @doc """
+  Sends a termination message to the open HTTP connection. When this function
+  returns, the HTTP connection may not have terminated yet.
+  """
+  def close(%{status: :closed}) do
+    {:error, :closed}
+  end
+
+  # If the status is request we send the message anyway because the channel can
+  # be converted to a stream later, and it will receive the message
+  def close(%{status: status} = channel) when status in [:stream, :request] do
+    send(channel.client, {:"$gen_mcp", :close})
+    {:ok, %{channel | status: :closed}}
   end
 
   @spec assign(t, atom, term) :: t
@@ -78,5 +120,14 @@ defmodule GenMCP.Mux.Channel do
 
   def set_streaming(%__MODULE__{status: :stream} = t) do
     t
+  end
+
+  @doc """
+  Used by server implementations when a channel process exits (generally
+  observed by a monitor). Sets the channel status as closed and prevents sending
+  messages.
+  """
+  def as_closed(t) do
+    %{t | status: :closed, client: nil}
   end
 end
