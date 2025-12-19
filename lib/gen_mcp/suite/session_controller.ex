@@ -70,12 +70,13 @@ defmodule GenMCP.Suite.SessionController do
 
   Returns the updated session state and optionally the channel updated with
   assigns.
+
+  To not be fighting about muscle memory, callback implementations must return
+  `:noreply` tuples instead of `:ok` tuples!
   """
 
   # TODO maybe we should find another name, because handle_info is typically a
   # 2-arity function
-
-  IO.warn(":ok instead of noreply")
 
   @callback handle_info(info :: term(), channel, session_state) ::
               {:noreply, channel, session_state}
@@ -99,8 +100,11 @@ defmodule GenMCP.Suite.SessionController do
   To initialize the session controller with a closed channel after session
   initialization, this callback is also called immediately after the
   InitializeRequest is handled by the MCP server. In general this will happen
-  before the InitializedNotification is received, so before the `c:update/3`
+  before the InitializedNotification is received, so before the `c:update/4`
   callback is called, but it may depend on the client implementation.
+
+  This callback is the right place to setup/teardown subscriptions to pubsub,
+  GenStage, etc.
 
   Returns the updated session state and optionally the channel updated with
   assigns.
