@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2026-01-06
+
+### 🐛 Bug Fixes
+
+- Use self-contained JSON Schemas when listing tools
+
 ## [0.5.0] - 2025-12-19
 
 ### 🚀 Features
