@@ -481,21 +481,9 @@ defmodule GenMCP.Suite.Tool do
     end
   end
 
-  defp normalize_schema(schema) when is_atom(schema) do
-    if JSV.Schema.schema_module?(schema) do
-      do_normalize_schema(schema.json_schema())
-    else
-      do_normalize_schema(schema)
-    end
-  end
-
-  defp normalize_schema(schema) do
-    do_normalize_schema(schema)
-  end
-
-  defp do_normalize_schema(schema) do
+  defp normalize_schema(schema) when is_atom(schema) when is_map(schema) do
     schema
-    |> JSV.Schema.normalize()
+    |> JSV.Schema.normalize_collect(as_root: true)
     |> JSV.Helpers.Traverse.prewalk(fn
       {:val, map} when is_map(map) -> Map.delete(map, "jsv-cast")
       other -> elem(other, 1)
@@ -531,7 +519,7 @@ defmodule GenMCP.Suite.Tool do
     if is_map(value) || (is_atom(value) && JSV.Schema.schema_module?(value)) do
       :ok
     else
-      raise_invalid_use_info(k, value, "must be a map")
+      raise_invalid_use_info(k, value, "must be a map or a module-based schema")
     end
   end
 

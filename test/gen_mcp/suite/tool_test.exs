@@ -679,21 +679,8 @@ defmodule GenMCP.Suite.ToolTest do
         defschema Args, name: string(), age: integer()
       end
 
-      # If we let JSV normalize the schema, we should get something like this:
-      #
-      #     %{
-      #       "$ref" => "jsv:module:Elixir.GenMCP.Suite.ToolTest.MyTool.Args"
-      #     }
-      #
-      # So the Tool describe function has to check if the schema is a module
-      # exporting a json_schema/0 function, and if yes it will call it.
-      #
-      # For now it will not do it recursively. We need a helper in JSV to
-      # collect schemas as definitions.
-
       assert %{
                "title" => "Args",
-               "description" => nil,
                "type" => "object",
                "properties" => %{
                  "age" => %{"type" => "integer"},
@@ -702,6 +689,75 @@ defmodule GenMCP.Suite.ToolTest do
                "required" => ["name", "age"]
              } ==
                Tool.describe(MyTool).inputSchema
+    end
+
+    test "self-contained schemas" do
+      # Module based schemas can use other modules as sub schemas. We must
+      # export schemas that contain all the definitions.
+
+      defmodule UsesModuleSubschemas do
+        use GenMCP.Suite.Tool, name: "some_tool", input_schema: InputParent
+        use JSV.Schema
+
+        defschema InputChild, name: string()
+        defschema InputParent, names: array_of(InputChild)
+
+        def output_schema(_) do
+          %{"properties" => %{"foo" => %{anyOf: [InputParent, InputChild]}}}
+        end
+      end
+
+      description = Tool.describe(UsesModuleSubschemas)
+
+      assert %{
+               "$defs" => %{
+                 "InputChild" => %{
+                   "properties" => %{"name" => %{"type" => "string"}},
+                   "required" => ["name"],
+                   "title" => "InputChild",
+                   "type" => "object"
+                 }
+               },
+               "properties" => %{
+                 "names" => %{
+                   "items" => %{"$ref" => "#/$defs/InputChild"},
+                   "type" => "array"
+                 }
+               },
+               "required" => ["names"],
+               "title" => "InputParent",
+               "type" => "object"
+             } == description.inputSchema
+
+      assert %{
+               "$defs" => %{
+                 "InputChild" => %{
+                   "properties" => %{"name" => %{"type" => "string"}},
+                   "required" => ["name"],
+                   "title" => "InputChild",
+                   "type" => "object"
+                 },
+                 "InputParent" => %{
+                   "properties" => %{
+                     "names" => %{
+                       "items" => %{"$ref" => "#/$defs/InputChild"},
+                       "type" => "array"
+                     }
+                   },
+                   "required" => ["names"],
+                   "title" => "InputParent",
+                   "type" => "object"
+                 }
+               },
+               "properties" => %{
+                 "foo" => %{
+                   "anyOf" => [
+                     %{"$ref" => "#/$defs/InputParent"},
+                     %{"$ref" => "#/$defs/InputChild"}
+                   ]
+                 }
+               }
+             } = description.outputSchema
     end
   end
 end

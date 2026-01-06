@@ -124,6 +124,8 @@ defmodule Generator do
     # We can now generate the modules
     generated_modules = Enum.map_join(confs, "\n\n", &generate_module/1)
 
+    IO.puts("generation done")
+
     generated_block = [
       prelude(),
       mod_map(confs, metaschema),
@@ -132,10 +134,12 @@ defmodule Generator do
 
     code = Enum.intersperse(generated_block, "\n\n")
 
-    File.write!("lib/gen_mcp/mcp/entities.ex", code)
+    output_path = "lib/gen_mcp/mcp/entities.ex"
+    File.write!(output_path, code)
+    IO.puts("wrote #{output_path}, formatting...")
 
     {_, 0} = System.cmd("mix", ~w(format --migrate))
-
+    IO.puts("schemas module generated")
     :ok
   end
 
