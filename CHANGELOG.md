@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.2] - 2026-01-26
+
+### 🐛 Bug Fixes
+
+- Fixed callback check macros for Elixir 1.20
+
 ## [0.5.1] - 2026-01-06
 
 ### 🐛 Bug Fixes
@@ -133,5 +139,4 @@ All notable changes to this project will be documented in this file.
 - Renaming namespaces
 - Wrap node sync in its own supervisor
 - Credo and dialyzer fixes
-
 

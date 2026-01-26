@@ -2,7 +2,7 @@ defmodule GenMCP.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/lud/gen_mcp"
-  @version "0.5.1"
+  @version "0.5.2"
   def project do
     [
       app: :gen_mcp,
