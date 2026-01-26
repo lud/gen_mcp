@@ -62,7 +62,8 @@ defmodule GenMCP do
   alias GenMCP.Mux.Channel
   alias GenMCP.Suite.SessionController
 
-  require(Elixir.GenMCP.MCP.ModMap).require_all()
+  require(Elixir.GenMCP.MCP.ModMap)
+  Elixir.GenMCP.MCP.ModMap.require_all()
 
   @doc """
   Returns the supported protocol versions.
