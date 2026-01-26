@@ -77,8 +77,6 @@ defmodule GenMCP.Transport.StreamableHTTP do
   alias GenMCP.Validator
   alias JSV.Codec
 
-  require Logger
-
   @plug_opts_schema plug_opts_schema
 
   # -- Plug API ---------------------------------------------------------------

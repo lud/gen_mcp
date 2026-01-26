@@ -32,8 +32,6 @@ defmodule GenMCP.RpcError do
 
   import GenMCP.RpcError.Compiler
 
-  require Logger
-
   @rpc_invalid_request -32_600
   @rpc_invalid_params -32_602
   @rpc_method_not_found -32_601

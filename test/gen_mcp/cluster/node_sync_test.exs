@@ -3,8 +3,6 @@ defmodule GenMCP.Cluster.NodeSyncTest do
 
   alias GenMCP.Cluster.NodeSync
 
-  require Logger
-
   doctest NodeSync
 
   test "returns unique session ids" do

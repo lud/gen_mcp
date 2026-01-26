@@ -66,7 +66,6 @@ defmodule GenMCP.Suite do
 
   require Logger
   require Record
-  require SessionController
   require GenMCP
 
   @supported_protocol_versions GenMCP.supported_protocol_versions()

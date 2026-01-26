@@ -6,10 +6,11 @@ defmodule GenMCP.Utils.CallbackExt do
   # args, only literals or variables
 
   defmacro callback(behaviour, {:dbg, _, [call]}, [{:do, clauses}]) do
-    :ok = check_behaviour(behaviour, __CALLER__)
     {mod, fun, args} = Macro.decompose_call(call)
 
     quote do
+      unquote(require_behaviour(behaviour, __CALLER__))
+
       # credo:disable-for-next-line Credo.Check.Warning.Dbg
       case dbg(unquote(call)) do
         unquote(clauses ++ catchall_clause(behaviour, mod, fun, args))
@@ -18,10 +19,11 @@ defmodule GenMCP.Utils.CallbackExt do
   end
 
   defmacro callback(behaviour, call, [{:do, clauses}]) do
-    :ok = check_behaviour(behaviour, __CALLER__)
     {mod, fun, args} = Macro.decompose_call(call)
 
     quote do
+      unquote(require_behaviour(behaviour, __CALLER__))
+
       case unquote(call) do
         unquote(clauses ++ catchall_clause(behaviour, mod, fun, args))
       end
@@ -38,27 +40,23 @@ defmodule GenMCP.Utils.CallbackExt do
     end
   end
 
-  defp check_behaviour(mod, %{module: mod}) when is_atom(mod) do
-    :ok
-  end
+  defp require_behaviour(behaviour, %{module: caller_mod} = env) do
+    behaviour = Macro.expand_literals(behaviour, env)
 
-  defp check_behaviour(mod, _env) when is_atom(mod) do
-    if {:module, mod} == Code.ensure_loaded(mod) and
-         function_exported?(mod, :behaviour_info, 1) and
-         match?([_ | _], mod.behaviour_info(:callbacks)) do
+    if behaviour == caller_mod do
       :ok
     else
-      raise ArgumentError,
-            "#{inspect(mod)} is not a behaviour. `require #{inspect(mod)}` may solve the problem"
+      quote bind_quoted: [behaviour: behaviour] do
+        if {:module, behaviour} == Code.ensure_loaded(behaviour) and
+             function_exported?(behaviour, :behaviour_info, 1) and
+             match?([_ | _], behaviour.behaviour_info(:callbacks)) do
+          :ok
+        else
+          raise ArgumentError,
+                "#{inspect(behaviour)} is not a behaviour"
+        end
+      end
     end
-  end
-
-  defp check_behaviour({:__aliases__, _, _} = ast, env) do
-    check_behaviour(Macro.expand_literals(ast, env), env)
-  end
-
-  defp check_behaviour({:__MODULE__, _, _} = ast, env) do
-    check_behaviour(Macro.expand_literals(ast, env), env)
   end
 
   # adds a tag inside a result tuple,

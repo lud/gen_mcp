@@ -16,9 +16,6 @@ defmodule GenMCP.Mux.Session do
 
   alias GenMCP.Utils.OptsValidator
 
-  require GenMCP
-  require Logger
-
   @gen_opts ~w(name timeout debug spawn_opt hibernate_after)a
   @default_session_timeout_minutes to_timeout(minute: 2)
 
@@ -126,8 +123,6 @@ defmodule GenMCP.Mux.Session do
   end
 
   defp init_server(conf) do
-    require GenMCP
-
     callback GenMCP, conf.server_mod.init(conf.session_id, conf.server_arg) do
       {:ok, server_state} -> {:ok, server_state}
       {:stop, reason} -> {:stop, {:mcp_server_init_failure, reason}}

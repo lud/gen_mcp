@@ -2,9 +2,12 @@ defmodule GenMCP.MCPTest do
   use ExUnit.Case, async: true
 
   alias GenMCP.MCP
+  alias GenMCP.MCP.ModMap
   alias GenMCP.MCP.TextContent
 
-  require(Elixir.GenMCP.MCP.ModMap).require_all()
+  require ModMap
+
+  ModMap.require_all()
 
   describe "intialize_result/1" do
     test "creates initialize result with required server_info" do

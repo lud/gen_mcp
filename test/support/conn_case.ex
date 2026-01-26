@@ -5,8 +5,6 @@ defmodule GenMCP.ConnCase do
 
   alias Phoenix.ConnTest
 
-  require Phoenix.ConnTest
-
   using do
     quote do
       use GenMCP.TestWeb, :verified_routes

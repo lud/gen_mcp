@@ -25,7 +25,7 @@ defmodule GenMCP.Suite.PromptRepoTest do
     end
 
     test "incomplete descriptor" do
-      descriptor = %{mod: PromptRepoMock, arg: :test}
+      descriptor = Process.get({__ENV__.file, __ENV__.line}, %{mod: PromptRepoMock, arg: :test})
 
       assert_raise FunctionClauseError, fn ->
         assert ^descriptor = PromptRepo.expand(descriptor)

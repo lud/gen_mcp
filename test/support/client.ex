@@ -3,7 +3,11 @@ defmodule GenMCP.Test.Client do
 
   import ExUnit.Assertions
 
-  require(GenMCP.MCP.ModMap).require_all()
+  alias GenMCP.MCP.ModMap
+
+  require ModMap
+
+  ModMap.require_all()
 
   [
     # Requests
