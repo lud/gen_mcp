@@ -1,4 +1,4 @@
-# quokka:skip-module-reordering
+# quokka:skip-module-directive-reordering
 defmodule GenMCP.Suite do
   provider_list = fn doc ->
     [
@@ -61,6 +61,7 @@ defmodule GenMCP.Suite do
   alias GenMCP.Suite.PromptRepo
   alias GenMCP.Suite.ResourceRepo
   alias GenMCP.Suite.SessionController
+  alias GenMCP.Suite.SessionController.Noop
   alias GenMCP.Suite.Tool
   alias GenMCP.Utils.OptsValidator
 
@@ -725,7 +726,7 @@ defmodule GenMCP.Suite do
   defp build_server_info(init_opts) do
     name = Keyword.fetch!(init_opts, :server_name)
     version = Keyword.fetch!(init_opts, :server_version)
-    title = Keyword.get(init_opts, :server_title, nil)
+    title = Keyword.get(init_opts, :server_title)
     MCP.server_info(name: name, version: version, title: title)
   end
 
@@ -911,17 +912,17 @@ defmodule GenMCP.Suite do
   defp normalize_session_controller(opts) do
     case Keyword.fetch!(opts, :session_controller) do
       {_, _} = t -> t
-      nil -> {GenMCP.Suite.SessionController.Noop, []}
+      nil -> {Noop, []}
       mod -> {mod, []}
     end
   end
 
-  defp normalized_client_info(_capabilities, _ready?, GenMCP.Suite.SessionController.Noop) do
+  defp normalized_client_info(_capabilities, _ready?, Noop) do
     :__skip_normalization__
   end
 
   defp normalized_client_info(capabilities, ready?, _) do
-    JSV.Normalizer.normalize(%GenMCP.Suite.PersistedClientInfo{
+    JSV.Normalizer.normalize(%PersistedClientInfo{
       client_capabilities: capabilities,
       client_initialized: ready?
     })

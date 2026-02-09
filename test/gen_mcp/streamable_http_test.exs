@@ -20,7 +20,7 @@ defmodule GenMCP.StreamableHTTPTest do
 
   def client(opts) when is_list(opts) do
     headers =
-      case Keyword.get(opts, :session_id, nil) do
+      case Keyword.get(opts, :session_id) do
         nil -> %{}
         sid when is_binary(sid) -> %{"mcp-session-id" => sid}
       end
