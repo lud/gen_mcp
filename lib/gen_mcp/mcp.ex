@@ -92,7 +92,7 @@ defmodule GenMCP.MCP do
     %MCP.Implementation{
       name: require_key!(opts, :name, "option :name is required by #{cur_fun()}"),
       version: require_key!(opts, :version, "option :version is required by #{cur_fun()}"),
-      title: Keyword.get(opts, :title, nil)
+      title: Keyword.get(opts, :title)
     }
   end
 

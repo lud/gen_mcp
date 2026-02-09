@@ -847,7 +847,7 @@ defmodule Generator do
     conf(name: name, schema: schema, opts: opts, kind: kind) = conf
     IO.puts("generating #{name}")
     module = module_name(name)
-    skip_keys = Keyword.get(opts, :skip_keys, nil)
+    skip_keys = Keyword.get(opts, :skip_keys)
     serialize_merge = Keyword.get(opts, :serialize_merge, %{})
 
     serialize_keep =
