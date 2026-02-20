@@ -46,7 +46,7 @@ defmodule GenMCP.Mux do
         :rpc.call(remote_node, GenMCP.Mux, :do_ensure_started, [session_id, channel, opts])
 
       :error ->
-        {:error, {:session_not_found, session_id}}
+        do_ensure_started(session_id, channel, opts)
     end
   end
 
@@ -153,7 +153,7 @@ defmodule GenMCP.Mux do
         pid_result(rpc)
 
       :error ->
-        :error
+        pid_result(whereis(session_id))
     end
   end
 
