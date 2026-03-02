@@ -1335,8 +1335,11 @@ defmodule GenMCP.StreamableHTTPTest do
 
   describe "session location and termination without controller" do
     test "request to unknown session id returns 404 with -32603 error" do
-      # Using an unknown node to skip the session fetch
       unknown_session_id = "unknown-session-id-12345"
+
+      expect(ServerMock, :session_fetch, fn ^unknown_session_id, %Channel{}, _ ->
+        {:error, :not_found}
+      end)
 
       resp =
         client(session_id: unknown_session_id, url: @mcp_url)
@@ -1403,6 +1406,10 @@ defmodule GenMCP.StreamableHTTPTest do
 
     test "calling GET with unknown session id" do
       unknown_session_id = "unknown-some-unknown-session"
+
+      expect(ServerMock, :session_fetch, fn ^unknown_session_id, %Channel{}, _ ->
+        {:error, :not_found}
+      end)
 
       assert %{
                "error" => %{
