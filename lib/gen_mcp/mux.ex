@@ -1,26 +1,28 @@
 defmodule GenMCP.Mux do
   @moduledoc false
 
-  alias GenMCP.Cluster.NodeSync
   alias GenMCP.Mux.Session
   alias GenMCP.Mux.SessionSupervisor
   alias GenMCP.Utils.CallbackExt
 
+  @syn_scope :gen_mcp_sessions
+
   # -- Session Initializing ---------------------------------------------------
 
   def start_session(opts) do
-    session_id = NodeSync.gen_session_id()
+    session_id = gen_session_id()
 
     with {:ok, _pid} <- start_as(session_id, opts) do
       {:ok, session_id}
     end
   end
 
-  defp start_as(session_id, opts) do
-    name = {:via, Registry, {registry(), session_id}}
+  @doc false
+  def start_as(session_id, opts) do
+    name = {:via, :syn, {@syn_scope, session_id}}
     opts = Keyword.merge(opts, name: name, session_id: session_id)
 
-    case DynamicSupervisor.start_child(SessionSupervisor.name(), {Session, opts}) do
+    case DynamicSupervisor.start_child(SessionSupervisor, {Session, opts}) do
       {:ok, pid} ->
         {:ok, pid}
 
@@ -34,35 +36,17 @@ defmodule GenMCP.Mux do
     end
   end
 
-  # TODO for the remote mechanism we should send the router path instead of the
-  # full options, and let the remote node fetch the options from the router
-
   def ensure_started(session_id, channel, opts) when is_binary(session_id) do
-    case NodeSync.node_of(session_id) do
-      {:ok, n} when n == node() ->
-        do_ensure_started(session_id, channel, opts)
-
-      {:ok, remote_node} ->
-        :rpc.call(remote_node, GenMCP.Mux, :do_ensure_started, [session_id, channel, opts])
+    case syn_lookup(session_id) do
+      {:ok, pid} ->
+        {:ok, pid}
 
       :error ->
-        {:error, {:session_not_found, session_id}}
-    end
-  end
-
-  @doc false
-  # public for :rpc.call
-  def do_ensure_started(session_id, channel, opts) do
-    case whereis(session_id) do
-      nil ->
         case start_existing_session(session_id, channel, opts) do
           {:ok, pid} -> {:ok, pid}
           {:error, {:session_not_found, _}} = err -> err
           {:error, _} = err -> CallbackExt.wrap_result(err, :mcp_session_restore_failure)
         end
-
-      pid ->
-        {:ok, pid}
     end
   end
 
@@ -72,15 +56,10 @@ defmodule GenMCP.Mux do
          :ok <- restore_session(pid, session_data, channel) do
       {:ok, pid}
     else
+      {:error, {:already_started, pid}} -> {:ok, pid}
       {:error, :not_found} -> {:error, {:session_not_found, session_id}}
       {:error, _} = err -> err
     end
-  end
-
-  # -- Local Process Registry -------------------------------------------------
-
-  def registry do
-    :gen_mcp_mux_session_registry
   end
 
   # -- Calling Session --------------------------------------------------------
@@ -144,32 +123,28 @@ defmodule GenMCP.Mux do
   """
   @spec lookup_pid(binary) :: {:ok, pid} | :error
   def lookup_pid(session_id) when is_binary(session_id) do
-    case NodeSync.node_of(session_id) do
-      {:ok, n} when n == node() ->
-        pid_result(whereis(session_id))
-
-      {:ok, remote_node} ->
-        rpc = :rpc.call(remote_node, GenMCP.Mux, :whereis, [session_id])
-        pid_result(rpc)
-
-      :error ->
-        :error
-    end
+    syn_lookup(session_id)
   end
 
   @doc false
   # Retrieves pids locally only, exported for tests and debug
   def whereis(session_id) when is_binary(session_id) do
-    case Registry.lookup(registry(), session_id) do
-      [{pid, _}] -> pid
-      [] -> nil
+    case :syn.lookup(@syn_scope, session_id) do
+      {pid, _meta} -> pid
+      :undefined -> nil
     end
   end
 
-  defp pid_result(pid_or_nil) do
-    case pid_or_nil do
-      pid when is_pid(pid) -> {:ok, pid}
-      nil -> :error
+  # -- Private ----------------------------------------------------------------
+
+  defp gen_session_id do
+    Base.url_encode64(:crypto.strong_rand_bytes(36))
+  end
+
+  defp syn_lookup(session_id) do
+    case :syn.lookup(@syn_scope, session_id) do
+      {pid, _meta} -> {:ok, pid}
+      :undefined -> :error
     end
   end
 end

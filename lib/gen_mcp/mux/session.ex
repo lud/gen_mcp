@@ -23,7 +23,7 @@ defmodule GenMCP.Mux.Session do
                       session_id: [
                         required: true,
                         type: :string,
-                        doc: "The session identifier, prefixed with the node ID and a dash"
+                        doc: "The session identifier"
                       ],
                       server: [
                         type: {:or, [:atom, :mod_arg]},

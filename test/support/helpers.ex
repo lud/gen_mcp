@@ -1,6 +1,5 @@
 defmodule GenMCP.Test.Helpers do
   @moduledoc false
-  alias GenMCP.Cluster.NodeSync
 
   def check_error({:error, reason}) do
     check_error(reason)
@@ -15,6 +14,6 @@ defmodule GenMCP.Test.Helpers do
   end
 
   def random_session_id do
-    NodeSync.gen_session_id()
+    Base.url_encode64(:crypto.strong_rand_bytes(36))
   end
 end

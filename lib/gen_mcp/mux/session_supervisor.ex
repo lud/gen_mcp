@@ -3,21 +3,12 @@ defmodule GenMCP.Mux.SessionSupervisor do
 
   use DynamicSupervisor
 
-  alias GenMCP.Cluster.NodeSync
-
-  def name do
-    {:global, {__MODULE__, NodeSync.node_id()}}
-  end
-
   def start_link(init_arg) do
-    DynamicSupervisor.start_link(__MODULE__, init_arg, name: name())
+    DynamicSupervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
   end
 
   @impl true
   def init(_init_arg) do
-    # Registering a local name for debug purposes
-    Process.register(self(), __MODULE__)
-
     DynamicSupervisor.init(strategy: :one_for_one)
   end
 end

@@ -3,11 +3,8 @@
 defmodule GenMCP.TelemetryLogger do
   events = %{
     # Cluster
-    [:gen_mcp, :cluster, :joined] => :info,
-    [:gen_mcp, :cluster, :left] => :info,
     [:gen_mcp, :cluster, :conflict] => :warning,
     [:gen_mcp, :cluster, :error] => :error,
-    [:gen_mcp, :cluster, :status] => :debug,
 
     # Session.
     [:gen_mcp, :session, :init] => :debug,
@@ -142,31 +139,20 @@ defmodule GenMCP.TelemetryLogger do
     log(p, "gen_mcp session start error: #{inspect(reason)}", %{gen_mcp_session_id: session_id})
   end
 
-  def handle_event([:gen_mcp, :cluster, :joined] = p, _, %{node: node, node_id: node_id}, _) do
-    log(p, "gen_mcp node #{node} joined as #{node_id}")
-  end
-
-  def handle_event([:gen_mcp, :cluster, :left] = p, _, %{node: node, node_id: node_id}, _) do
-    log(p, "gen_mcp node #{node}  as #{node_id}")
-  end
-
-  def handle_event([:gen_mcp, :cluster, :conflict] = p, _, %{node: node, node_id: node_id}, _) do
-    log(p, "gen_mcp peer #{node} shutting down, duplicated node id #{node_id}")
+  def handle_event(
+        [:gen_mcp, :cluster, :conflict] = p,
+        _,
+        %{session_id: session_id, killed_pid: killed_pid, surviving_pid: surviving_pid},
+        _
+      ) do
+    log(
+      p,
+      "gen_mcp session conflict for #{session_id}: killed #{inspect(killed_pid)}, surviving #{inspect(surviving_pid)}"
+    )
   end
 
   def handle_event([:gen_mcp, :cluster, :error] = p, _, %{message: message}, _) do
     log(p, message)
-  end
-
-  def handle_event([:gen_mcp, :cluster, :status] = p, _, %{peers: peers}, _) do
-    log(p, fn ->
-      as_text =
-        Enum.map_intersperse(peers, ?\s, fn %{node_id: node_id, node: node} ->
-          [node_id, "/", Atom.to_string(node)]
-        end)
-
-      "gen_mcp cluster map #{as_text}"
-    end)
   end
 
   # -- event catchall ---------------------------------------------------------

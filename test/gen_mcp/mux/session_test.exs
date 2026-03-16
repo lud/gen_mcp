@@ -98,7 +98,7 @@ defmodule GenMCP.Mux.SessionTest do
     assert {:ok, session_id} = Mux.start_session(server: ServerMock)
     pid = Mux.whereis(session_id)
     assert is_pid(pid)
-    session_sup = GenServer.whereis(SessionSupervisor.name())
+    session_sup = GenServer.whereis(SessionSupervisor)
     assert is_pid(session_sup)
 
     # Supervisor should have mfa = {GenMCP.Mux.Session, :start_link, :undefined}

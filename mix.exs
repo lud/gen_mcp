@@ -50,6 +50,7 @@ defmodule GenMCP.MixProject do
       {:texture, ">= 0.3.2"},
       {:nimble_options, "~> 1.1"},
       {:telemetry, ">= 0.0.0"},
+      {:syn, "~> 3.3"},
 
       # Resources
       mcp_schemas(),
