@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-03-16
+
+### 🐛 Bug Fixes
+
+- Return HTTP 200 codes for RPC-level errors
+
 ## [0.5.2] - 2026-01-26
 
 ### 🐛 Bug Fixes
