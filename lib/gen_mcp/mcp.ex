@@ -42,7 +42,7 @@ defmodule GenMCP.MCP do
 
   Requires `:server_info` (usually a `%#{inspect(MCP.Implementation)}{}`) and
   uses `:capabilities` if provided. The `protocolVersion` field is fixed to
-  `"2025-06-18"` to match the MCP spec supported here.
+  `"2025-11-25"` to match the latest MCP spec supported here.
 
   ## Example
 
@@ -58,7 +58,7 @@ defmodule GenMCP.MCP do
     %MCP.InitializeResult{
       capabilities: Keyword.get(opts, :capabilities, %{}),
       serverInfo: Keyword.fetch!(opts, :server_info),
-      protocolVersion: "2025-06-18"
+      protocolVersion: "2025-11-25"
     }
   end
 

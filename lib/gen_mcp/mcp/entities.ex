@@ -7,7 +7,7 @@ defmodule GenMCP.MCP.Meta do
     %{
       additionalProperties: %{},
       description:
-        "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
+        "See [General Fields](https://modelcontextprotocol.io/specification/2025-11-25/basic#general-fields) for notes on _meta usage.",
       properties: %{progressToken: GenMCP.MCP.ProgressToken},
       type: "object"
     }
@@ -21,7 +21,7 @@ defmodule GenMCP.MCP.RequestMeta do
     %{
       additionalProperties: %{},
       description:
-        "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
+        "See [General Fields](https://modelcontextprotocol.io/specification/2025-11-25/basic#general-fields) for notes on _meta usage.",
       properties: %{progressToken: GenMCP.MCP.ProgressToken},
       type: "object"
     }
@@ -48,7 +48,7 @@ defmodule GenMCP.MCP.ModMap do
 
   def json_schema do
     %{
-      "$schema": "http://json-schema.org/draft-07/schema#",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
       definitions: %{
         "Annotations" => GenMCP.MCP.Annotations,
         "AudioContent" => GenMCP.MCP.AudioContent,
@@ -62,31 +62,35 @@ defmodule GenMCP.MCP.ModMap do
         "ClientCapabilities" => GenMCP.MCP.ClientCapabilities,
         "ContentBlock" => GenMCP.MCP.ContentBlock,
         "EmbeddedResource" => GenMCP.MCP.EmbeddedResource,
+        "Error" => GenMCP.MCP.Error,
         "GetPromptRequest" => GenMCP.MCP.GetPromptRequest,
         "GetPromptRequestParams" => GenMCP.MCP.GetPromptRequestParams,
         "GetPromptResult" => GenMCP.MCP.GetPromptResult,
+        "Icon" => GenMCP.MCP.Icon,
+        "Icons" => GenMCP.MCP.Icons,
         "ImageContent" => GenMCP.MCP.ImageContent,
         "Implementation" => GenMCP.MCP.Implementation,
         "InitializeRequest" => GenMCP.MCP.InitializeRequest,
         "InitializeRequestParams" => GenMCP.MCP.InitializeRequestParams,
         "InitializeResult" => GenMCP.MCP.InitializeResult,
         "InitializedNotification" => GenMCP.MCP.InitializedNotification,
-        "JSONRPCError" => GenMCP.MCP.JSONRPCError,
+        "JSONRPCErrorResponse" => GenMCP.MCP.JSONRPCErrorResponse,
         "JSONRPCRequest" => GenMCP.MCP.JSONRPCRequest,
         "JSONRPCResponse" => GenMCP.MCP.JSONRPCResponse,
+        "JSONRPCResultResponse" => GenMCP.MCP.JSONRPCResultResponse,
         "ListPromptsRequest" => GenMCP.MCP.ListPromptsRequest,
-        "ListPromptsRequestParams" => GenMCP.MCP.ListPromptsRequestParams,
         "ListPromptsResult" => GenMCP.MCP.ListPromptsResult,
         "ListResourceTemplatesRequest" => GenMCP.MCP.ListResourceTemplatesRequest,
-        "ListResourceTemplatesRequestParams" => GenMCP.MCP.ListResourceTemplatesRequestParams,
         "ListResourceTemplatesResult" => GenMCP.MCP.ListResourceTemplatesResult,
         "ListResourcesRequest" => GenMCP.MCP.ListResourcesRequest,
-        "ListResourcesRequestParams" => GenMCP.MCP.ListResourcesRequestParams,
         "ListResourcesResult" => GenMCP.MCP.ListResourcesResult,
         "ListToolsRequest" => GenMCP.MCP.ListToolsRequest,
         "ListToolsResult" => GenMCP.MCP.ListToolsResult,
+        "NotificationParams" => GenMCP.MCP.NotificationParams,
+        "PaginatedRequestParams" => GenMCP.MCP.PaginatedRequestParams,
         "PingRequest" => GenMCP.MCP.PingRequest,
         "ProgressNotification" => GenMCP.MCP.ProgressNotification,
+        "ProgressNotificationParams" => GenMCP.MCP.ProgressNotificationParams,
         "ProgressToken" => GenMCP.MCP.ProgressToken,
         "Prompt" => GenMCP.MCP.Prompt,
         "PromptArgument" => GenMCP.MCP.PromptArgument,
@@ -95,6 +99,7 @@ defmodule GenMCP.MCP.ModMap do
         "ReadResourceRequestParams" => GenMCP.MCP.ReadResourceRequestParams,
         "ReadResourceResult" => GenMCP.MCP.ReadResourceResult,
         "RequestId" => GenMCP.MCP.RequestId,
+        "RequestParams" => GenMCP.MCP.RequestParams,
         "Resource" => GenMCP.MCP.Resource,
         "ResourceLink" => GenMCP.MCP.ResourceLink,
         "ResourceTemplate" => GenMCP.MCP.ResourceTemplate,
@@ -103,11 +108,15 @@ defmodule GenMCP.MCP.ModMap do
         "RootsListChangedNotification" => GenMCP.MCP.RootsListChangedNotification,
         "ServerCapabilities" => GenMCP.MCP.ServerCapabilities,
         "SubscribeRequest" => GenMCP.MCP.SubscribeRequest,
+        "SubscribeRequestParams" => GenMCP.MCP.SubscribeRequestParams,
+        "TaskMetadata" => GenMCP.MCP.TaskMetadata,
         "TextContent" => GenMCP.MCP.TextContent,
         "TextResourceContents" => GenMCP.MCP.TextResourceContents,
         "Tool" => GenMCP.MCP.Tool,
         "ToolAnnotations" => GenMCP.MCP.ToolAnnotations,
-        "UnsubscribeRequest" => GenMCP.MCP.UnsubscribeRequest
+        "ToolExecution" => GenMCP.MCP.ToolExecution,
+        "UnsubscribeRequest" => GenMCP.MCP.UnsubscribeRequest,
+        "UnsubscribeRequestParams" => GenMCP.MCP.UnsubscribeRequestParams
       }
     }
   end
@@ -116,7 +125,7 @@ end
 defmodule GenMCP.MCP.Annotations do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [])
 
   defschema %{
     description: ~SD"""
@@ -126,7 +135,7 @@ defmodule GenMCP.MCP.Annotations do
     properties: %{
       audience: %{
         description: ~SD"""
-        Describes who the intended customer of this object or data is.
+        Describes who the intended audience of this object or data is.
 
         It can include multiple entries to indicate content useful for
         multiple audiences (e.g., `["user", "assistant"]`).
@@ -169,14 +178,22 @@ end
 defmodule GenMCP.MCP.AudioContent do
   use JSV.Schema
 
-  JsonDerive.auto(%{type: "audio"}, [:data, :mimeType])
+  JsonDerive.auto(_merge = %{type: "audio"}, _keep_nils = [:data, :mimeType])
 
   @skip_keys [:type]
 
   defschema %{
     description: "Audio provided to or from an LLM.",
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       annotations: GenMCP.MCP.Annotations,
       data: string_of("byte", description: "The base64-encoded audio data."),
       mimeType:
@@ -199,11 +216,19 @@ end
 defmodule GenMCP.MCP.BlobResourceContents do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:blob, :uri])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:blob, :uri])
 
   defschema %{
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       blob:
         string_of("byte",
           description: ~SD"""
@@ -224,7 +249,7 @@ end
 defmodule GenMCP.MCP.BooleanSchema do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:type])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:type])
 
   defschema %{
     properties: %{
@@ -244,7 +269,7 @@ end
 defmodule GenMCP.MCP.CallToolRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "tools/call", jsonrpc: "2.0"}, [:params])
+  JsonDerive.auto(_merge = %{method: "tools/call", jsonrpc: "2.0"}, _keep_nils = [:params])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -258,7 +283,7 @@ defmodule GenMCP.MCP.CallToolRequest do
       method: const("tools/call"),
       params: GenMCP.MCP.CallToolRequestParams
     },
-    required: [:method, :params],
+    required: [:jsonrpc, :method, :params],
     title: "MCP:CallToolRequest",
     type: "object"
   }
@@ -269,13 +294,19 @@ end
 defmodule GenMCP.MCP.CallToolRequestParams do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:name])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:name])
 
   defschema %{
+    description: "Parameters for a `tools/call` request.",
     properties: %{
       _meta: GenMCP.MCP.RequestMeta,
-      arguments: %{additionalProperties: %{}, type: "object"},
-      name: string()
+      arguments: %{
+        additionalProperties: %{},
+        description: "Arguments to use for the tool call.",
+        type: "object"
+      },
+      name: string(description: "The name of the tool."),
+      task: GenMCP.MCP.TaskMetadata
     },
     required: [:name],
     title: "MCP:CallToolRequestParams",
@@ -288,12 +319,20 @@ end
 defmodule GenMCP.MCP.CallToolResult do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:content])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:content])
 
   defschema %{
     description: "The server's response to a tool call.",
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       content: %{
         description: ~SD"""
         A list of content objects that represent the unstructured result of
@@ -339,7 +378,12 @@ end
 defmodule GenMCP.MCP.CancelledNotification do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:method, :params])
+  JsonDerive.auto(
+    _merge = %{method: "notifications/cancelled", jsonrpc: "2.0"},
+    _keep_nils = [:params]
+  )
+
+  @skip_keys [:method, :jsonrpc]
 
   defschema %{
     description: ~SD"""
@@ -354,12 +398,16 @@ defmodule GenMCP.MCP.CancelledNotification do
     associated processing SHOULD cease.
 
     A client MUST NOT attempt to cancel its `initialize` request.
+
+    For task cancellation, use the `tasks/cancel` request instead of this
+    notification.
     """,
     properties: %{
+      jsonrpc: const("2.0"),
       method: const("notifications/cancelled"),
       params: GenMCP.MCP.CancelledNotificationParams
     },
-    required: [:method, :params],
+    required: [:jsonrpc, :method, :params],
     title: "MCP:CancelledNotification",
     type: "object"
   }
@@ -370,9 +418,12 @@ end
 defmodule GenMCP.MCP.CancelledNotificationParams do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:requestId])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [])
 
   defschema %{
+    description: ~SD"""
+    Parameters for a `notifications/cancelled` notification.
+    """,
     properties: %{
       _meta: GenMCP.MCP.RequestMeta,
       reason:
@@ -384,7 +435,6 @@ defmodule GenMCP.MCP.CancelledNotificationParams do
         ),
       requestId: GenMCP.MCP.RequestId
     },
-    required: [:requestId],
     title: "MCP:CancelledNotificationParams",
     type: "object"
   }
@@ -395,7 +445,7 @@ end
 defmodule GenMCP.MCP.ClientCapabilities do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [])
 
   defschema %{
     description: ~SD"""
@@ -405,11 +455,13 @@ defmodule GenMCP.MCP.ClientCapabilities do
     """,
     properties: %{
       elicitation: %{
-        additionalProperties: true,
         description: ~SD"""
         Present if the client supports elicitation from the server.
         """,
-        properties: %{},
+        properties: %{
+          form: %{additionalProperties: true, properties: %{}, type: "object"},
+          url: %{additionalProperties: true, properties: %{}, type: "object"}
+        },
         type: "object"
       },
       experimental: %{
@@ -437,11 +489,88 @@ defmodule GenMCP.MCP.ClientCapabilities do
         type: "object"
       },
       sampling: %{
-        additionalProperties: true,
         description: ~SD"""
         Present if the client supports sampling from an LLM.
         """,
-        properties: %{},
+        properties: %{
+          context: %{
+            additionalProperties: true,
+            description: ~SD"""
+            Whether the client supports context inclusion via includeContext
+            parameter. If not declared, servers SHOULD only use `includeContext:
+            "none"` (or omit it).
+            """,
+            properties: %{},
+            type: "object"
+          },
+          tools: %{
+            additionalProperties: true,
+            description: ~SD"""
+            Whether the client supports tool use via tools and toolChoice
+            parameters.
+            """,
+            properties: %{},
+            type: "object"
+          }
+        },
+        type: "object"
+      },
+      tasks: %{
+        description: ~SD"""
+        Present if the client supports task-augmented requests.
+        """,
+        properties: %{
+          cancel: %{
+            additionalProperties: true,
+            description: "Whether this client supports tasks/cancel.",
+            properties: %{},
+            type: "object"
+          },
+          list: %{
+            additionalProperties: true,
+            description: "Whether this client supports tasks/list.",
+            properties: %{},
+            type: "object"
+          },
+          requests: %{
+            description: ~SD"""
+            Specifies which request types can be augmented with tasks.
+            """,
+            properties: %{
+              elicitation: %{
+                description: "Task support for elicitation-related requests.",
+                properties: %{
+                  create: %{
+                    additionalProperties: true,
+                    description: ~SD"""
+                    Whether the client supports task-augmented elicitation/create
+                    requests.
+                    """,
+                    properties: %{},
+                    type: "object"
+                  }
+                },
+                type: "object"
+              },
+              sampling: %{
+                description: "Task support for sampling-related requests.",
+                properties: %{
+                  createMessage: %{
+                    additionalProperties: true,
+                    description: ~SD"""
+                    Whether the client supports task-augmented sampling/createMessage
+                    requests.
+                    """,
+                    properties: %{},
+                    type: "object"
+                  }
+                },
+                type: "object"
+              }
+            },
+            type: "object"
+          }
+        },
         type: "object"
       }
     },
@@ -472,7 +601,7 @@ end
 defmodule GenMCP.MCP.EmbeddedResource do
   use JSV.Schema
 
-  JsonDerive.auto(%{type: "resource"}, [:resource])
+  JsonDerive.auto(_merge = %{type: "resource"}, _keep_nils = [:resource])
 
   @skip_keys [:type]
 
@@ -485,7 +614,15 @@ defmodule GenMCP.MCP.EmbeddedResource do
     benefit of the LLM and/or the user.
     """,
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       annotations: GenMCP.MCP.Annotations,
       resource: %{
         anyOf: [GenMCP.MCP.TextResourceContents, GenMCP.MCP.BlobResourceContents]
@@ -500,10 +637,41 @@ defmodule GenMCP.MCP.EmbeddedResource do
   @type t :: %__MODULE__{}
 end
 
+defmodule GenMCP.MCP.Error do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:code, :message])
+
+  defschema %{
+    properties: %{
+      code: integer(description: "The error type that occurred."),
+      data: %{
+        description: ~SD"""
+        Additional information about the error. The value of this member is
+        defined by the sender (e.g. detailed error information, nested errors
+        etc.).
+        """
+      },
+      message:
+        string(
+          description: ~SD"""
+          A short description of the error. The message SHOULD be limited to a
+          concise single sentence.
+          """
+        )
+    },
+    required: [:code, :message],
+    title: "MCP:Error",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
 defmodule GenMCP.MCP.GetPromptRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "prompts/get", jsonrpc: "2.0"}, [:params])
+  JsonDerive.auto(_merge = %{method: "prompts/get", jsonrpc: "2.0"}, _keep_nils = [:params])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -517,7 +685,7 @@ defmodule GenMCP.MCP.GetPromptRequest do
       method: const("prompts/get"),
       params: GenMCP.MCP.GetPromptRequestParams
     },
-    required: [:method, :params],
+    required: [:jsonrpc, :method, :params],
     title: "MCP:GetPromptRequest",
     type: "object"
   }
@@ -528,9 +696,10 @@ end
 defmodule GenMCP.MCP.GetPromptRequestParams do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:name])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:name])
 
   defschema %{
+    description: "Parameters for a `prompts/get` request.",
     properties: %{
       _meta: GenMCP.MCP.RequestMeta,
       arguments: %{
@@ -551,14 +720,22 @@ end
 defmodule GenMCP.MCP.GetPromptResult do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:messages])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:messages])
 
   defschema %{
     description: ~SD"""
     The server's response to a prompts/get request from the client.
     """,
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       description: string(description: "An optional description for the prompt."),
       messages: array_of(GenMCP.MCP.PromptMessage)
     },
@@ -570,17 +747,111 @@ defmodule GenMCP.MCP.GetPromptResult do
   @type t :: %__MODULE__{}
 end
 
+defmodule GenMCP.MCP.Icon do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:src])
+
+  defschema %{
+    description: ~SD"""
+    An optionally-sized icon that can be displayed in a user interface.
+    """,
+    properties: %{
+      mimeType:
+        string(
+          description: ~SD"""
+          Optional MIME type override if the source MIME type is missing or
+          generic. For example: `"image/png"`, `"image/jpeg"`, or
+          `"image/svg+xml"`.
+          """
+        ),
+      sizes: %{
+        description: ~SD"""
+        Optional array of strings that specify sizes at which the icon can be
+        used. Each string should be in WxH format (e.g., `"48x48"`, `"96x96"`)
+        or `"any"` for scalable formats like SVG.
+
+        If not provided, the client should assume that the icon can be used at
+        any size.
+        """,
+        items: string(),
+        type: "array"
+      },
+      src:
+        uri(
+          description: ~SD"""
+          A standard URI pointing to an icon resource. May be an HTTP/HTTPS URL
+          or a `data:` URI with Base64-encoded image data.
+
+          Consumers SHOULD takes steps to ensure URLs serving icons are from the
+          same domain as the client/server or a trusted domain.
+
+          Consumers SHOULD take appropriate precautions when consuming SVGs as
+          they can contain executable JavaScript.
+          """
+        ),
+      theme: string_enum_to_atom([:dark, :light])
+    },
+    required: [:src],
+    title: "MCP:Icon",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.Icons do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [])
+
+  defschema %{
+    description: "Base interface to add `icons` property.",
+    properties: %{
+      icons: %{
+        description: ~SD"""
+        Optional set of sized icons that the client can display in a user
+        interface.
+
+        Clients that support rendering icons MUST support at least the
+        following MIME types: - `image/png` - PNG images (safe, universal
+        compatibility) - `image/jpeg` (and `image/jpg`) - JPEG images (safe,
+        universal compatibility)
+
+        Clients that support rendering icons SHOULD also support: -
+        `image/svg+xml` - SVG images (scalable but requires security
+        precautions) - `image/webp` - WebP images (modern, efficient format)
+        """,
+        items: GenMCP.MCP.Icon,
+        type: "array"
+      }
+    },
+    title: "MCP:Icons",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
 defmodule GenMCP.MCP.ImageContent do
   use JSV.Schema
 
-  JsonDerive.auto(%{type: "image"}, [:data, :mimeType])
+  JsonDerive.auto(_merge = %{type: "image"}, _keep_nils = [:data, :mimeType])
 
   @skip_keys [:type]
 
   defschema %{
     description: "An image provided to or from an LLM.",
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       annotations: GenMCP.MCP.Annotations,
       data: string_of("byte", description: "The base64-encoded image data."),
       mimeType:
@@ -603,14 +874,40 @@ end
 defmodule GenMCP.MCP.Implementation do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:name, :version])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:name, :version])
 
   defschema %{
-    description: ~SD"""
-    Describes the name and version of an MCP implementation, with an
-    optional title for UI representation.
-    """,
+    description: "Describes the MCP implementation.",
     properties: %{
+      description:
+        string(
+          description: ~SD"""
+          An optional human-readable description of what this implementation
+          does.
+
+          This can be used by clients or servers to provide context about their
+          purpose and capabilities. For example, a server might describe the
+          types of resources or tools it provides, while a client might describe
+          its intended use case.
+          """
+        ),
+      icons: %{
+        description: ~SD"""
+        Optional set of sized icons that the client can display in a user
+        interface.
+
+        Clients that support rendering icons MUST support at least the
+        following MIME types: - `image/png` - PNG images (safe, universal
+        compatibility) - `image/jpeg` (and `image/jpg`) - JPEG images (safe,
+        universal compatibility)
+
+        Clients that support rendering icons SHOULD also support: -
+        `image/svg+xml` - SVG images (scalable but requires security
+        precautions) - `image/webp` - WebP images (modern, efficient format)
+        """,
+        items: GenMCP.MCP.Icon,
+        type: "array"
+      },
       name:
         string(
           description: ~SD"""
@@ -630,7 +927,13 @@ defmodule GenMCP.MCP.Implementation do
           `name`, if present).
           """
         ),
-      version: string()
+      version: string(),
+      websiteUrl:
+        uri(
+          description: ~SD"""
+          An optional URL of the website for this implementation.
+          """
+        )
     },
     required: [:name, :version],
     title: "MCP:Implementation",
@@ -643,7 +946,7 @@ end
 defmodule GenMCP.MCP.InitializeRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "initialize", jsonrpc: "2.0"}, [:params])
+  JsonDerive.auto(_merge = %{method: "initialize", jsonrpc: "2.0"}, _keep_nils = [:params])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -658,7 +961,7 @@ defmodule GenMCP.MCP.InitializeRequest do
       method: const("initialize"),
       params: GenMCP.MCP.InitializeRequestParams
     },
-    required: [:method, :params],
+    required: [:jsonrpc, :method, :params],
     title: "MCP:InitializeRequest",
     type: "object"
   }
@@ -669,9 +972,10 @@ end
 defmodule GenMCP.MCP.InitializeRequestParams do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:capabilities, :clientInfo, :protocolVersion])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:capabilities, :clientInfo, :protocolVersion])
 
   defschema %{
+    description: "Parameters for an `initialize` request.",
     properties: %{
       _meta: GenMCP.MCP.RequestMeta,
       capabilities: GenMCP.MCP.ClientCapabilities,
@@ -695,7 +999,7 @@ end
 defmodule GenMCP.MCP.InitializeResult do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:capabilities, :protocolVersion, :serverInfo])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:capabilities, :protocolVersion, :serverInfo])
 
   defschema %{
     description: ~SD"""
@@ -703,7 +1007,15 @@ defmodule GenMCP.MCP.InitializeResult do
     sends this response.
     """,
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       capabilities: GenMCP.MCP.ServerCapabilities,
       instructions:
         string(
@@ -737,7 +1049,12 @@ end
 defmodule GenMCP.MCP.InitializedNotification do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:method])
+  JsonDerive.auto(
+    _merge = %{method: "notifications/initialized", jsonrpc: "2.0"},
+    _keep_nils = []
+  )
+
+  @skip_keys [:method, :jsonrpc]
 
   defschema %{
     description: ~SD"""
@@ -745,14 +1062,11 @@ defmodule GenMCP.MCP.InitializedNotification do
     initialization has finished.
     """,
     properties: %{
+      jsonrpc: const("2.0"),
       method: const("notifications/initialized"),
-      params: %{
-        additionalProperties: %{},
-        properties: %{_meta: GenMCP.MCP.Meta},
-        type: "object"
-      }
+      params: GenMCP.MCP.NotificationParams
     },
-    required: [:method],
+    required: [:jsonrpc, :method],
     title: "MCP:InitializedNotification",
     type: "object"
   }
@@ -760,42 +1074,22 @@ defmodule GenMCP.MCP.InitializedNotification do
   @type t :: %__MODULE__{}
 end
 
-defmodule GenMCP.MCP.JSONRPCError do
+defmodule GenMCP.MCP.JSONRPCErrorResponse do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:error, :id, :jsonrpc])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:error, :jsonrpc, :id])
 
   defschema %{
     description: ~SD"""
     A response to a request that indicates an error occurred.
     """,
     properties: %{
-      error: %{
-        properties: %{
-          code: integer(description: "The error type that occurred."),
-          data: %{
-            description: ~SD"""
-            Additional information about the error. The value of this member is
-            defined by the sender (e.g. detailed error information, nested errors
-            etc.).
-            """
-          },
-          message:
-            string(
-              description: ~SD"""
-              A short description of the error. The message SHOULD be limited to a
-              concise single sentence.
-              """
-            )
-        },
-        required: ["code", "message"],
-        type: "object"
-      },
+      error: GenMCP.MCP.Error,
       id: GenMCP.MCP.RequestId,
       jsonrpc: const("2.0")
     },
-    required: [:error, :id, :jsonrpc],
-    title: "MCP:JSONRPCError",
+    required: [:error, :jsonrpc],
+    title: "MCP:JSONRPCErrorResponse",
     type: "object"
   }
 
@@ -805,7 +1099,7 @@ end
 defmodule GenMCP.MCP.JSONRPCRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:id, :jsonrpc, :method])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:id, :jsonrpc, :method])
 
   defschema %{
     description: "A request that expects a response.",
@@ -813,21 +1107,7 @@ defmodule GenMCP.MCP.JSONRPCRequest do
       id: GenMCP.MCP.RequestId,
       jsonrpc: const("2.0"),
       method: string(),
-      params: %{
-        additionalProperties: %{},
-        properties: %{
-          _meta: %{
-            additionalProperties: %{},
-            description: ~SD"""
-            See [specification/2025-06-18/basic/index#general-fields] for notes on
-            _meta usage.
-            """,
-            properties: %{progressToken: GenMCP.MCP.ProgressToken},
-            type: "object"
-          }
-        },
-        type: "object"
-      }
+      params: %{additionalProperties: %{}, type: "object"}
     },
     required: [:id, :jsonrpc, :method],
     title: "MCP:JSONRPCRequest",
@@ -840,7 +1120,21 @@ end
 defmodule GenMCP.MCP.JSONRPCResponse do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:id, :jsonrpc, :result])
+  def json_schema do
+    %{
+      anyOf: [GenMCP.MCP.JSONRPCResultResponse, GenMCP.MCP.JSONRPCErrorResponse],
+      description: ~SD"""
+      A response to a request, containing either the result or error.
+      """,
+      title: "MCP:JSONRPCResponse"
+    }
+  end
+end
+
+defmodule GenMCP.MCP.JSONRPCResultResponse do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:id, :jsonrpc, :result])
 
   defschema %{
     description: "A successful (non-error) response to a request.",
@@ -850,7 +1144,7 @@ defmodule GenMCP.MCP.JSONRPCResponse do
       result: GenMCP.MCP.Result
     },
     required: [:id, :jsonrpc, :result],
-    title: "MCP:JSONRPCResponse",
+    title: "MCP:JSONRPCResultResponse",
     type: "object"
   }
 
@@ -860,7 +1154,7 @@ end
 defmodule GenMCP.MCP.ListPromptsRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "prompts/list", jsonrpc: "2.0"}, [])
+  JsonDerive.auto(_merge = %{method: "prompts/list", jsonrpc: "2.0"}, _keep_nils = [])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -873,33 +1167,10 @@ defmodule GenMCP.MCP.ListPromptsRequest do
       id: GenMCP.MCP.RequestId,
       jsonrpc: const("2.0"),
       method: const("prompts/list"),
-      params: GenMCP.MCP.ListPromptsRequestParams
+      params: GenMCP.MCP.PaginatedRequestParams
     },
-    required: [:method],
+    required: [:jsonrpc, :method],
     title: "MCP:ListPromptsRequest",
-    type: "object"
-  }
-
-  @type t :: %__MODULE__{}
-end
-
-defmodule GenMCP.MCP.ListPromptsRequestParams do
-  use JSV.Schema
-
-  JsonDerive.auto(%{}, [])
-
-  defschema %{
-    properties: %{
-      _meta: GenMCP.MCP.RequestMeta,
-      cursor:
-        string(
-          description: ~SD"""
-          An opaque token representing the current pagination position. If
-          provided, the server should return results starting after this cursor.
-          """
-        )
-    },
-    title: "MCP:ListPromptsRequestParams",
     type: "object"
   }
 
@@ -909,14 +1180,22 @@ end
 defmodule GenMCP.MCP.ListPromptsResult do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:prompts])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:prompts])
 
   defschema %{
     description: ~SD"""
     The server's response to a prompts/list request from the client.
     """,
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       nextCursor:
         string(
           description: ~SD"""
@@ -937,7 +1216,7 @@ end
 defmodule GenMCP.MCP.ListResourceTemplatesRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "resources/templates/list", jsonrpc: "2.0"}, [])
+  JsonDerive.auto(_merge = %{method: "resources/templates/list", jsonrpc: "2.0"}, _keep_nils = [])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -950,33 +1229,10 @@ defmodule GenMCP.MCP.ListResourceTemplatesRequest do
       id: GenMCP.MCP.RequestId,
       jsonrpc: const("2.0"),
       method: const("resources/templates/list"),
-      params: GenMCP.MCP.ListResourceTemplatesRequestParams
+      params: GenMCP.MCP.PaginatedRequestParams
     },
-    required: [:method],
+    required: [:jsonrpc, :method],
     title: "MCP:ListResourceTemplatesRequest",
-    type: "object"
-  }
-
-  @type t :: %__MODULE__{}
-end
-
-defmodule GenMCP.MCP.ListResourceTemplatesRequestParams do
-  use JSV.Schema
-
-  JsonDerive.auto(%{}, [])
-
-  defschema %{
-    properties: %{
-      _meta: GenMCP.MCP.RequestMeta,
-      cursor:
-        string(
-          description: ~SD"""
-          An opaque token representing the current pagination position. If
-          provided, the server should return results starting after this cursor.
-          """
-        )
-    },
-    title: "MCP:ListResourceTemplatesRequestParams",
     type: "object"
   }
 
@@ -986,7 +1242,7 @@ end
 defmodule GenMCP.MCP.ListResourceTemplatesResult do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:resourceTemplates])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:resourceTemplates])
 
   defschema %{
     description: ~SD"""
@@ -994,7 +1250,15 @@ defmodule GenMCP.MCP.ListResourceTemplatesResult do
     client.
     """,
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       nextCursor:
         string(
           description: ~SD"""
@@ -1015,7 +1279,7 @@ end
 defmodule GenMCP.MCP.ListResourcesRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "resources/list", jsonrpc: "2.0"}, [])
+  JsonDerive.auto(_merge = %{method: "resources/list", jsonrpc: "2.0"}, _keep_nils = [])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -1027,33 +1291,10 @@ defmodule GenMCP.MCP.ListResourcesRequest do
       id: GenMCP.MCP.RequestId,
       jsonrpc: const("2.0"),
       method: const("resources/list"),
-      params: GenMCP.MCP.ListResourcesRequestParams
+      params: GenMCP.MCP.PaginatedRequestParams
     },
-    required: [:method],
+    required: [:jsonrpc, :method],
     title: "MCP:ListResourcesRequest",
-    type: "object"
-  }
-
-  @type t :: %__MODULE__{}
-end
-
-defmodule GenMCP.MCP.ListResourcesRequestParams do
-  use JSV.Schema
-
-  JsonDerive.auto(%{}, [])
-
-  defschema %{
-    properties: %{
-      _meta: GenMCP.MCP.RequestMeta,
-      cursor:
-        string(
-          description: ~SD"""
-          An opaque token representing the current pagination position. If
-          provided, the server should return results starting after this cursor.
-          """
-        )
-    },
-    title: "MCP:ListResourcesRequestParams",
     type: "object"
   }
 
@@ -1063,14 +1304,22 @@ end
 defmodule GenMCP.MCP.ListResourcesResult do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:resources])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:resources])
 
   defschema %{
     description: ~SD"""
     The server's response to a resources/list request from the client.
     """,
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       nextCursor:
         string(
           description: ~SD"""
@@ -1091,7 +1340,7 @@ end
 defmodule GenMCP.MCP.ListToolsRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "tools/list", jsonrpc: "2.0"}, [])
+  JsonDerive.auto(_merge = %{method: "tools/list", jsonrpc: "2.0"}, _keep_nils = [])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -1103,20 +1352,9 @@ defmodule GenMCP.MCP.ListToolsRequest do
       id: GenMCP.MCP.RequestId,
       jsonrpc: const("2.0"),
       method: const("tools/list"),
-      params: %{
-        properties: %{
-          cursor:
-            string(
-              description: ~SD"""
-              An opaque token representing the current pagination position. If
-              provided, the server should return results starting after this cursor.
-              """
-            )
-        },
-        type: "object"
-      }
+      params: GenMCP.MCP.PaginatedRequestParams
     },
-    required: [:method],
+    required: [:jsonrpc, :method],
     title: "MCP:ListToolsRequest",
     type: "object"
   }
@@ -1127,14 +1365,22 @@ end
 defmodule GenMCP.MCP.ListToolsResult do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:tools])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:tools])
 
   defschema %{
     description: ~SD"""
     The server's response to a tools/list request from the client.
     """,
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       nextCursor:
         string(
           description: ~SD"""
@@ -1152,10 +1398,58 @@ defmodule GenMCP.MCP.ListToolsResult do
   @type t :: %__MODULE__{}
 end
 
+defmodule GenMCP.MCP.NotificationParams do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [])
+
+  defschema %{
+    properties: %{
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      }
+    },
+    title: "MCP:NotificationParams",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.PaginatedRequestParams do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [])
+
+  defschema %{
+    description: "Common parameters for paginated requests.",
+    properties: %{
+      _meta: GenMCP.MCP.RequestMeta,
+      cursor:
+        string(
+          description: ~SD"""
+          An opaque token representing the current pagination position. If
+          provided, the server should return results starting after this cursor.
+          """
+        )
+    },
+    title: "MCP:PaginatedRequestParams",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
 defmodule GenMCP.MCP.PingRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "ping", jsonrpc: "2.0"}, [])
+  JsonDerive.auto(_merge = %{method: "ping", jsonrpc: "2.0"}, _keep_nils = [])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -1169,23 +1463,9 @@ defmodule GenMCP.MCP.PingRequest do
       id: GenMCP.MCP.RequestId,
       jsonrpc: const("2.0"),
       method: const("ping"),
-      params: %{
-        additionalProperties: %{},
-        properties: %{
-          _meta: %{
-            additionalProperties: %{},
-            description: ~SD"""
-            See [specification/2025-06-18/basic/index#general-fields] for notes on
-            _meta usage.
-            """,
-            properties: %{progressToken: GenMCP.MCP.ProgressToken},
-            type: "object"
-          }
-        },
-        type: "object"
-      }
+      params: GenMCP.MCP.RequestParams
     },
-    required: [:method],
+    required: [:jsonrpc, :method],
     title: "MCP:PingRequest",
     type: "object"
   }
@@ -1196,7 +1476,12 @@ end
 defmodule GenMCP.MCP.ProgressNotification do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:method, :params])
+  JsonDerive.auto(
+    _merge = %{method: "notifications/progress", jsonrpc: "2.0"},
+    _keep_nils = [:params]
+  )
+
+  @skip_keys [:method, :jsonrpc]
 
   defschema %{
     description: ~SD"""
@@ -1204,37 +1489,61 @@ defmodule GenMCP.MCP.ProgressNotification do
     update for a long-running request.
     """,
     properties: %{
+      jsonrpc: const("2.0"),
       method: const("notifications/progress"),
-      params: %{
-        properties: %{
-          message:
-            string(
-              description: ~SD"""
-              An optional message describing the current progress.
-              """
-            ),
-          progress:
-            number(
-              description: ~SD"""
-              The progress thus far. This should increase every time progress is
-              made, even if the total is unknown.
-              """
-            ),
-          progressToken: GenMCP.MCP.ProgressToken,
-          total:
-            number(
-              description: ~SD"""
-              Total number of items to process (or total progress required), if
-              known.
-              """
-            )
-        },
-        required: ["progress", "progressToken"],
-        type: "object"
-      }
+      params: GenMCP.MCP.ProgressNotificationParams
     },
-    required: [:method, :params],
+    required: [:jsonrpc, :method, :params],
     title: "MCP:ProgressNotification",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.ProgressNotificationParams do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:progress, :progressToken])
+
+  defschema %{
+    description: ~SD"""
+    Parameters for a `notifications/progress` notification.
+    """,
+    properties: %{
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
+      message:
+        string(
+          description: ~SD"""
+          An optional message describing the current progress.
+          """
+        ),
+      progress:
+        number(
+          description: ~SD"""
+          The progress thus far. This should increase every time progress is
+          made, even if the total is unknown.
+          """
+        ),
+      progressToken: GenMCP.MCP.ProgressToken,
+      total:
+        number(
+          description: ~SD"""
+          Total number of items to process (or total progress required), if
+          known.
+          """
+        )
+    },
+    required: [:progress, :progressToken],
+    title: "MCP:ProgressNotificationParams",
     type: "object"
   }
 
@@ -1259,14 +1568,22 @@ end
 defmodule GenMCP.MCP.Prompt do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:name])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:name])
 
   defschema %{
     description: ~SD"""
     A prompt or prompt template that the server offers.
     """,
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       arguments: %{
         description: ~SD"""
         A list of arguments to use for templating the prompt.
@@ -1280,6 +1597,23 @@ defmodule GenMCP.MCP.Prompt do
           An optional description of what this prompt provides
           """
         ),
+      icons: %{
+        description: ~SD"""
+        Optional set of sized icons that the client can display in a user
+        interface.
+
+        Clients that support rendering icons MUST support at least the
+        following MIME types: - `image/png` - PNG images (safe, universal
+        compatibility) - `image/jpeg` (and `image/jpg`) - JPEG images (safe,
+        universal compatibility)
+
+        Clients that support rendering icons SHOULD also support: -
+        `image/svg+xml` - SVG images (scalable but requires security
+        precautions) - `image/webp` - WebP images (modern, efficient format)
+        """,
+        items: GenMCP.MCP.Icon,
+        type: "array"
+      },
       name:
         string(
           description: ~SD"""
@@ -1311,7 +1645,7 @@ end
 defmodule GenMCP.MCP.PromptArgument do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:name])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:name])
 
   defschema %{
     description: "Describes an argument that a prompt can accept.",
@@ -1349,7 +1683,7 @@ end
 defmodule GenMCP.MCP.PromptMessage do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:content, :role])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:content, :role])
 
   defschema %{
     description: ~SD"""
@@ -1370,7 +1704,7 @@ end
 defmodule GenMCP.MCP.ReadResourceRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "resources/read", jsonrpc: "2.0"}, [:params])
+  JsonDerive.auto(_merge = %{method: "resources/read", jsonrpc: "2.0"}, _keep_nils = [:params])
 
   @skip_keys [:method, :jsonrpc]
 
@@ -1384,7 +1718,7 @@ defmodule GenMCP.MCP.ReadResourceRequest do
       method: const("resources/read"),
       params: GenMCP.MCP.ReadResourceRequestParams
     },
-    required: [:method, :params],
+    required: [:jsonrpc, :method, :params],
     title: "MCP:ReadResourceRequest",
     type: "object"
   }
@@ -1395,16 +1729,17 @@ end
 defmodule GenMCP.MCP.ReadResourceRequestParams do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:uri])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:uri])
 
   defschema %{
+    description: "Parameters for a `resources/read` request.",
     properties: %{
       _meta: GenMCP.MCP.RequestMeta,
       uri:
         uri(
           description: ~SD"""
-          The URI of the resource to read. The URI can use any protocol; it is
-          up to the server how to interpret it.
+          The URI of the resource. The URI can use any protocol; it is up to the
+          server how to interpret it.
           """
         )
     },
@@ -1419,14 +1754,22 @@ end
 defmodule GenMCP.MCP.ReadResourceResult do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:contents])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:contents])
 
   defschema %{
     description: ~SD"""
     The server's response to a resources/read request from the client.
     """,
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       contents:
         array_of(%{anyOf: [GenMCP.MCP.TextResourceContents, GenMCP.MCP.BlobResourceContents]})
     },
@@ -1452,17 +1795,51 @@ defmodule GenMCP.MCP.RequestId do
   end
 end
 
+defmodule GenMCP.MCP.RequestParams do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [])
+
+  defschema %{
+    description: "Common params for any request.",
+    properties: %{
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        properties: %{progressToken: GenMCP.MCP.ProgressToken},
+        type: "object"
+      }
+    },
+    title: "MCP:RequestParams",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
 defmodule GenMCP.MCP.Resource do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:name, :uri])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:name, :uri])
 
   defschema %{
     description: ~SD"""
     A known resource that the server is capable of reading.
     """,
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       annotations: GenMCP.MCP.Annotations,
       description:
         string(
@@ -1473,6 +1850,23 @@ defmodule GenMCP.MCP.Resource do
           available resources. It can be thought of like a "hint" to the model.
           """
         ),
+      icons: %{
+        description: ~SD"""
+        Optional set of sized icons that the client can display in a user
+        interface.
+
+        Clients that support rendering icons MUST support at least the
+        following MIME types: - `image/png` - PNG images (safe, universal
+        compatibility) - `image/jpeg` (and `image/jpg`) - JPEG images (safe,
+        universal compatibility)
+
+        Clients that support rendering icons SHOULD also support: -
+        `image/svg+xml` - SVG images (scalable but requires security
+        precautions) - `image/webp` - WebP images (modern, efficient format)
+        """,
+        items: GenMCP.MCP.Icon,
+        type: "array"
+      },
       mimeType: string(description: "The MIME type of this resource, if known."),
       name:
         string(
@@ -1516,7 +1910,7 @@ end
 defmodule GenMCP.MCP.ResourceLink do
   use JSV.Schema
 
-  JsonDerive.auto(%{type: "resource_link"}, [:name, :uri])
+  JsonDerive.auto(_merge = %{type: "resource_link"}, _keep_nils = [:name, :uri])
 
   @skip_keys [:type]
 
@@ -1529,7 +1923,15 @@ defmodule GenMCP.MCP.ResourceLink do
     the results of `resources/list` requests.
     """,
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       annotations: GenMCP.MCP.Annotations,
       description:
         string(
@@ -1540,6 +1942,23 @@ defmodule GenMCP.MCP.ResourceLink do
           available resources. It can be thought of like a "hint" to the model.
           """
         ),
+      icons: %{
+        description: ~SD"""
+        Optional set of sized icons that the client can display in a user
+        interface.
+
+        Clients that support rendering icons MUST support at least the
+        following MIME types: - `image/png` - PNG images (safe, universal
+        compatibility) - `image/jpeg` (and `image/jpg`) - JPEG images (safe,
+        universal compatibility)
+
+        Clients that support rendering icons SHOULD also support: -
+        `image/svg+xml` - SVG images (scalable but requires security
+        precautions) - `image/webp` - WebP images (modern, efficient format)
+        """,
+        items: GenMCP.MCP.Icon,
+        type: "array"
+      },
       mimeType: string(description: "The MIME type of this resource, if known."),
       name:
         string(
@@ -1584,14 +2003,22 @@ end
 defmodule GenMCP.MCP.ResourceTemplate do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:name, :uriTemplate])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:name, :uriTemplate])
 
   defschema %{
     description: ~SD"""
     A template description for resources available on the server.
     """,
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       annotations: GenMCP.MCP.Annotations,
       description:
         string(
@@ -1602,6 +2029,23 @@ defmodule GenMCP.MCP.ResourceTemplate do
           available resources. It can be thought of like a "hint" to the model.
           """
         ),
+      icons: %{
+        description: ~SD"""
+        Optional set of sized icons that the client can display in a user
+        interface.
+
+        Clients that support rendering icons MUST support at least the
+        following MIME types: - `image/png` - PNG images (safe, universal
+        compatibility) - `image/jpeg` (and `image/jpg`) - JPEG images (safe,
+        universal compatibility)
+
+        Clients that support rendering icons SHOULD also support: -
+        `image/svg+xml` - SVG images (scalable but requires security
+        precautions) - `image/webp` - WebP images (modern, efficient format)
+        """,
+        items: GenMCP.MCP.Icon,
+        type: "array"
+      },
       mimeType:
         string(
           description: ~SD"""
@@ -1648,11 +2092,21 @@ end
 defmodule GenMCP.MCP.Result do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [])
 
   defschema %{
     additionalProperties: %{},
-    properties: %{_meta: GenMCP.MCP.Meta},
+    properties: %{
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      }
+    },
     title: "MCP:Result",
     type: "object"
   }
@@ -1671,7 +2125,12 @@ end
 defmodule GenMCP.MCP.RootsListChangedNotification do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:method])
+  JsonDerive.auto(
+    _merge = %{method: "notifications/roots/list_changed", jsonrpc: "2.0"},
+    _keep_nils = []
+  )
+
+  @skip_keys [:method, :jsonrpc]
 
   defschema %{
     description: ~SD"""
@@ -1681,14 +2140,11 @@ defmodule GenMCP.MCP.RootsListChangedNotification do
     request an updated list of roots using the ListRootsRequest.
     """,
     properties: %{
+      jsonrpc: const("2.0"),
       method: const("notifications/roots/list_changed"),
-      params: %{
-        additionalProperties: %{},
-        properties: %{_meta: GenMCP.MCP.Meta},
-        type: "object"
-      }
+      params: GenMCP.MCP.NotificationParams
     },
-    required: [:method],
+    required: [:jsonrpc, :method],
     title: "MCP:RootsListChangedNotification",
     type: "object"
   }
@@ -1699,7 +2155,7 @@ end
 defmodule GenMCP.MCP.ServerCapabilities do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [])
 
   defschema %{
     description: ~SD"""
@@ -1769,6 +2225,48 @@ defmodule GenMCP.MCP.ServerCapabilities do
         },
         type: "object"
       },
+      tasks: %{
+        description: ~SD"""
+        Present if the server supports task-augmented requests.
+        """,
+        properties: %{
+          cancel: %{
+            additionalProperties: true,
+            description: "Whether this server supports tasks/cancel.",
+            properties: %{},
+            type: "object"
+          },
+          list: %{
+            additionalProperties: true,
+            description: "Whether this server supports tasks/list.",
+            properties: %{},
+            type: "object"
+          },
+          requests: %{
+            description: ~SD"""
+            Specifies which request types can be augmented with tasks.
+            """,
+            properties: %{
+              tools: %{
+                description: "Task support for tool-related requests.",
+                properties: %{
+                  call: %{
+                    additionalProperties: true,
+                    description: ~SD"""
+                    Whether the server supports task-augmented tools/call requests.
+                    """,
+                    properties: %{},
+                    type: "object"
+                  }
+                },
+                type: "object"
+              }
+            },
+            type: "object"
+          }
+        },
+        type: "object"
+      },
       tools: %{
         description: "Present if the server offers any tools to call.",
         properties: %{
@@ -1793,7 +2291,10 @@ end
 defmodule GenMCP.MCP.SubscribeRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "resources/subscribe", jsonrpc: "2.0"}, [:params])
+  JsonDerive.auto(
+    _merge = %{method: "resources/subscribe", jsonrpc: "2.0"},
+    _keep_nils = [:params]
+  )
 
   @skip_keys [:method, :jsonrpc]
 
@@ -1806,22 +2307,60 @@ defmodule GenMCP.MCP.SubscribeRequest do
       id: GenMCP.MCP.RequestId,
       jsonrpc: const("2.0"),
       method: const("resources/subscribe"),
-      params: %{
-        properties: %{
-          uri:
-            uri(
-              description: ~SD"""
-              The URI of the resource to subscribe to. The URI can use any protocol;
-              it is up to the server how to interpret it.
-              """
-            )
-        },
-        required: ["uri"],
-        type: "object"
-      }
+      params: GenMCP.MCP.SubscribeRequestParams
     },
-    required: [:method, :params],
+    required: [:jsonrpc, :method, :params],
     title: "MCP:SubscribeRequest",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.SubscribeRequestParams do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:uri])
+
+  defschema %{
+    description: "Parameters for a `resources/subscribe` request.",
+    properties: %{
+      _meta: GenMCP.MCP.RequestMeta,
+      uri:
+        uri(
+          description: ~SD"""
+          The URI of the resource. The URI can use any protocol; it is up to the
+          server how to interpret it.
+          """
+        )
+    },
+    required: [:uri],
+    title: "MCP:SubscribeRequestParams",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.TaskMetadata do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [])
+
+  defschema %{
+    description: ~SD"""
+    Metadata for augmenting a request with task execution. Include this in
+    the `task` field of the request parameters.
+    """,
+    properties: %{
+      ttl:
+        integer(
+          description: ~SD"""
+          Requested duration in milliseconds to retain task from creation.
+          """
+        )
+    },
+    title: "MCP:TaskMetadata",
     type: "object"
   }
 
@@ -1831,14 +2370,22 @@ end
 defmodule GenMCP.MCP.TextContent do
   use JSV.Schema
 
-  JsonDerive.auto(%{type: "text"}, [:text])
+  JsonDerive.auto(_merge = %{type: "text"}, _keep_nils = [:text])
 
   @skip_keys [:type]
 
   defschema %{
     description: "Text provided to or from an LLM.",
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       annotations: GenMCP.MCP.Annotations,
       text: string(description: "The text content of the message."),
       type: const("text")
@@ -1854,11 +2401,19 @@ end
 defmodule GenMCP.MCP.TextResourceContents do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:text, :uri])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:text, :uri])
 
   defschema %{
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       mimeType: string(description: "The MIME type of this resource, if known."),
       text:
         string(
@@ -1880,12 +2435,20 @@ end
 defmodule GenMCP.MCP.Tool do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [:inputSchema, :name])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:inputSchema, :name])
 
   defschema %{
     description: "Definition for a tool the client can call.",
     properties: %{
-      _meta: GenMCP.MCP.Meta,
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
       annotations: GenMCP.MCP.ToolAnnotations,
       description:
         string(
@@ -1896,11 +2459,30 @@ defmodule GenMCP.MCP.Tool do
           available tools. It can be thought of like a "hint" to the model.
           """
         ),
+      execution: GenMCP.MCP.ToolExecution,
+      icons: %{
+        description: ~SD"""
+        Optional set of sized icons that the client can display in a user
+        interface.
+
+        Clients that support rendering icons MUST support at least the
+        following MIME types: - `image/png` - PNG images (safe, universal
+        compatibility) - `image/jpeg` (and `image/jpg`) - JPEG images (safe,
+        universal compatibility)
+
+        Clients that support rendering icons SHOULD also support: -
+        `image/svg+xml` - SVG images (scalable but requires security
+        precautions) - `image/webp` - WebP images (modern, efficient format)
+        """,
+        items: GenMCP.MCP.Icon,
+        type: "array"
+      },
       inputSchema: %{
         description: ~SD"""
         A JSON Schema object defining the expected parameters for the tool.
         """,
         properties: %{
+          "$schema": string(),
           properties: %{
             additionalProperties: %{
               additionalProperties: true,
@@ -1926,8 +2508,12 @@ defmodule GenMCP.MCP.Tool do
         description: ~SD"""
         An optional JSON Schema object defining the structure of the tool's
         output returned in the structuredContent field of a CallToolResult.
+
+        Defaults to JSON Schema 2020-12 when no explicit $schema is provided.
+        Currently restricted to type: "object" at the root level.
         """,
         properties: %{
+          "$schema": string(),
           properties: %{
             additionalProperties: %{
               additionalProperties: true,
@@ -1966,7 +2552,7 @@ end
 defmodule GenMCP.MCP.ToolAnnotations do
   use JSV.Schema
 
-  JsonDerive.auto(%{}, [])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [])
 
   defschema %{
     description: ~SD"""
@@ -1995,7 +2581,7 @@ defmodule GenMCP.MCP.ToolAnnotations do
         boolean(
           description: ~SD"""
           If true, calling the tool repeatedly with the same arguments will have
-          no additional effect on the its environment.
+          no additional effect on its environment.
 
           (This property is meaningful only when `readOnlyHint == false`)
 
@@ -2030,10 +2616,30 @@ defmodule GenMCP.MCP.ToolAnnotations do
   @type t :: %__MODULE__{}
 end
 
+defmodule GenMCP.MCP.ToolExecution do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [])
+
+  defschema %{
+    description: "Execution-related properties for a tool.",
+    properties: %{
+      taskSupport: string_enum_to_atom([:forbidden, :optional, :required])
+    },
+    title: "MCP:ToolExecution",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
 defmodule GenMCP.MCP.UnsubscribeRequest do
   use JSV.Schema
 
-  JsonDerive.auto(%{method: "resources/unsubscribe", jsonrpc: "2.0"}, [:params])
+  JsonDerive.auto(
+    _merge = %{method: "resources/unsubscribe", jsonrpc: "2.0"},
+    _keep_nils = [:params]
+  )
 
   @skip_keys [:method, :jsonrpc]
 
@@ -2047,16 +2653,35 @@ defmodule GenMCP.MCP.UnsubscribeRequest do
       id: GenMCP.MCP.RequestId,
       jsonrpc: const("2.0"),
       method: const("resources/unsubscribe"),
-      params: %{
-        properties: %{
-          uri: uri(description: "The URI of the resource to unsubscribe from.")
-        },
-        required: ["uri"],
-        type: "object"
-      }
+      params: GenMCP.MCP.UnsubscribeRequestParams
     },
-    required: [:method, :params],
+    required: [:jsonrpc, :method, :params],
     title: "MCP:UnsubscribeRequest",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.UnsubscribeRequestParams do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:uri])
+
+  defschema %{
+    description: "Parameters for a `resources/unsubscribe` request.",
+    properties: %{
+      _meta: GenMCP.MCP.RequestMeta,
+      uri:
+        uri(
+          description: ~SD"""
+          The URI of the resource. The URI can use any protocol; it is up to the
+          server how to interpret it.
+          """
+        )
+    },
+    required: [:uri],
+    title: "MCP:UnsubscribeRequestParams",
     type: "object"
   }
 

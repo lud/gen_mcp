@@ -34,7 +34,6 @@ defmodule GenMCP.Mux.SessionTest do
 
   defp init_notif do
     %MCP.InitializedNotification{
-      method: "notifications/initialized",
       params: %{}
     }
   end

@@ -49,7 +49,6 @@ defmodule GenMCP.Mux.Channel do
   def send_progress(%{progress_token: token} = channel, progress, total, message) do
     payload =
       %ProgressNotification{
-        method: "notifications/progress",
         params: %{progress: progress, progressToken: token, total: total, message: message}
       }
 

@@ -21,7 +21,7 @@ defmodule GenMCP.MCPTest do
       assert %MCP.InitializeResult{
                capabilities: %{},
                serverInfo: ^server_info,
-               protocolVersion: "2025-06-18"
+               protocolVersion: "2025-11-25"
              } = result
     end
 
@@ -45,7 +45,7 @@ defmodule GenMCP.MCPTest do
       assert %MCP.InitializeResult{
                capabilities: ^capabilities,
                serverInfo: ^server_info,
-               protocolVersion: "2025-06-18"
+               protocolVersion: "2025-11-25"
              } = result
     end
 

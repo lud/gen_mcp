@@ -43,7 +43,6 @@ defmodule GenMCP.SuiteTest do
            } = state
 
     client_init_notif = %MCP.InitializedNotification{
-      method: "notifications/initialized",
       params: %{}
     }
 
@@ -340,7 +339,7 @@ defmodule GenMCP.SuiteTest do
 
       assert %MCP.InitializeResult{
                capabilities: %MCP.ServerCapabilities{},
-               protocolVersion: "2025-06-18"
+               protocolVersion: "2025-11-25"
              } = result
     end
 
@@ -441,7 +440,7 @@ defmodule GenMCP.SuiteTest do
       assert {200,
               %{
                 code: -32_000,
-                data: %{version: "2024-01-01", supported: ["2025-06-18"]},
+                data: %{version: "2024-01-01", supported: ["2025-11-25", "2025-06-18"]},
                 message: "Unsupported protocol version"
               }} = check_error(reason)
     end
@@ -687,7 +686,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, result2}, _} =
                Suite.handle_request(
                  %MCP.ListResourcesRequest{
-                   params: %MCP.ListResourcesRequestParams{cursor: pagination}
+                   params: %MCP.PaginatedRequestParams{cursor: pagination}
                  },
                  build_channel(),
                  state
@@ -755,7 +754,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, result2}, _} =
                Suite.handle_request(
                  %MCP.ListResourcesRequest{
-                   params: %MCP.ListResourcesRequestParams{cursor: cursor}
+                   params: %MCP.PaginatedRequestParams{cursor: cursor}
                  },
                  build_channel(),
                  state
@@ -845,7 +844,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:result, result2}, _} =
                Suite.handle_request(
                  %MCP.ListResourcesRequest{
-                   params: %MCP.ListResourcesRequestParams{cursor: cursor}
+                   params: %MCP.PaginatedRequestParams{cursor: cursor}
                  },
                  build_channel(),
                  state
@@ -879,7 +878,7 @@ defmodule GenMCP.SuiteTest do
 
       # Client sends an invalid/tampered pagination token
       invalid_request = %MCP.ListResourcesRequest{
-        params: %MCP.ListResourcesRequestParams{cursor: "invalid-token-from-client"}
+        params: %MCP.PaginatedRequestParams{cursor: "invalid-token-from-client"}
       }
 
       assert {:reply, {:error, error}, _} =
@@ -1645,7 +1644,6 @@ defmodule GenMCP.SuiteTest do
       state = init_session()
 
       cancelled_notif = %MCP.CancelledNotification{
-        method: "notifications/cancelled",
         params: %MCP.CancelledNotificationParams{
           requestId: "some-request-id",
           reason: "User cancelled the operation"
@@ -1660,7 +1658,6 @@ defmodule GenMCP.SuiteTest do
       state = init_session()
 
       roots_changed_notif = %MCP.RootsListChangedNotification{
-        method: "notifications/roots/list_changed",
         params: %{_meta: %{}}
       }
 
@@ -1767,7 +1764,7 @@ defmodule GenMCP.SuiteTest do
 
       # fetch all pages
       req = fn cursor ->
-        %MCP.ListResourcesRequest{params: %MCP.ListResourcesRequestParams{cursor: cursor}}
+        %MCP.ListResourcesRequest{params: %MCP.PaginatedRequestParams{cursor: cursor}}
       end
 
       assert {:reply, {:result, %{resources: page1, nextCursor: cursor}}, state} =
@@ -1843,7 +1840,7 @@ defmodule GenMCP.SuiteTest do
 
       # fetch all pages
       req = fn cursor ->
-        %MCP.ListPromptsRequest{params: %MCP.ListPromptsRequestParams{cursor: cursor}}
+        %MCP.ListPromptsRequest{params: %MCP.PaginatedRequestParams{cursor: cursor}}
       end
 
       assert {:reply, {:result, %{prompts: page1, nextCursor: cursor}}, state} =

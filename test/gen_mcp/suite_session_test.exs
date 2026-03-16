@@ -58,7 +58,6 @@ defmodule GenMCP.SuiteSessionTest do
 
   defp init_notif do
     %MCP.InitializedNotification{
-      method: "notifications/initialized",
       params: %{}
     }
   end
@@ -687,7 +686,6 @@ defmodule GenMCP.SuiteSessionTest do
         Mux.notify(
           session_pid,
           %MCP.CancelledNotification{
-            method: "notifications/cancelled",
             params: %MCP.CancelledNotificationParams{requestId: "123", reason: "test"}
           }
         )

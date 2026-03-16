@@ -68,8 +68,8 @@ defmodule GenMCP.Transport.StreamableHTTP do
   alias GenMCP.Error
   alias GenMCP.MCP.InitializeRequest
   alias GenMCP.MCP.InitializeResult
-  alias GenMCP.MCP.JSONRPCError
-  alias GenMCP.MCP.JSONRPCResponse
+  alias GenMCP.MCP.JSONRPCErrorResponse
+  alias GenMCP.MCP.JSONRPCResultResponse
   alias GenMCP.Mux
   alias GenMCP.Mux.Channel
   alias GenMCP.Transport.StreamableHTTP.Impl
@@ -143,8 +143,8 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
   alias GenMCP.Error
   alias GenMCP.MCP.InitializeRequest
   alias GenMCP.MCP.InitializeResult
-  alias GenMCP.MCP.JSONRPCError
-  alias GenMCP.MCP.JSONRPCResponse
+  alias GenMCP.MCP.JSONRPCErrorResponse
+  alias GenMCP.MCP.JSONRPCResultResponse
   alias GenMCP.Mux
   alias GenMCP.Mux.Channel
   alias GenMCP.Utils.OptsValidator
@@ -311,7 +311,7 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
   end
 
   defp send_result_response(conn, status, msg_id, result) do
-    payload = %JSONRPCResponse{
+    payload = %JSONRPCResultResponse{
       id: msg_id,
       jsonrpc: "2.0",
       result: result
@@ -331,7 +331,7 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
   defp send_error(conn, reason, msg_id) do
     case Error.cast_error(reason) do
       {status, payload} ->
-        payload = %JSONRPCError{
+        payload = %JSONRPCErrorResponse{
           error: payload,
           id: msg_id,
           jsonrpc: "2.0"
@@ -445,7 +445,7 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
   defp send_result_response_chunk(conn, result) do
     msg_id = conn.private.gen_mcp_client_request_id
 
-    payload = %JSONRPCResponse{
+    payload = %JSONRPCResultResponse{
       id: msg_id,
       jsonrpc: "2.0",
       result: result
@@ -458,7 +458,7 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
     msg_id = conn.private.gen_mcp_client_request_id
     {_status, error_payload} = Error.cast_error(reason)
 
-    payload = %JSONRPCError{
+    payload = %JSONRPCErrorResponse{
       error: error_payload,
       id: msg_id,
       jsonrpc: "2.0"

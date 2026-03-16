@@ -100,7 +100,7 @@ defmodule Generator do
 
   def run do
     schema =
-      "deps/modelcontextprotocol/schema/2025-06-18/schema.json"
+      "deps/modelcontextprotocol/schema/2025-11-25/schema.json"
       |> File.read!()
       |> Jason.decode!(keys: :atoms)
 
@@ -108,7 +108,7 @@ defmodule Generator do
 
     confs =
       schema
-      |> Map.fetch!(:definitions)
+      |> Map.fetch!(:"$defs")
       |> Enum.map(fn {name, schema} -> conf(name: name, schema: schema, opts: []) end)
       |> filter_schemas()
       # index by name so we can target schemas by name and add new confs to the
@@ -145,307 +145,160 @@ defmodule Generator do
 
   defp module_config(name) do
     case name do
-      # Custom additions
-      :CallToolRequestParams ->
-        [rpc_request_params: true]
-
-      :CancelledNotificationParams ->
-        [rpc_request_params: true]
-
-      :GetPromptRequestParams ->
-        [rpc_request_params: true]
-
-      :InitializeRequestParams ->
-        [rpc_request_params: true]
-
-      :ListPromptsRequestParams ->
-        [rpc_request_params: true]
-
-      :ListResourcesRequestParams ->
-        [rpc_request_params: true]
-
-      :ListResourceTemplatesRequestParams ->
-        [rpc_request_params: true]
-
-      :ReadResourceRequestParams ->
-        [rpc_request_params: true]
-
-      # Existing definitions
-
-      :CallToolRequest ->
-        [rpc_request: true]
-
-      :CompleteRequest ->
-        # [ rpc_request: true]
-        :nogen
-
-      :GetPromptRequest ->
-        [rpc_request: true]
-
-      :InitializeRequest ->
-        [rpc_request: true]
-
-      :ListPromptsRequest ->
-        [rpc_request: true]
-
-      :ListResourcesRequest ->
-        [rpc_request: true]
-
-      :ListResourceTemplatesRequest ->
-        [rpc_request: true]
-
-      :ListToolsRequest ->
-        [rpc_request: true]
-
-      :PingRequest ->
-        [rpc_request: true]
-
-      :ReadResourceRequest ->
-        [rpc_request: true]
-
-      :SetLevelRequest ->
-        # [ rpc_request: true]
-        :nogen
-
-      :SubscribeRequest ->
-        [rpc_request: true]
-
-      :UnsubscribeRequest ->
-        [rpc_request: true]
-
-      :Annotations ->
-        []
-
-      :AudioContent ->
-        [content_block: true]
-
-      :BaseMetadata ->
-        :nogen
-
-      :BlobResourceContents ->
-        []
-
-      :BooleanSchema ->
-        []
-
-      :CallToolResult ->
-        []
-
-      :CancelledNotification ->
-        []
-
-      :ClientCapabilities ->
-        []
-
-      :ClientNotification ->
-        :nogen
-
-      :ClientRequest ->
-        :nogen
-
-      :ClientResult ->
-        :nogen
-
-      :CompleteResult ->
-        :nogen
-
-      :ContentBlock ->
-        []
-
-      :CreateMessageRequest ->
-        :nogen
-
-      :CreateMessageResult ->
-        :nogen
-
-      :Cursor ->
-        :nogen
-
-      :ElicitRequest ->
-        :nogen
-
-      :ElicitResult ->
-        :nogen
-
-      :EmbeddedResource ->
-        [content_block: true]
-
-      :EmptyResult ->
-        :nogen
-
-      :EnumSchema ->
-        :nogen
-
-      :GetPromptResult ->
-        []
-
-      :ImageContent ->
-        [content_block: true]
-
-      :Implementation ->
-        []
-
-      :InitializedNotification ->
-        []
-
-      :InitializeResult ->
-        []
-
-      :JSONRPCError ->
-        []
-
-      :JSONRPCMessage ->
-        :nogen
-
-      :JSONRPCNotification ->
-        :nogen
-
-      :JSONRPCRequest ->
-        []
-
-      :JSONRPCResponse ->
-        []
-
-      :ListPromptsResult ->
-        []
-
-      :ListResourcesResult ->
-        []
-
-      :ListResourceTemplatesResult ->
-        []
-
-      :ListRootsRequest ->
-        :nogen
-
-      :ListRootsResult ->
-        :nogen
-
-      :ListToolsResult ->
-        []
-
-      :LoggingLevel ->
-        :nogen
-
-      :LoggingMessageNotification ->
-        :nogen
-
-      :ModelHint ->
-        :nogen
-
-      :ModelPreferences ->
-        :nogen
-
-      :Notification ->
-        :nogen
-
-      :NumberSchema ->
-        :nogen
-
-      :PaginatedRequest ->
-        :nogen
-
-      :PaginatedResult ->
-        :nogen
-
-      :PrimitiveSchemaDefinition ->
-        :nogen
-
-      :ProgressNotification ->
-        []
-
-      :ProgressToken ->
-        []
-
-      :Prompt ->
-        []
-
-      :PromptArgument ->
-        []
-
-      :PromptListChangedNotification ->
-        :nogen
-
-      :PromptMessage ->
-        []
-
-      :PromptReference ->
-        :nogen
-
-      :ReadResourceResult ->
-        []
-
-      :Request ->
-        :nogen
-
-      :RequestId ->
-        []
-
-      :Resource ->
-        []
-
-      :ResourceContents ->
-        :nogen
-
-      :ResourceLink ->
-        [content_block: true]
-
-      :ResourceListChangedNotification ->
-        :nogen
-
-      :ResourceTemplate ->
-        []
-
-      :ResourceTemplateReference ->
-        :nogen
-
-      :ResourceUpdatedNotification ->
-        :nogen
-
-      :Result ->
-        []
-
-      :Role ->
-        []
-
-      :Root ->
-        :nogen
-
-      :RootsListChangedNotification ->
-        []
-
-      :SamplingMessage ->
-        :nogen
-
-      :ServerCapabilities ->
-        []
-
-      :ServerNotification ->
-        :nogen
-
-      :ServerRequest ->
-        :nogen
-
-      :ServerResult ->
-        :nogen
-
-      :StringSchema ->
-        :nogen
-
-      :TextContent ->
-        [content_block: true]
-
-      :TextResourceContents ->
-        []
-
-      :Tool ->
-        []
-
-      :ToolAnnotations ->
-        []
-
-      :ToolListChangedNotification ->
-        :nogen
+      # -- Request params (custom extractions or from schema) -------------------
+
+      :CallToolRequestParams -> [rpc_request_params: true]
+      :CancelledNotificationParams -> [rpc_request_params: true]
+      :GetPromptRequestParams -> [rpc_request_params: true]
+      :InitializeRequestParams -> [rpc_request_params: true]
+      :PaginatedRequestParams -> [rpc_request_params: true]
+      :ReadResourceRequestParams -> [rpc_request_params: true]
+      # -- RPC requests ---------------------------------------------------------
+
+      :CallToolRequest -> [rpc_request: true]
+      :GetPromptRequest -> [rpc_request: true]
+      :InitializeRequest -> [rpc_request: true]
+      :ListPromptsRequest -> [rpc_request: true]
+      :ListResourcesRequest -> [rpc_request: true]
+      :ListResourceTemplatesRequest -> [rpc_request: true]
+      :ListToolsRequest -> [rpc_request: true]
+      :PingRequest -> [rpc_request: true]
+      :ReadResourceRequest -> [rpc_request: true]
+      :SubscribeRequest -> [rpc_request: true]
+      :UnsubscribeRequest -> [rpc_request: true]
+      # -- Generated structs/types ----------------------------------------------
+
+      :Annotations -> []
+      :AudioContent -> [content_block: true]
+      :BlobResourceContents -> []
+      :BooleanSchema -> []
+      :CallToolResult -> []
+      :CancelledNotification -> []
+      :ClientCapabilities -> []
+      :ContentBlock -> []
+      :EmbeddedResource -> [content_block: true]
+      :GetPromptResult -> []
+      :Icon -> []
+      :Icons -> []
+      :ImageContent -> [content_block: true]
+      :Implementation -> []
+      :InitializedNotification -> []
+      :InitializeResult -> []
+      :JSONRPCErrorResponse -> [keep_nils: [:id]]
+      :JSONRPCRequest -> []
+      :JSONRPCResponse -> []
+      :JSONRPCResultResponse -> []
+      :ListPromptsResult -> []
+      :ListResourcesResult -> []
+      :ListResourceTemplatesResult -> []
+      :ListToolsResult -> []
+      :ProgressNotification -> []
+      :ProgressToken -> []
+      :Prompt -> []
+      :PromptArgument -> []
+      :PromptMessage -> []
+      :ReadResourceResult -> []
+      :RequestId -> []
+      :Resource -> []
+      :ResourceLink -> [content_block: true]
+      :ResourceTemplate -> []
+      :Result -> []
+      :Role -> []
+      :RootsListChangedNotification -> []
+      :ServerCapabilities -> []
+      :TextContent -> [content_block: true]
+      :TextResourceContents -> []
+      :Tool -> []
+      :ToolAnnotations -> []
+      # -- Not generated (unsupported, abstract, or internal) -------------------
+
+      :BaseMetadata -> :nogen
+      :CancelTaskRequest -> :nogen
+      :CancelTaskResult -> :nogen
+      :ClientNotification -> :nogen
+      :ClientRequest -> :nogen
+      :ClientResult -> :nogen
+      :CompleteRequest -> :nogen
+      :CompleteRequestParams -> :nogen
+      :CompleteResult -> :nogen
+      :CreateMessageRequest -> :nogen
+      :CreateMessageRequestParams -> :nogen
+      :CreateMessageResult -> :nogen
+      :CreateTaskResult -> :nogen
+      :Cursor -> :nogen
+      :ElicitRequest -> :nogen
+      :ElicitRequestFormParams -> :nogen
+      :ElicitRequestParams -> :nogen
+      :ElicitRequestURLParams -> :nogen
+      :ElicitResult -> :nogen
+      :ElicitationCompleteNotification -> :nogen
+      :EmptyResult -> :nogen
+      :EnumSchema -> :nogen
+      :Error -> []
+      :GetTaskPayloadRequest -> :nogen
+      :GetTaskPayloadResult -> :nogen
+      :GetTaskRequest -> :nogen
+      :GetTaskResult -> :nogen
+      :JSONRPCMessage -> :nogen
+      :JSONRPCNotification -> :nogen
+      :LegacyTitledEnumSchema -> :nogen
+      :ListRootsRequest -> :nogen
+      :ListRootsResult -> :nogen
+      :ListTasksRequest -> :nogen
+      :ListTasksResult -> :nogen
+      :LoggingLevel -> :nogen
+      :LoggingMessageNotification -> :nogen
+      :LoggingMessageNotificationParams -> :nogen
+      :ModelHint -> :nogen
+      :ModelPreferences -> :nogen
+      :MultiSelectEnumSchema -> :nogen
+      :Notification -> :nogen
+      :NotificationParams -> []
+      :NumberSchema -> :nogen
+      :PaginatedRequest -> :nogen
+      # PaginatedRequestParams is in the rpc_request_params section above
+      :PaginatedResult -> :nogen
+      :PrimitiveSchemaDefinition -> :nogen
+      :ProgressNotificationParams -> []
+      :PromptListChangedNotification -> :nogen
+      :PromptReference -> :nogen
+      :RelatedTaskMetadata -> :nogen
+      :Request -> :nogen
+      :RequestParams -> []
+      :ResourceContents -> :nogen
+      :ResourceListChangedNotification -> :nogen
+      :ResourceRequestParams -> :nogen
+      :ResourceTemplateReference -> :nogen
+      :ResourceUpdatedNotification -> :nogen
+      :ResourceUpdatedNotificationParams -> :nogen
+      :Root -> :nogen
+      :SamplingMessage -> :nogen
+      :SamplingMessageContentBlock -> :nogen
+      :ServerNotification -> :nogen
+      :ServerRequest -> :nogen
+      :ServerResult -> :nogen
+      :SetLevelRequest -> :nogen
+      :SetLevelRequestParams -> :nogen
+      :SingleSelectEnumSchema -> :nogen
+      :StringSchema -> :nogen
+      :SubscribeRequestParams -> [rpc_request_params: true]
+      :Task -> :nogen
+      :TaskAugmentedRequestParams -> :nogen
+      :TaskMetadata -> []
+      :TaskStatus -> :nogen
+      :TaskStatusNotification -> :nogen
+      :TaskStatusNotificationParams -> :nogen
+      :TitledMultiSelectEnumSchema -> :nogen
+      :TitledSingleSelectEnumSchema -> :nogen
+      :ToolChoice -> :nogen
+      :ToolExecution -> []
+      :ToolListChangedNotification -> :nogen
+      :ToolResultContent -> :nogen
+      :ToolUseContent -> :nogen
+      :URLElicitationRequiredError -> :nogen
+      :UnsubscribeRequestParams -> [rpc_request_params: true]
+      :UntitledMultiSelectEnumSchema -> :nogen
+      :UntitledSingleSelectEnumSchema -> :nogen
     end
   end
 
@@ -473,6 +326,7 @@ defmodule Generator do
     conf
     |> enforce_request_params_meta()
     |> skip_request_fields()
+    |> skip_notification_fields()
     |> skip_content_type()
     |> classify_schema()
     |> use_schema_api()
@@ -484,6 +338,17 @@ defmodule Generator do
   # * copy that schema (named new_schema_name) in the confmap under key new_schema_name
   # * replace the original schema place with a ref to that new schema
   def swap_sub_schema(confmap, parent_name, schema_path, new_schema_name) do
+    # If the target params type already exists in the schema (e.g. 2025-11-25+
+    # defines *Params types as standalone $defs), skip the extraction.
+    if Map.has_key?(confmap, new_schema_name) do
+      IO.puts("  swap_sub_schema: #{new_schema_name} already exists, skipping extraction")
+      confmap
+    else
+      swap_sub_schema_do(confmap, parent_name, schema_path, new_schema_name)
+    end
+  end
+
+  defp swap_sub_schema_do(confmap, parent_name, schema_path, new_schema_name) do
     # Lookup the parent schema from the confs map
     parent_conf = Map.fetch!(confmap, parent_name)
     conf(schema: parent_schema) = parent_conf
@@ -493,7 +358,7 @@ defmodule Generator do
     # (done later)
     {sub_schema, parent_schema} =
       get_and_update_in(parent_schema, schema_path, fn sub_schema ->
-        {sub_schema, %{"$ref": "#/definitions/#{new_schema_name}"}}
+        {sub_schema, %{"$ref": "#/$defs/#{new_schema_name}"}}
       end)
 
     # Update the parent and sub schema in the confs
@@ -519,25 +384,10 @@ defmodule Generator do
       reraise e, __STACKTRACE__
   end
 
-  # extract sub obeject schemas from entities and move them as new definitions.
+  # In 2025-11-25+, all request params are already standalone $defs with $ref
+  # in the parent request. No extraction needed.
   defp swap_sub_schemas(confmap) do
     confmap
-    |> swap_sub_schema(:InitializeRequest, [:properties, :params], :InitializeRequestParams)
-    |> swap_sub_schema(:CallToolRequest, [:properties, :params], :CallToolRequestParams)
-    |> swap_sub_schema(:ListResourcesRequest, [:properties, :params], :ListResourcesRequestParams)
-    |> swap_sub_schema(
-      :ListResourceTemplatesRequest,
-      [:properties, :params],
-      :ListResourceTemplatesRequestParams
-    )
-    |> swap_sub_schema(:ReadResourceRequest, [:properties, :params], :ReadResourceRequestParams)
-    |> swap_sub_schema(:ListPromptsRequest, [:properties, :params], :ListPromptsRequestParams)
-    |> swap_sub_schema(:GetPromptRequest, [:properties, :params], :GetPromptRequestParams)
-    |> swap_sub_schema(
-      :CancelledNotification,
-      [:properties, :params],
-      :CancelledNotificationParams
-    )
   end
 
   def prelude do
@@ -550,7 +400,7 @@ defmodule Generator do
       def json_schema do
         %{
           additionalProperties: %{},
-          description: "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
+          description: "See [General Fields](https://modelcontextprotocol.io/specification/2025-11-25/basic#general-fields) for notes on _meta usage.",
           properties: %{progressToken: #{inspect(base_module())}.ProgressToken},
           type: "object"
         }
@@ -563,7 +413,7 @@ defmodule Generator do
       def json_schema do
         %{
           additionalProperties: %{},
-          description: "See [General Fields](https://modelcontextprotocol.io/specification/2025-06-18/basic#general-fields) for notes on _meta usage.",
+          description: "See [General Fields](https://modelcontextprotocol.io/specification/2025-11-25/basic#general-fields) for notes on _meta usage.",
           properties: %{progressToken: #{inspect(base_module())}.ProgressToken},
           type: "object"
         }
@@ -635,7 +485,7 @@ defmodule Generator do
     schema =
       if request_params_schema?(name) do
         put_in(schema, [:properties, :_meta], %{
-          "$ref": "#/definitions/RequestMeta"
+          "$ref": "#/$defs/RequestMeta"
         })
       else
         schema
@@ -663,13 +513,62 @@ defmodule Generator do
         schema
         | properties:
             Map.merge(schema.properties, %{
-              id: %{"$ref": "#/definitions/RequestId"},
+              id: %{"$ref": "#/$defs/RequestId"},
               jsonrpc: %{const: @jsonrpc_vsn}
             })
       }
 
+      # Remove id from required (keep in struct for tracking, but don't enforce)
+      schema = Map.update(schema, :required, [], &(&1 -- ["id"]))
+
+      # If params points to a schema with no required properties, make params
+      # optional with a default of %{}
+      schema = maybe_default_params(schema, conf)
+
       conf(conf,
         schema: schema,
+        opts:
+          Keyword.merge(opts,
+            skip_keys: [:method, :jsonrpc],
+            serialize_merge: %{method: method, jsonrpc: @jsonrpc_vsn}
+          )
+      )
+    else
+      conf
+    end
+  end
+
+  defp maybe_default_params(schema, _conf) do
+    case schema[:properties][:params] do
+      %{"$ref": "#/$defs/" <> params_name} ->
+        # Params types with no required properties — make params optional
+        no_required_params = params_name in ~w(
+          PaginatedRequestParams CancelledNotificationParams RequestParams
+        )
+
+        if no_required_params do
+          Map.update(schema, :required, [], &(&1 -- ["params"]))
+        else
+          schema
+        end
+
+      _ ->
+        schema
+    end
+  end
+
+  defp skip_notification_fields(conf) do
+    conf(name: name, schema: schema, opts: opts) = conf
+
+    # Notifications have method + jsonrpc but no id (unlike requests)
+    has_method_const = match?(%{const: _}, schema[:properties][:method])
+    has_jsonrpc = Map.has_key?(schema[:properties] || %{}, :jsonrpc)
+    no_id = not Map.has_key?(schema[:properties] || %{}, :id)
+
+    if has_method_const and has_jsonrpc and no_id and not rpc_request?(name) do
+      %{const: method} = schema.properties.method
+
+      conf(conf,
         opts:
           Keyword.merge(opts,
             skip_keys: [:method, :jsonrpc],
@@ -744,7 +643,7 @@ defmodule Generator do
 
   defp traverse_use_schema_helpers(schema) do
     Traverse.postwalk(schema, fn
-      {:val, %{"$ref": "#/definitions/" <> name} = schema} ->
+      {:val, %{"$ref": "#/$defs/" <> name} = schema} ->
         case Map.drop(schema, [:description, :"$schema"]) do
           rest when map_size(rest) == 1 -> module_name(name)
         end
@@ -850,10 +749,12 @@ defmodule Generator do
     skip_keys = Keyword.get(opts, :skip_keys)
     serialize_merge = Keyword.get(opts, :serialize_merge, %{})
 
+    keep_nils = Keyword.get(module_config(name), :keep_nils, [])
+
     serialize_keep =
       case schema do
-        %{required: [_ | _] = keys} -> keys -- (skip_keys || [])
-        _ -> []
+        %{required: [_ | _] = keys} -> (keys -- (skip_keys || [])) ++ keep_nils
+        _ -> keep_nils
       end
 
     case kind do
@@ -862,7 +763,7 @@ defmodule Generator do
         defmodule #{inspect(module)} do
           use JSV.Schema
 
-          JsonDerive.auto(#{inspect(serialize_merge)}, #{inspect(serialize_keep)})
+          JsonDerive.auto(_merge = #{inspect(serialize_merge)}, _keep_nils = #{inspect(serialize_keep)})
 
           #{skip_keys && "@skip_keys #{inspect(skip_keys)}"}
 

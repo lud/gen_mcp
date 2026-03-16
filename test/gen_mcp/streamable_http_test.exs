@@ -170,7 +170,6 @@ defmodule GenMCP.StreamableHTTPTest do
 
       expect(ServerMock, :handle_notification, fn notif, :some_server_state_1 ->
         assert %MCP.InitializedNotification{
-                 method: "notifications/initialized",
                  params: %{}
                } = notif
 
@@ -716,7 +715,6 @@ defmodule GenMCP.StreamableHTTPTest do
 
       expect(ServerMock, :handle_notification, fn notif, state ->
         assert %MCP.CancelledNotification{
-                 method: "notifications/cancelled",
                  params: %MCP.CancelledNotificationParams{
                    requestId: "request-to-cancel",
                    reason: "User cancelled"
@@ -749,8 +747,7 @@ defmodule GenMCP.StreamableHTTPTest do
 
       expect(ServerMock, :handle_notification, fn notif, state ->
         assert %MCP.RootsListChangedNotification{
-                 method: "notifications/roots/list_changed",
-                 params: %{"_meta" => %{}}
+                 params: %MCP.NotificationParams{}
                } = notif
 
         {:noreply, state}
@@ -827,7 +824,7 @@ defmodule GenMCP.StreamableHTTPTest do
       expect(ServerMock, :handle_request, fn req, _channel, state ->
         assert %MCP.ListResourcesRequest{
                  id: 201,
-                 params: %MCP.ListResourcesRequestParams{cursor: ^cursor}
+                 params: %MCP.PaginatedRequestParams{cursor: ^cursor}
                } = req
 
         result =
@@ -875,7 +872,7 @@ defmodule GenMCP.StreamableHTTPTest do
       expect(ServerMock, :handle_request, fn req, _channel, state ->
         assert %MCP.ListResourcesRequest{
                  id: 202,
-                 params: %MCP.ListResourcesRequestParams{
+                 params: %MCP.PaginatedRequestParams{
                    cursor: "some-cursor"
                  }
                } = req

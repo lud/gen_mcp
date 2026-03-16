@@ -40,7 +40,6 @@ defmodule GenMCP.SuiteAsyncTest do
              Suite.handle_request(init_req, build_channel(init_assigns), state)
 
     client_init_notif = %MCP.InitializedNotification{
-      method: "notifications/initialized",
       params: %{}
     }
 
