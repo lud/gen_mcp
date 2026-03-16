@@ -158,7 +158,7 @@ defmodule GenMCP.MixProject do
           ~r/GenMCP\.Mux\..*/
         ],
         Utilities: [
-          GenMCP.RpcError,
+          GenMCP.Error,
           GenMCP.TelemetryLogger
         ],
         Protocol: [

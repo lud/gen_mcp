@@ -634,7 +634,7 @@ defmodule GenMCP.Suite.ToolTest do
     test "invalid params errors" do
       # Custom message
 
-      assert {400, %{code: -32_602, message: "some string"}} =
+      assert {200, %{code: -32_602, message: "some string"}} =
                check_error({:invalid_params, "some string"})
 
       # JSV Validation
@@ -642,7 +642,7 @@ defmodule GenMCP.Suite.ToolTest do
       jsv_root = JSV.build!(%{type: :integer})
       {:error, jsv_err} = JSV.validate("not_an_int", jsv_root)
 
-      assert {400,
+      assert {200,
               %{
                 code: -32_602,
                 data: %{
@@ -660,7 +660,7 @@ defmodule GenMCP.Suite.ToolTest do
       # Any term
       #
       # Testing with a pid, we do not return the data
-      assert {400, %{code: -32_602, message: "Invalid Parameters"}} ==
+      assert {200, %{code: -32_602, message: "Invalid Parameters"}} ==
                check_error({:invalid_params, self()})
     end
   end

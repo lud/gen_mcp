@@ -416,7 +416,7 @@ defmodule GenMCP.SuiteTest do
       assert {:shutdown, {:init_failure, :already_initialized}} = stop_reason
       assert {:error, :already_initialized} = err
 
-      assert {400, %{code: -32_602, message: "Session is already initialized"}} = check_error(err)
+      assert {200, %{code: -32_602, message: "Session is already initialized"}} = check_error(err)
     end
 
     test "rejects initialization with invalid protocol version" do
@@ -435,10 +435,10 @@ defmodule GenMCP.SuiteTest do
       assert {:stop, stop_tuple, err, _} =
                Suite.handle_request(init_req, build_channel(), state)
 
-      assert {:error, {:unsupported_protocol, "2024-01-01"} = reason} = err
+      assert {:error, {:unsupported_protocol_init, "2024-01-01"} = reason} = err
       assert {:shutdown, {:init_failure, ^reason}} = stop_tuple
 
-      assert {400,
+      assert {200,
               %{
                 code: -32_000,
                 data: %{version: "2024-01-01", supported: ["2025-06-18"]},
@@ -509,7 +509,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:error, {:unknown_tool, "SomeTool"}} = err, _} =
                Suite.handle_request(tool_call_req, build_channel(), state)
 
-      assert {400, %{code: -32_602, data: %{tool: "SomeTool"}, message: "Unknown tool SomeTool"}} =
+      assert {200, %{code: -32_602, data: %{tool: "SomeTool"}, message: "Unknown tool SomeTool"}} =
                check_error(err)
     end
 
@@ -575,7 +575,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:error, %JSV.ValidationError{}} = err, _} =
                Suite.handle_request(tool_call_req, build_channel(), state)
 
-      assert {400,
+      assert {200,
               %{code: -32_602, data: %{valid: false, details: []}, message: "Invalid Parameters"}} =
                check_error(err)
     end
@@ -625,7 +625,7 @@ defmodule GenMCP.SuiteTest do
       assert {:reply, {:error, {:invalid_params, :foo}} = err, _} =
                Suite.handle_request(tool_call_req, build_channel(), state)
 
-      assert {400, %{code: -32_602, message: "Invalid Parameters"}} =
+      assert {200, %{code: -32_602, message: "Invalid Parameters"}} =
                check_error(err)
     end
   end
@@ -886,7 +886,7 @@ defmodule GenMCP.SuiteTest do
                Suite.handle_request(invalid_request, build_channel(), state)
 
       # Verify it returns a proper error that can be cast to RPC error
-      assert {400, %{code: -32_602, message: "Invalid pagination cursor"}} = check_error(error)
+      assert {200, %{code: -32_602, message: "Invalid pagination cursor"}} = check_error(error)
     end
   end
 
@@ -991,7 +991,7 @@ defmodule GenMCP.SuiteTest do
                Suite.handle_request(request, build_channel(), state)
 
       # Check that it returns proper RPC error code -32002
-      assert {400, %{code: -32_002}} = check_error(err)
+      assert {200, %{code: -32_002}} = check_error(err)
     end
 
     test "returns custom error message from repository" do
@@ -1054,7 +1054,7 @@ defmodule GenMCP.SuiteTest do
                Suite.handle_request(request, build_channel(), state)
 
       # Check that it returns proper RPC error code -32002
-      assert {400, %{code: -32_002}} = check_error(err)
+      assert {200, %{code: -32_002}} = check_error(err)
     end
 
     test "reads resource with repository using module shorthand" do
@@ -1478,7 +1478,7 @@ defmodule GenMCP.SuiteTest do
                  state
                )
 
-      assert {400, %{code: -32_602, message: "Invalid pagination cursor"}} =
+      assert {200, %{code: -32_602, message: "Invalid pagination cursor"}} =
                check_error(:invalid_cursor)
     end
 
@@ -1563,7 +1563,7 @@ defmodule GenMCP.SuiteTest do
                  state
                )
 
-      assert {400,
+      assert {200,
               %{code: -32_602, data: %{name: "unknown"}, message: "Prompt not found: unknown"}} =
                check_error({:prompt_not_found, "unknown"})
     end

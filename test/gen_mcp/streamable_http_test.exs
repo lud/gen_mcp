@@ -103,7 +103,7 @@ defmodule GenMCP.StreamableHTTPTest do
         })
 
       assert %{
-               status: 400,
+               status: 200,
                body: %{
                  "error" => %{
                    "code" => -32_601,
@@ -440,7 +440,7 @@ defmodule GenMCP.StreamableHTTPTest do
                  method: "tools/call",
                  params: %{name: "SomeUnknownTool", arguments: %{}}
                })
-               |> expect_status(400)
+               |> expect_status(200)
                |> body()
     end
 
@@ -971,7 +971,7 @@ defmodule GenMCP.StreamableHTTPTest do
           method: "resources/read",
           params: %{uri: "file:///missing.txt"}
         })
-        |> expect_status(400)
+        |> expect_status(200)
 
       assert %{
                "error" => %{

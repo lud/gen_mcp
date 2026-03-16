@@ -733,7 +733,7 @@ defmodule GenMCP.Suite do
   defp check_protocol_version(%MCP.InitializeRequest{} = req) do
     case req do
       %{params: %{protocolVersion: version}} when version in @supported_protocol_versions -> :ok
-      %{params: %{protocolVersion: version}} -> {:error, {:unsupported_protocol, version}}
+      %{params: %{protocolVersion: version}} -> {:error, {:unsupported_protocol_init, version}}
     end
   end
 

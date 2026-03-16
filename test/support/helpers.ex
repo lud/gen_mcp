@@ -7,7 +7,7 @@ defmodule GenMCP.Test.Helpers do
   end
 
   def check_error(reason) do
-    GenMCP.RpcError.cast_error(reason)
+    GenMCP.Error.cast_error(reason)
   end
 
   def build_channel(assigns \\ %{}) do

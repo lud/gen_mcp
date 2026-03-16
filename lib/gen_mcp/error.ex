@@ -1,6 +1,6 @@
 # credo:disable-for-this-file Credo.Check.Readability.LargeNumbers
 
-defmodule GenMCP.RpcError.Compiler do
+defmodule GenMCP.Error.Compiler do
   # RPC codes https://docs.trafficserver.apache.org/en/latest/developer-guide/jsonrpc/jsonrpc-node-errors.en.html
   # MCP specific http://mcpevals.io/blog/mcp-error-codes
 
@@ -24,13 +24,13 @@ defmodule GenMCP.RpcError.Compiler do
   end
 end
 
-defmodule GenMCP.RpcError do
+defmodule GenMCP.Error do
   @moduledoc """
   Helper module used to transform application errors into MCP/RPC error
   payloads and HTTP status codes.
   """
 
-  import GenMCP.RpcError.Compiler
+  import GenMCP.Error.Compiler
 
   @rpc_invalid_request -32_600
   @rpc_invalid_params -32_602
@@ -66,73 +66,88 @@ defmodule GenMCP.RpcError do
     }
   end
 
-  defcasterror %JSV.ValidationError{} = e, @rpc_invalid_params, 400 do
+  defcasterror %JSV.ValidationError{} = e, @rpc_invalid_params, 200 do
     %{
       data: JSV.normalize_error(e),
       message: "Invalid Parameters"
     }
   end
 
-  defcasterror {:invalid_params, %JSV.ValidationError{} = e}, @rpc_invalid_params, 400 do
+  defcasterror {:invalid_params, %JSV.ValidationError{} = e}, @rpc_invalid_params, 200 do
     %{
       data: JSV.normalize_error(e),
       message: "Invalid Parameters"
     }
   end
 
-  defcasterror {:invalid_params, errmsg} when is_binary(errmsg), @rpc_invalid_params, 400 do
+  defcasterror {:invalid_params, errmsg} when is_binary(errmsg), @rpc_invalid_params, 200 do
     %{
       message: errmsg
     }
   end
 
-  defcasterror {:invalid_params, _}, @rpc_invalid_params, 400 do
+  defcasterror {:invalid_params, _}, @rpc_invalid_params, 200 do
     %{
       message: "Invalid Parameters"
     }
   end
 
-  defcasterror :already_initialized, @rpc_invalid_params, 400 do
+  defcasterror :already_initialized, @rpc_invalid_params, 200 do
     %{
       message: "Session is already initialized"
     }
   end
 
-  defcasterror {:unsupported_protocol, version}, @mcp_unsupported_protocol_version, 400 do
+  # JSON-RPC level: client sent an unsupported protocolVersion in the initialize request.
+  # This is an application-level error, returned as HTTP 200 with a JSON-RPC error body.
+  defcasterror {:unsupported_protocol_init, version}, @mcp_unsupported_protocol_version, 200 do
     %{
       data: %{version: version, supported: GenMCP.supported_protocol_versions()},
       message: "Unsupported protocol version"
     }
   end
 
-  defcasterror {:unknown_tool, name} when is_binary(name), @rpc_invalid_params, 400 do
+  # HTTP header level: client sent an invalid MCP-Protocol-Version HTTP header.
+  # Per spec, this MUST return HTTP 400.
+  #
+  # Protocol header is not implemented yet
+  #
+  # defcasterror {:unsupported_protocol_header, version},
+  #              @mcp_unsupported_protocol_version, 400 do
+  #   %{
+  #     data: %{version: version, supported: GenMCP.supported_protocol_versions()},
+  #     message: "Unsupported protocol version"
+  #   }
+  # end
+
+  defcasterror {:unknown_tool, name} when is_binary(name), @rpc_invalid_params, 200 do
     %{
       data: %{tool: name},
       message: "Unknown tool #{name}"
     }
   end
 
-  defcasterror {:resource_not_found, uri} when is_binary(uri), @mcp_resource_not_found, 400 do
+  defcasterror {:resource_not_found, uri} when is_binary(uri), @mcp_resource_not_found, 200 do
     %{
       data: %{uri: uri},
       message: "Resource not found: #{uri}"
     }
   end
 
-  defcasterror {:prompt_not_found, name} when is_binary(name), @mcp_prompt_not_found, 400 do
+  defcasterror {:prompt_not_found, name} when is_binary(name), @mcp_prompt_not_found, 200 do
     %{
       data: %{name: name},
       message: "Prompt not found: #{name}"
     }
   end
 
-  defcasterror :invalid_cursor, @rpc_invalid_params, 400 do
+  defcasterror :invalid_cursor, @rpc_invalid_params, 200 do
     %{
       message: "Invalid pagination cursor"
     }
   end
 
-  defcasterror :expired_cursor, @rpc_invalid_params, 400 do
+  defcasterror :expired_cursor, @rpc_invalid_params, 200 do
     %{
       message: "Expired pagination cursor"
     }
@@ -169,7 +184,7 @@ defmodule GenMCP.RpcError do
     }
   end
 
-  defcasterror {:unknown_method, method} when is_binary(method), @rpc_method_not_found, 400 do
+  defcasterror {:unknown_method, method} when is_binary(method), @rpc_method_not_found, 200 do
     %{
       data: %{method: method},
       message: "Unknown method #{method}"
