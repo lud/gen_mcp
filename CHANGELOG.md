@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2026-03-16
+
+### 🚀 Features
+
+- Use a global registry to support restoring sessions on any node
+- [**breaking**] Default protocol version is now 2025-11-25
+
 ## [0.6.0] - 2026-03-16
 
 ### 🐛 Bug Fixes
