@@ -28,7 +28,7 @@ The usual tuple for mix.exs!
 ```elixir
 def deps do
   [
-    {:gen_mcp, "~> 0.7"},
+    {:gen_mcp, "~> 0.8"},
   ]
 end
 ```

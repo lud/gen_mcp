@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2026-03-30
+
+### 🚀 Features
+
+- Added support for logging capabilities
+
+### 🚜 Refactor
+
+- [**breaking**] Channel.send_progress/3 will not return :ok instead of {:ok, channel}
+
 ## [0.7.0] - 2026-03-16
 
 ### 🚀 Features
