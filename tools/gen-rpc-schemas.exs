@@ -153,6 +153,7 @@ defmodule Generator do
       :InitializeRequestParams -> [rpc_request_params: true]
       :PaginatedRequestParams -> [rpc_request_params: true]
       :ReadResourceRequestParams -> [rpc_request_params: true]
+      :SetLevelRequestParams -> [rpc_request_params: true]
       # -- RPC requests ---------------------------------------------------------
 
       :CallToolRequest -> [rpc_request: true]
@@ -163,6 +164,7 @@ defmodule Generator do
       :ListResourceTemplatesRequest -> [rpc_request: true]
       :ListToolsRequest -> [rpc_request: true]
       :PingRequest -> [rpc_request: true]
+      :SetLevelRequest -> [rpc_request: true]
       :ReadResourceRequest -> [rpc_request: true]
       :SubscribeRequest -> [rpc_request: true]
       :UnsubscribeRequest -> [rpc_request: true]
@@ -190,6 +192,9 @@ defmodule Generator do
       :JSONRPCResultResponse -> []
       :ListPromptsResult -> []
       :ListResourcesResult -> []
+      :LoggingLevel -> []
+      :LoggingMessageNotification -> []
+      :LoggingMessageNotificationParams -> []
       :ListResourceTemplatesResult -> []
       :ListToolsResult -> []
       :ProgressNotification -> []
@@ -246,9 +251,6 @@ defmodule Generator do
       :ListRootsResult -> :nogen
       :ListTasksRequest -> :nogen
       :ListTasksResult -> :nogen
-      :LoggingLevel -> :nogen
-      :LoggingMessageNotification -> :nogen
-      :LoggingMessageNotificationParams -> :nogen
       :ModelHint -> :nogen
       :ModelPreferences -> :nogen
       :MultiSelectEnumSchema -> :nogen
@@ -277,8 +279,6 @@ defmodule Generator do
       :ServerNotification -> :nogen
       :ServerRequest -> :nogen
       :ServerResult -> :nogen
-      :SetLevelRequest -> :nogen
-      :SetLevelRequestParams -> :nogen
       :SingleSelectEnumSchema -> :nogen
       :StringSchema -> :nogen
       :SubscribeRequestParams -> [rpc_request_params: true]

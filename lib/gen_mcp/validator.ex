@@ -19,8 +19,8 @@ defmodule GenMCP.Validator do
       GenMCP.MCP.ListPromptsRequest,
       GenMCP.MCP.GetPromptRequest,
       GenMCP.MCP.ListToolsRequest,
-      GenMCP.MCP.CallToolRequest
-      # GenMCP.MCP.SetLevelRequest,
+      GenMCP.MCP.CallToolRequest,
+      GenMCP.MCP.SetLevelRequest
       # GenMCP.MCP.CompleteRequest
     ],
     notification: [

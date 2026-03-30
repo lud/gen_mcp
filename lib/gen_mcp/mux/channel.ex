@@ -1,16 +1,23 @@
 defmodule GenMCP.Mux.Channel do
+  alias GenMCP.MCP.LoggingMessageNotification
   alias GenMCP.MCP.ProgressNotification
 
-  @enforce_keys [:client, :progress_token, :status, :assigns]
+  @log_levels Enum.map(GenMCP.MCP.LoggingLevel.json_schema().enum, &String.to_atom/1)
+
+  @enforce_keys [:client, :progress_token, :status, :assigns, :log_level]
   defstruct @enforce_keys
 
   @type status :: :request | :stream | :closed
+
+  @type log_level ::
+          :debug | :info | :notice | :warning | :error | :critical | :alert | :emergency
 
   @type t :: %__MODULE__{
           client: pid | nil,
           status: status,
           progress_token: nil | binary | integer,
-          assigns: map()
+          assigns: map(),
+          log_level: log_level() | nil
         }
 
   @doc """
@@ -23,17 +30,22 @@ defmodule GenMCP.Mux.Channel do
         _ -> nil
       end
 
-    %__MODULE__{
-      client: self(),
-      progress_token: progress_token,
-      assigns: assigns,
-      status: :request
-    }
+    create_new(self(), progress_token, assigns)
   end
 
   @doc false
   def for_pid(pid, assigns \\ %{}) do
-    %__MODULE__{client: pid, progress_token: nil, assigns: assigns, status: :request}
+    create_new(pid, nil, assigns)
+  end
+
+  defp create_new(owner_pid, progress_token, assigns) do
+    %__MODULE__{
+      client: owner_pid,
+      progress_token: progress_token,
+      assigns: assigns,
+      status: :request,
+      log_level: GenMCP.default_channel_log_level()
+    }
   end
 
   def send_progress(channel, progress, total \\ nil, message \\ nil)
@@ -54,6 +66,41 @@ defmodule GenMCP.Mux.Channel do
 
     send(channel.client, {:"$gen_mcp", :notification, payload})
     {:ok, channel}
+  end
+
+  @doc """
+  Sends a log message notification to the client if the message level is at or
+  above the channel's configured log level.
+
+  Returns `:ok` if the message was sent or filtered out, `{:error, :closed}` if
+  the channel is closed.
+  """
+  def send_log(channel, level, data, logger \\ nil)
+
+  def send_log(%{status: :closed}, _level, _data, _logger) do
+    {:error, :closed}
+  end
+
+  def send_log(%{log_level: min_level}, _level, _data, _logger)
+      when min_level not in @log_levels do
+    {:error, :invalid_min_level}
+  end
+
+  def send_log(%{log_level: _}, level, _data, _logger) when level not in @log_levels do
+    {:error, :invalid_level}
+  end
+
+  def send_log(%{log_level: min_level} = channel, level, data, logger)
+      when min_level in @log_levels and level in @log_levels do
+    if :logger.compare_levels(level, min_level) in [:gt, :eq] do
+      payload = %LoggingMessageNotification{
+        params: %{level: level, data: data, logger: logger}
+      }
+
+      send(channel.client, {:"$gen_mcp", :notification, payload})
+    end
+
+    :ok
   end
 
   def send_result(%{status: :closed}, _payload) do

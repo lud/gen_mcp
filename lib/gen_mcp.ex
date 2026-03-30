@@ -202,4 +202,13 @@ defmodule GenMCP do
   def attach_default_logger(filters \\ []) do
     GenMCP.TelemetryLogger.attach(filters)
   end
+
+  @default_channel_log_level :notice
+  @doc """
+  Returns the default logging level used by the MCP logging features on session
+  initialization.
+  """
+  def default_channel_log_level do
+    @default_channel_log_level
+  end
 end

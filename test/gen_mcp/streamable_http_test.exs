@@ -1440,4 +1440,64 @@ defmodule GenMCP.StreamableHTTPTest do
                |> Enum.to_list()
     end
   end
+
+  describe "logging" do
+    test "set level request is accepted and log notifications are delivered as SSE events" do
+      session_id = init_session(url: @mcp_url)
+
+      # Handle set level request
+      ServerMock
+      |> expect(:handle_request, fn req, channel, _state ->
+        assert %MCP.SetLevelRequest{params: %{level: :warning}} = req
+
+        # Simulate streaming with a log notification
+        channel_as_state = channel
+        send(self(), :send_log)
+
+        {:reply, :stream, channel_as_state}
+      end)
+      |> expect(:handle_info, fn :send_log, channel ->
+        :ok = Channel.send_log(%{channel | log_level: :warning}, :error, "something broke", "db")
+
+        {:ok, channel} =
+          Channel.send_result(channel, %MCP.Result{})
+
+        {:noreply, channel}
+      end)
+
+      resp =
+        post_message(
+          client(session_id: session_id, url: @mcp_url),
+          %{
+            jsonrpc: "2.0",
+            id: 789,
+            method: "logging/setLevel",
+            params: %{level: "warning"}
+          },
+          into: :self
+        )
+
+      chunks =
+        resp
+        |> stream_chunks()
+        |> parse_stream()
+        |> Enum.map(fn %{event: "message", data: data} -> data end)
+
+      assert [
+               %{
+                 "method" => "notifications/message",
+                 "params" => %{
+                   "level" => "error",
+                   "data" => "something broke",
+                   "logger" => "db"
+                 }
+               },
+               %{
+                 "id" => 789,
+                 "jsonrpc" => "2.0",
+                 "result" => %{}
+               }
+             ] = chunks
+    end
+  end
 end

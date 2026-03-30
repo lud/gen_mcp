@@ -23,7 +23,7 @@ defmodule GenMCP.Test.Client do
     GenMCP.MCP.GetPromptRequest,
     GenMCP.MCP.ListToolsRequest,
     GenMCP.MCP.CallToolRequest,
-    # GenMCP.MCP.SetLevelRequest,
+    GenMCP.MCP.SetLevelRequest,
     # GenMCP.MCP.CompleteRequest,
 
     # Notifications

@@ -86,6 +86,9 @@ defmodule GenMCP.MCP.ModMap do
         "ListResourcesResult" => GenMCP.MCP.ListResourcesResult,
         "ListToolsRequest" => GenMCP.MCP.ListToolsRequest,
         "ListToolsResult" => GenMCP.MCP.ListToolsResult,
+        "LoggingLevel" => GenMCP.MCP.LoggingLevel,
+        "LoggingMessageNotification" => GenMCP.MCP.LoggingMessageNotification,
+        "LoggingMessageNotificationParams" => GenMCP.MCP.LoggingMessageNotificationParams,
         "NotificationParams" => GenMCP.MCP.NotificationParams,
         "PaginatedRequestParams" => GenMCP.MCP.PaginatedRequestParams,
         "PingRequest" => GenMCP.MCP.PingRequest,
@@ -107,6 +110,8 @@ defmodule GenMCP.MCP.ModMap do
         "Role" => GenMCP.MCP.Role,
         "RootsListChangedNotification" => GenMCP.MCP.RootsListChangedNotification,
         "ServerCapabilities" => GenMCP.MCP.ServerCapabilities,
+        "SetLevelRequest" => GenMCP.MCP.SetLevelRequest,
+        "SetLevelRequestParams" => GenMCP.MCP.SetLevelRequestParams,
         "SubscribeRequest" => GenMCP.MCP.SubscribeRequest,
         "SubscribeRequestParams" => GenMCP.MCP.SubscribeRequestParams,
         "TaskMetadata" => GenMCP.MCP.TaskMetadata,
@@ -1398,6 +1403,84 @@ defmodule GenMCP.MCP.ListToolsResult do
   @type t :: %__MODULE__{}
 end
 
+defmodule GenMCP.MCP.LoggingLevel do
+  use JSV.Schema
+
+  def json_schema do
+    string_enum_to_atom([:alert, :critical, :debug, :emergency, :error, :info, :notice, :warning])
+  end
+end
+
+defmodule GenMCP.MCP.LoggingMessageNotification do
+  use JSV.Schema
+
+  JsonDerive.auto(
+    _merge = %{method: "notifications/message", jsonrpc: "2.0"},
+    _keep_nils = [:params]
+  )
+
+  @skip_keys [:method, :jsonrpc]
+
+  defschema %{
+    description: ~SD"""
+    JSONRPCNotification of a log message passed from server to client. If
+    no logging/setLevel request has been sent from the client, the server
+    MAY decide which messages to send automatically.
+    """,
+    properties: %{
+      jsonrpc: const("2.0"),
+      method: const("notifications/message"),
+      params: GenMCP.MCP.LoggingMessageNotificationParams
+    },
+    required: [:jsonrpc, :method, :params],
+    title: "MCP:LoggingMessageNotification",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.LoggingMessageNotificationParams do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:data, :level])
+
+  defschema %{
+    description: ~SD"""
+    Parameters for a `notifications/message` notification.
+    """,
+    properties: %{
+      _meta: %{
+        additionalProperties: %{},
+        description: ~SD"""
+        See [General fields:
+        `_meta`](/specification/2025-11-25/basic/index#meta) for notes on
+        `_meta` usage.
+        """,
+        type: "object"
+      },
+      data: %{
+        description: ~SD"""
+        The data to be logged, such as a string message or an object. Any JSON
+        serializable type is allowed here.
+        """
+      },
+      level: GenMCP.MCP.LoggingLevel,
+      logger:
+        string(
+          description: ~SD"""
+          An optional name of the logger issuing this message.
+          """
+        )
+    },
+    required: [:data, :level],
+    title: "MCP:LoggingMessageNotificationParams",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
 defmodule GenMCP.MCP.NotificationParams do
   use JSV.Schema
 
@@ -2282,6 +2365,47 @@ defmodule GenMCP.MCP.ServerCapabilities do
       }
     },
     title: "MCP:ServerCapabilities",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.SetLevelRequest do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{method: "logging/setLevel", jsonrpc: "2.0"}, _keep_nils = [:params])
+
+  @skip_keys [:method, :jsonrpc]
+
+  defschema %{
+    description: ~SD"""
+    A request from the client to the server, to enable or adjust logging.
+    """,
+    properties: %{
+      id: GenMCP.MCP.RequestId,
+      jsonrpc: const("2.0"),
+      method: const("logging/setLevel"),
+      params: GenMCP.MCP.SetLevelRequestParams
+    },
+    required: [:jsonrpc, :method, :params],
+    title: "MCP:SetLevelRequest",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.SetLevelRequestParams do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:level])
+
+  defschema %{
+    description: "Parameters for a `logging/setLevel` request.",
+    properties: %{_meta: GenMCP.MCP.RequestMeta, level: GenMCP.MCP.LoggingLevel},
+    required: [:level],
+    title: "MCP:SetLevelRequestParams",
     type: "object"
   }
 
