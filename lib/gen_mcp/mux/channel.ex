@@ -65,7 +65,7 @@ defmodule GenMCP.Mux.Channel do
       }
 
     send(channel.client, {:"$gen_mcp", :notification, payload})
-    {:ok, channel}
+    :ok
   end
 
   @doc """

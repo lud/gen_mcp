@@ -508,12 +508,12 @@ defmodule GenMCP.StreamableHTTPTest do
         {:reply, :stream, channel_as_state}
       end)
       |> expect(:handle_info, fn :some_info1, channel_as_state ->
-        {:ok, channel_as_state} = Channel.send_progress(channel_as_state, 0, 3, "zero")
+        :ok = Channel.send_progress(channel_as_state, 0, 3, "zero")
         send(self(), :some_info2)
         {:noreply, channel_as_state}
       end)
       |> expect(:handle_info, fn :some_info2, channel_as_state ->
-        {:ok, channel_as_state} = Channel.send_progress(channel_as_state, 3, 3, "three")
+        :ok = Channel.send_progress(channel_as_state, 3, 3, "three")
         send(self(), :some_info3)
         {:noreply, channel_as_state}
       end)
@@ -647,12 +647,12 @@ defmodule GenMCP.StreamableHTTPTest do
         {:reply, :stream, channel}
       end)
       |> expect(:handle_info, fn :progress_step_1, channel ->
-        {:ok, channel} = Channel.send_progress(channel, 1, 3, "step 1")
+        :ok = Channel.send_progress(channel, 1, 3, "step 1")
         send(self(), :progress_step_2)
         {:noreply, channel}
       end)
       |> expect(:handle_info, fn :progress_step_2, channel ->
-        {:ok, channel} = Channel.send_progress(channel, 2, 3, "step 2")
+        :ok = Channel.send_progress(channel, 2, 3, "step 2")
         send(self(), :error_step)
         {:noreply, channel}
       end)

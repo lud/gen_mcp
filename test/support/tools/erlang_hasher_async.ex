@@ -32,7 +32,7 @@ defmodule GenMCP.Test.Tools.ErlangHasherAsync do
 
   defp run(args, channel) do
     Enum.each(1..100, fn i ->
-      {:ok, _} = Channel.send_progress(channel, i, 100)
+      :ok = Channel.send_progress(channel, i, 100)
     end)
 
     subject = Map.fetch!(args, "subject")
