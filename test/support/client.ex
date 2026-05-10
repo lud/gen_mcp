@@ -35,7 +35,7 @@ defmodule GenMCP.Test.Client do
   ]
   |> Enum.map(fn mod ->
     method = mod.json_schema().properties.method.const
-    {method, JSV.build!(mod)}
+    {method, JSV.build!(mod, atoms: true)}
   end)
   |> Enum.each(fn {method, root} ->
     def jsv_root(unquote(method)) do

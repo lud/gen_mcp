@@ -31,7 +31,7 @@ defmodule GenMCP.Validator do
     ]
   ]
 
-  ctx = JSV.build_init!(formats: true)
+  ctx = JSV.build_init!(formats: true, atoms: true)
   {:root, _, ctx} = JSV.build_add!(ctx, ModMap)
 
   {ctx, items} =

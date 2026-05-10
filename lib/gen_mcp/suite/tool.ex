@@ -485,7 +485,7 @@ defmodule GenMCP.Suite.Tool do
     schema
     |> JSV.Schema.normalize_collect(as_root: true)
     |> JSV.Helpers.Traverse.prewalk(fn
-      {:val, map} when is_map(map) -> Map.delete(map, "jsv-cast")
+      {:val, map} when is_map(map) -> Map.drop(map, ["jsv-cast", "x-jsv-cast"])
       other -> elem(other, 1)
     end)
   end

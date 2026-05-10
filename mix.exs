@@ -45,7 +45,7 @@ defmodule GenMCP.MixProject do
     [
       # App
       {:phoenix, ">= 1.7.0"},
-      {:jsv, "~> 0.16"},
+      {:jsv, "~> 0.19"},
       {:abnf_parsec, "~> 2.0"},
       {:texture, ">= 0.3.2"},
       {:nimble_options, "~> 1.1"},
@@ -63,7 +63,6 @@ defmodule GenMCP.MixProject do
       {:mox, "~> 1.2", only: [:dev, :test]},
       {:credo, ">= 1.7.12", only: [:dev, :test], runtime: false},
       {:dialyxir, ">= 1.4.5", only: [:dev, :test], runtime: false},
-      {:doctor, ">= 0.22.0", only: [:dev, :test], runtime: false},
       {:ex_check, ">= 0.16.0", only: [:dev, :test], runtime: false},
       {:ex_doc, ">= 0.38.2", only: [:dev, :test], runtime: false},
       {:mix_audit, ">= 2.1.5", only: [:dev, :test], runtime: false},

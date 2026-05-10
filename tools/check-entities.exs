@@ -1,7 +1,7 @@
-root = JSV.build!(GenMCP.MCP.TextContent)
+root = JSV.build!(GenMCP.MCP.TextContent, atoms: false)
 JSV.validate!(%{"text" => "hello", "type" => "text"}, root)
 
-root = JSV.build!(GenMCP.MCP.ListToolsRequest)
+root = JSV.build!(GenMCP.MCP.ListToolsRequest, atoms: false)
 
 JSV.validate!(
   %{
@@ -17,7 +17,7 @@ JSV.validate!(
 
 schema = %{anyOf: Map.values(GenMCP.MCP.ModMap.json_schema().definitions)}
 
-case JSV.build(schema) do
+case JSV.build(schema, atoms: false) do
   {:ok, _} ->
     :ok
 
