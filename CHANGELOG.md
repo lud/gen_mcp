@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-05-10
+
+### 🚀 Features
+
+- Upgrade to JSV 0.19 new cast system, support Decimal 3
+
 ## [0.8.0] - 2026-03-30
 
 ### 🚀 Features
