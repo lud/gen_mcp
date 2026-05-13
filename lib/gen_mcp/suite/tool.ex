@@ -375,7 +375,7 @@ defmodule GenMCP.Suite.Tool do
     quote bind_quoted: [input_opt: input_opt] do
       GenMCP.Suite.Tool.__validate_use__(:input_schema, input_opt)
 
-      @jsv_input_root JSV.build!(input_opt)
+      @jsv_input_root JSV.build!(input_opt, atoms: true)
 
       @impl true
       def input_schema(_arg) do
