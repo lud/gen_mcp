@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] - 2026-05-13
+
+### 🐛 Bug Fixes
+
+- Allow atom casting in compile-time tool schemas
+
 ## [0.9.0] - 2026-05-10
 
 ### 🚀 Features
