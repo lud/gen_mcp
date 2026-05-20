@@ -1,4 +1,4 @@
-# quokka:skip-module-directive-reordering
+# quokka:skip-module-directives
 
 defmodule GenMCP.Transport.StreamableHTTP do
   plug_opts_schema =

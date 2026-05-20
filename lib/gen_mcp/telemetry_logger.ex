@@ -1,4 +1,4 @@
-# quokka:skip-module-directive-reordering
+# quokka:skip-module-directives
 
 defmodule GenMCP.TelemetryLogger do
   events = %{

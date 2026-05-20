@@ -1,4 +1,4 @@
-# quokka:skip-module-directive-reordering
+# quokka:skip-module-directives
 defmodule GenMCP.Suite do
   provider_list = fn doc ->
     [
