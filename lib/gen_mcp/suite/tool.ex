@@ -19,8 +19,29 @@ defmodule GenMCP.Suite.Tool do
           required: [:query]
         }
 
-  Auto-generates `c:info/2`, `c:input_schema/1`, and `c:validate_request/2` with JSON
-  schema validation.
+  Auto-generates `c:info/2`, `c:input_schema/1`, and `c:validate_request/2` with
+  JSON schema validation.
+
+  ## JSV Build Options
+
+  The auto-generated `c:validate_request/2` validates incoming arguments against
+  the `:input_schema` using a `JSV` root built at compile time. By default, the
+  root is built with `formats: true` and `atoms: true`.
+
+  The `:jsv_build_opts` option is merged on top of those defaults and the
+  result is passed to `JSV.build/2`. Any key given in `:jsv_build_opts` wins
+  over the default, so to change `:formats` or `:atoms` you must set them
+  explicitly:
+
+      use GenMCP.Suite.Tool,
+        name: "MyTool",
+        input_schema: Input,
+        jsv_build_opts: [
+          formats: [MyApp.MyFormats | JSV.default_format_validator_modules()],
+          atoms: false
+        ]
+
+  See `JSV.build/2` for the full list of available options.
 
   ## Synchronous Tool Example
 
@@ -321,7 +342,7 @@ defmodule GenMCP.Suite.Tool do
       end
 
       unquote(def_infos(opts))
-      unquote(def_validator(opts[:input_schema]))
+      unquote(def_validator(opts[:input_schema], opts[:jsv_build_opts]))
       unquote(def_output_schema(opts[:output_schema]))
     end
   end
@@ -367,15 +388,18 @@ defmodule GenMCP.Suite.Tool do
 
   # No input schema defined, maybe it will be implemented by hand, so we do not
   # raise here.
-  defp def_validator(nil) do
+  defp def_validator(nil, _jsv_build_opts) do
     []
   end
 
-  defp def_validator(input_opt) do
-    quote bind_quoted: [input_opt: input_opt] do
+  defp def_validator(input_opt, jsv_build_opts) do
+    quote bind_quoted: [input_opt: input_opt, jsv_build_opts: jsv_build_opts] do
+      jsv_build_opts = jsv_build_opts || []
+      GenMCP.Suite.Tool.__validate_use__(:jsv_build_opts, jsv_build_opts)
+      build_opts = Keyword.merge([formats: true, atoms: true], jsv_build_opts)
       GenMCP.Suite.Tool.__validate_use__(:input_schema, input_opt)
 
-      @jsv_input_root JSV.build!(input_opt, atoms: true)
+      @jsv_input_root JSV.build!(input_opt, build_opts)
 
       @impl true
       def input_schema(_arg) do
@@ -520,6 +544,14 @@ defmodule GenMCP.Suite.Tool do
       :ok
     else
       raise_invalid_use_info(k, value, "must be a map or a module-based schema")
+    end
+  end
+
+  def __validate_use__(:jsv_build_opts = k, value) do
+    if Keyword.keyword?(value) do
+      :ok
+    else
+      raise_invalid_use_info(k, value, "must be a keyword list")
     end
   end
 

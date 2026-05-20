@@ -305,6 +305,142 @@ defmodule GenMCP.Suite.ToolTest do
                Tool.call(tool, bad_req, build_channel())
     end
 
+    test "format validation is enabled by default" do
+      defmodule UseDefaultFormats do
+        use GenMCP.Suite.Tool,
+          behaviour: false,
+          name: "some_name",
+          input_schema: %{
+            type: :object,
+            properties: %{
+              when: %{type: :string, format: :"date-time"}
+            },
+            required: [:when]
+          }
+
+        def call(req, channel, _) do
+          {:result, {:called_with, req.params.arguments}, channel}
+        end
+      end
+
+      tool = Tool.expand(UseDefaultFormats)
+
+      # A valid RFC-3339 date-time is accepted.
+
+      valid_req = %MCP.CallToolRequest{
+        id: 1,
+        params: %MCP.CallToolRequestParams{
+          name: "some_name",
+          arguments: %{"when" => "2026-05-20T12:34:56Z"}
+        }
+      }
+
+      assert {:result, {:called_with, %{"when" => "2026-05-20T12:34:56Z"}}, _} =
+               Tool.call(tool, valid_req, build_channel())
+
+      # A string that doesn't match the format is rejected.
+
+      bad_req = %MCP.CallToolRequest{
+        id: 2,
+        params: %MCP.CallToolRequestParams{
+          name: "some_name",
+          arguments: %{"when" => "not a date"}
+        }
+      }
+
+      assert {:error, {:invalid_params, %JSV.ValidationError{}}, _} =
+               Tool.call(tool, bad_req, build_channel())
+    end
+
+    test "jsv_build_opts overrides the defaults" do
+      defmodule UseCustomBuildOpts do
+        use GenMCP.Suite.Tool,
+          behaviour: false,
+          name: "some_name",
+          input_schema: %{
+            type: :object,
+            properties: %{
+              when: %{type: :string, format: :"date-time"}
+            },
+            required: [:when]
+          },
+          jsv_build_opts: [formats: false]
+
+        def call(req, channel, _) do
+          {:result, {:called_with, req.params.arguments}, channel}
+        end
+      end
+
+      tool = Tool.expand(UseCustomBuildOpts)
+
+      # With formats: false, badly formatted strings are accepted.
+
+      bad_req = %MCP.CallToolRequest{
+        id: 1,
+        params: %MCP.CallToolRequestParams{
+          name: "some_name",
+          arguments: %{"when" => "not a date"}
+        }
+      }
+
+      assert {:result, {:called_with, %{"when" => "not a date"}}, _} =
+               Tool.call(tool, bad_req, build_channel())
+    end
+
+    test "jsv_build_opts can be sourced from a module function" do
+      defmodule BuildOptsProvider do
+        def default_opts do
+          [formats: false]
+        end
+      end
+
+      defmodule UseModuleSourcedBuildOpts do
+        use GenMCP.Suite.Tool,
+          behaviour: false,
+          name: "some_name",
+          input_schema: %{
+            type: :object,
+            properties: %{
+              when: %{type: :string, format: :"date-time"}
+            },
+            required: [:when]
+          },
+          jsv_build_opts: BuildOptsProvider.default_opts()
+
+        def call(req, channel, _) do
+          {:result, {:called_with, req.params.arguments}, channel}
+        end
+      end
+
+      tool = Tool.expand(UseModuleSourcedBuildOpts)
+
+      # With formats: false coming from the module function, badly formatted
+      # strings are accepted.
+
+      bad_req = %MCP.CallToolRequest{
+        id: 1,
+        params: %MCP.CallToolRequestParams{
+          name: "some_name",
+          arguments: %{"when" => "not a date"}
+        }
+      }
+
+      assert {:result, {:called_with, %{"when" => "not a date"}}, _} =
+               Tool.call(tool, bad_req, build_channel())
+    end
+
+    test "raise on invalid jsv_build_opts" do
+      assert_raise ArgumentError, ~r{jsv_build_opts .* must be a keyword list}, fn ->
+        defmodule InvalidBuildOpts do
+          use GenMCP.Suite.Tool,
+            behaviour: false,
+            name: "foo",
+            input_schema: %{type: :object},
+            jsv_build_opts: "not a keyword list"
+        end
+      end
+    end
+
     test "output schema with use" do
       defmodule UseOutputSchema do
         use GenMCP.Suite.Tool,
