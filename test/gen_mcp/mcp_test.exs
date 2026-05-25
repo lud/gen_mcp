@@ -331,12 +331,67 @@ defmodule GenMCP.MCPTest do
              } == result
     end
 
+    test ":data shortcut sets structured content and mirrors it as text" do
+      result =
+        MCP.call_tool_result(
+          text: "summary",
+          data: %{rows: 3}
+        )
+
+      assert %MCP.CallToolResult{
+               content: [
+                 %TextContent{text: "summary"},
+                 %TextContent{text: ~s({"rows":3})}
+               ],
+               structuredContent: %{rows: 3},
+               isError: nil
+             } == result
+    end
+
+    test ":_data shortcut sets structured content without text mirror" do
+      result =
+        MCP.call_tool_result(
+          text: "summary",
+          _data: %{rows: 3}
+        )
+
+      assert %MCP.CallToolResult{
+               content: [
+                 %TextContent{text: "summary"}
+               ],
+               structuredContent: %{rows: 3},
+               isError: nil
+             } == result
+    end
+
+    test ":_data shortcut alone produces only structured content" do
+      result = MCP.call_tool_result(_data: %{ok: true})
+
+      assert %MCP.CallToolResult{
+               content: [],
+               structuredContent: %{ok: true},
+               isError: nil
+             } == result
+    end
+
     test "cannot return structured content twice" do
       assert_raise ArgumentError, ~r/cannot return multiple structured content/, fn ->
         MCP.call_tool_result([
           %{foo: :bar},
           %{foo: :other}
         ])
+      end
+    end
+
+    test "cannot mix :data and :_data" do
+      assert_raise ArgumentError, ~r/cannot return multiple structured content/, fn ->
+        MCP.call_tool_result(data: %{foo: :bar}, _data: %{foo: :other})
+      end
+    end
+
+    test "cannot mix :data with a naked map" do
+      assert_raise ArgumentError, ~r/cannot return multiple structured content/, fn ->
+        MCP.call_tool_result([{:data, %{foo: :bar}}, %{foo: :other}])
       end
     end
 

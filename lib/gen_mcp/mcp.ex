@@ -188,8 +188,22 @@ defmodule GenMCP.MCP do
   implementations.
 
   The list may contain shortcuts such as `text: "foo"`, `image: {"mime", data}`
-  or literal `%#{inspect(MCP)}.*` structs. Maps without a shortcut become
-  `structuredContent` (only one is allowed).
+  or literal `%#{inspect(MCP)}.*` structs.
+
+  ## Structured content
+
+  Structured payloads can be provided as a naked map in the list, with the
+  `data:` keyword shortcut, or with the `_data:` shortcut. Only one structured
+  payload is allowed per result.
+
+  - `data: map` and a naked map both set `structuredContent` and also append a
+    JSON-encoded text content block mirroring the payload. This is convenient
+    for clients that do not consume structured content directly.
+  - `_data: map` sets `structuredContent` without adding the JSON text mirror,
+    when the caller wants the structured payload to remain the only carrier
+    of that data.
+
+  ## Errors
 
   Errors can be reported by including `error: true` (sets `isError` to true) or
   `error: "message"` (adds a text content block with the message and sets
@@ -198,8 +212,18 @@ defmodule GenMCP.MCP do
   ## Example
 
       MCP.call_tool_result(text: "Hello, world!", error: true)
+
+      MCP.call_tool_result(text: "Summary", data: %{rows: 3})
+
+      MCP.call_tool_result(text: "Summary", _data: %{rows: 3})
   """
-  @spec call_tool_result([content_block() | {:error, boolean() | binary() | nil} | map()]) ::
+  @spec call_tool_result([
+          content_block()
+          | {:error, boolean() | binary() | nil}
+          | {:data, map()}
+          | {:_data, map()}
+          | map()
+        ]) ::
           MCP.CallToolResult.t()
   def call_tool_result(all_content) when is_list(all_content) do
     {content, {structured_content, error_or_nil?}} =
@@ -226,6 +250,14 @@ defmodule GenMCP.MCP do
     {[], {structured_content, error_or_nil?}}
   end
 
+  defp flat_map_reduce_tool_result({:data, map}, acc) when is_map(map) do
+    add_structured_content(map, acc, _mirror_text? = true)
+  end
+
+  defp flat_map_reduce_tool_result({:_data, map}, acc) when is_map(map) do
+    add_structured_content(map, acc, _mirror_text? = false)
+  end
+
   defp flat_map_reduce_tool_result(content, {structured_content, error_or_nil?})
        when is_struct(content, MCP.TextContent)
        when is_struct(content, MCP.AudioContent)
@@ -235,24 +267,29 @@ defmodule GenMCP.MCP do
     {[content], {structured_content, error_or_nil?}}
   end
 
-  # structured content is accepted if currently nil
-  defp flat_map_reduce_tool_result(map, {nil, error_or_nil?}) when is_map(map) do
-    json = JSV.Codec.encode!(map)
-    as_text = content_block({:text, json})
-    {[as_text], {map, error_or_nil?}}
-  end
-
-  defp flat_map_reduce_tool_result(map, {existing, _error_or_nil?}) when is_map(map) do
-    raise ArgumentError,
-          "cannot return multiple structured content, tried to add #{inspect(map)} with existing content: #{inspect(existing)}"
+  # Naked map sets structuredContent and mirrors it as JSON text content.
+  defp flat_map_reduce_tool_result(map, acc) when is_map(map) do
+    add_structured_content(map, acc, _mirror_text? = true)
   end
 
   defp flat_map_reduce_tool_result(elem, {structured_content, error_or_nil?}) do
     {[content_block(elem)], {structured_content, error_or_nil?}}
   end
 
-  defp flat_map_reduce_tool_result(other, _) do
-    raise ArgumentError, "unsupported tool result content definition: #{inspect(other)}"
+  defp add_structured_content(map, {nil, error_or_nil?}, mirror_text?) do
+    extra =
+      if mirror_text? do
+        [content_block({:text, JSV.Codec.encode!(map)})]
+      else
+        []
+      end
+
+    {extra, {map, error_or_nil?}}
+  end
+
+  defp add_structured_content(map, {existing, _error_or_nil?}, _mirror_text?) do
+    raise ArgumentError,
+          "cannot return multiple structured content, tried to add #{inspect(map)} with existing content: #{inspect(existing)}"
   end
 
   @doc """

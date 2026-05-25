@@ -218,7 +218,7 @@ defmodule GenMCP.Suite.ToolTest do
         # by "use"
 
         def call(req, channel, _) do
-          {:result, {:called_with, req.params.arguments}, channel}
+          {:result, MCP.call_tool_result(_data: req.params.arguments), channel}
         end
       end
 
@@ -234,7 +234,7 @@ defmodule GenMCP.Suite.ToolTest do
         }
       }
 
-      assert {:result, {:called_with, %{"foo" => 123}}, _} =
+      assert {:result, %MCP.CallToolResult{structuredContent: %{"foo" => 123}}, _} =
                Tool.call(tool, valid_req, build_channel())
 
       # invalid request will not hit the call callback if rejected
@@ -285,7 +285,7 @@ defmodule GenMCP.Suite.ToolTest do
         end
 
         def call(req, channel, _) do
-          {:result, {:called_with, req.params.arguments}, channel}
+          {:result, MCP.call_tool_result(_data: req.params.arguments), channel}
         end
       end
 
@@ -301,7 +301,7 @@ defmodule GenMCP.Suite.ToolTest do
         }
       }
 
-      assert {:result, {:called_with, %{"foo" => "not_an_int"}}, _} =
+      assert {:result, %MCP.CallToolResult{structuredContent: %{"foo" => "not_an_int"}}, _} =
                Tool.call(tool, bad_req, build_channel())
     end
 
@@ -319,7 +319,7 @@ defmodule GenMCP.Suite.ToolTest do
           }
 
         def call(req, channel, _) do
-          {:result, {:called_with, req.params.arguments}, channel}
+          {:result, MCP.call_tool_result(_data: req.params.arguments), channel}
         end
       end
 
@@ -335,7 +335,8 @@ defmodule GenMCP.Suite.ToolTest do
         }
       }
 
-      assert {:result, {:called_with, %{"when" => "2026-05-20T12:34:56Z"}}, _} =
+      assert {:result,
+              %MCP.CallToolResult{structuredContent: %{"when" => "2026-05-20T12:34:56Z"}}, _} =
                Tool.call(tool, valid_req, build_channel())
 
       # A string that doesn't match the format is rejected.
@@ -367,7 +368,7 @@ defmodule GenMCP.Suite.ToolTest do
           jsv_build_opts: [formats: false]
 
         def call(req, channel, _) do
-          {:result, {:called_with, req.params.arguments}, channel}
+          {:result, MCP.call_tool_result(_data: req.params.arguments), channel}
         end
       end
 
@@ -383,7 +384,7 @@ defmodule GenMCP.Suite.ToolTest do
         }
       }
 
-      assert {:result, {:called_with, %{"when" => "not a date"}}, _} =
+      assert {:result, %MCP.CallToolResult{structuredContent: %{"when" => "not a date"}}, _} =
                Tool.call(tool, bad_req, build_channel())
     end
 
@@ -408,7 +409,7 @@ defmodule GenMCP.Suite.ToolTest do
           jsv_build_opts: BuildOptsProvider.default_opts()
 
         def call(req, channel, _) do
-          {:result, {:called_with, req.params.arguments}, channel}
+          {:result, MCP.call_tool_result(_data: req.params.arguments), channel}
         end
       end
 
@@ -425,7 +426,7 @@ defmodule GenMCP.Suite.ToolTest do
         }
       }
 
-      assert {:result, {:called_with, %{"when" => "not a date"}}, _} =
+      assert {:result, %MCP.CallToolResult{structuredContent: %{"when" => "not a date"}}, _} =
                Tool.call(tool, bad_req, build_channel())
     end
 
@@ -641,7 +642,7 @@ defmodule GenMCP.Suite.ToolTest do
         end
 
         def call(req, channel, _) do
-          {:result, {:called_with, req.params.arguments}, channel}
+          {:result, MCP.call_tool_result(_data: req.params.arguments), channel}
         end
       end
 
@@ -657,7 +658,7 @@ defmodule GenMCP.Suite.ToolTest do
         }
       }
 
-      assert {:result, {:called_with, %{"foo" => 123}}, _} =
+      assert {:result, %MCP.CallToolResult{structuredContent: %{"foo" => 123}}, _} =
                Tool.call(tool, valid_req, build_channel())
 
       # invalid request will not hit the call callback if rejected
@@ -700,7 +701,7 @@ defmodule GenMCP.Suite.ToolTest do
         end
 
         def call(req, channel, _) do
-          {:result, {:called_with, req.params.arguments}, channel}
+          {:result, MCP.call_tool_result(_data: req.params.arguments), channel}
         end
       end
 
@@ -716,7 +717,7 @@ defmodule GenMCP.Suite.ToolTest do
         }
       }
 
-      assert {:result, {:called_with, %{"foo" => "not_an_int"}}, _} =
+      assert {:result, %MCP.CallToolResult{structuredContent: %{"foo" => "not_an_int"}}, _} =
                Tool.call(tool, bad_req, build_channel())
     end
 

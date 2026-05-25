@@ -224,6 +224,12 @@ defmodule GenMCP.Suite.Tool do
   When using `use GenMCP.Suite.Tool`, JSON schema validation is automatically
   implemented, ensuring `req.params.arguments` conforms to the schema.
 
+  ## Result payload
+
+  Synchronous results are returned as `{:result, %MCP.CallToolResult{},
+  channel}`. The second element must be a `%MCP.CallToolResult{}`, typically
+  built with `GenMCP.MCP.call_tool_result/1`.
+
   ## Async calls
 
   When returning `{:async, {tag, ref}, channel}`, the `c:continue/3` callback
@@ -564,7 +570,7 @@ defmodule GenMCP.Suite.Tool do
   defmacrop handle_result(call) do
     quote do
       callback __MODULE__, unquote(call) do
-        {:result, _result, %Channel{}} = result ->
+        {:result, %MCP.CallToolResult{}, %Channel{}} = result ->
           result
 
         {:async, {tag, %Task{ref: ref}}, %Channel{} = channel} ->
