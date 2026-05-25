@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0] - 2026-05-25
+
+### 🚀 Features
+
+- Added :jsv_build_opts to customize Suite.Tool input schema validation
+- Support returning structured content without mirrored text content from tools
+
 ## [0.9.1] - 2026-05-13
 
 ### 🐛 Bug Fixes
