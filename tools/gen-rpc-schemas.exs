@@ -1,7 +1,6 @@
 alias JSV.Helpers.Traverse
 
 Mix.install([:jason, :jsv, :nimble_options], consolidate_protocols: false)
-
 # This module receives a fun and args, and implements inspect so we can render a
 # call
 #
