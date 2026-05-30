@@ -14,20 +14,6 @@ defmodule GenMCP.MCP.Meta do
   end
 end
 
-defmodule GenMCP.MCP.RequestMeta do
-  use JSV.Schema
-
-  def json_schema do
-    %{
-      additionalProperties: %{},
-      description:
-        "See [General Fields](https://modelcontextprotocol.io/specification/2025-11-25/basic#general-fields) for notes on _meta usage.",
-      properties: %{progressToken: GenMCP.MCP.ProgressToken},
-      type: "object"
-    }
-  end
-end
-
 defmodule GenMCP.MCP.ListenerRequest do
   @moduledoc """
   Represents a GET request from the StreamableHTTP client.
@@ -274,9 +260,9 @@ end
 defmodule GenMCP.MCP.CallToolRequest do
   use JSV.Schema
 
-  JsonDerive.auto(_merge = %{method: "tools/call", jsonrpc: "2.0"}, _keep_nils = [:params])
+  JsonDerive.auto(_merge = %{method: "tools/call", jsonrpc: "2.0"}, _keep_nils = [:id, :params])
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -288,7 +274,7 @@ defmodule GenMCP.MCP.CallToolRequest do
       method: const("tools/call"),
       params: GenMCP.MCP.CallToolRequestParams
     },
-    required: [:jsonrpc, :method, :params],
+    required: [:id, :jsonrpc, :method, :params],
     title: "MCP:CallToolRequest",
     type: "object"
   }
@@ -304,7 +290,7 @@ defmodule GenMCP.MCP.CallToolRequestParams do
   defschema %{
     description: "Parameters for a `tools/call` request.",
     properties: %{
-      _meta: GenMCP.MCP.RequestMeta,
+      _meta: GenMCP.MCP.Meta,
       arguments: %{
         additionalProperties: %{},
         description: "Arguments to use for the tool call.",
@@ -388,7 +374,7 @@ defmodule GenMCP.MCP.CancelledNotification do
     _keep_nils = [:params]
   )
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -430,7 +416,7 @@ defmodule GenMCP.MCP.CancelledNotificationParams do
     Parameters for a `notifications/cancelled` notification.
     """,
     properties: %{
-      _meta: GenMCP.MCP.RequestMeta,
+      _meta: GenMCP.MCP.Meta,
       reason:
         string(
           description: ~SD"""
@@ -676,9 +662,9 @@ end
 defmodule GenMCP.MCP.GetPromptRequest do
   use JSV.Schema
 
-  JsonDerive.auto(_merge = %{method: "prompts/get", jsonrpc: "2.0"}, _keep_nils = [:params])
+  JsonDerive.auto(_merge = %{method: "prompts/get", jsonrpc: "2.0"}, _keep_nils = [:id, :params])
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -690,7 +676,7 @@ defmodule GenMCP.MCP.GetPromptRequest do
       method: const("prompts/get"),
       params: GenMCP.MCP.GetPromptRequestParams
     },
-    required: [:jsonrpc, :method, :params],
+    required: [:id, :jsonrpc, :method, :params],
     title: "MCP:GetPromptRequest",
     type: "object"
   }
@@ -706,7 +692,7 @@ defmodule GenMCP.MCP.GetPromptRequestParams do
   defschema %{
     description: "Parameters for a `prompts/get` request.",
     properties: %{
-      _meta: GenMCP.MCP.RequestMeta,
+      _meta: GenMCP.MCP.Meta,
       arguments: %{
         additionalProperties: string(),
         description: "Arguments to use for templating the prompt.",
@@ -951,9 +937,9 @@ end
 defmodule GenMCP.MCP.InitializeRequest do
   use JSV.Schema
 
-  JsonDerive.auto(_merge = %{method: "initialize", jsonrpc: "2.0"}, _keep_nils = [:params])
+  JsonDerive.auto(_merge = %{method: "initialize", jsonrpc: "2.0"}, _keep_nils = [:id, :params])
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -966,7 +952,7 @@ defmodule GenMCP.MCP.InitializeRequest do
       method: const("initialize"),
       params: GenMCP.MCP.InitializeRequestParams
     },
-    required: [:jsonrpc, :method, :params],
+    required: [:id, :jsonrpc, :method, :params],
     title: "MCP:InitializeRequest",
     type: "object"
   }
@@ -982,7 +968,7 @@ defmodule GenMCP.MCP.InitializeRequestParams do
   defschema %{
     description: "Parameters for an `initialize` request.",
     properties: %{
-      _meta: GenMCP.MCP.RequestMeta,
+      _meta: GenMCP.MCP.Meta,
       capabilities: GenMCP.MCP.ClientCapabilities,
       clientInfo: GenMCP.MCP.Implementation,
       protocolVersion:
@@ -1059,7 +1045,7 @@ defmodule GenMCP.MCP.InitializedNotification do
     _keep_nils = []
   )
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -1082,7 +1068,7 @@ end
 defmodule GenMCP.MCP.JSONRPCErrorResponse do
   use JSV.Schema
 
-  JsonDerive.auto(_merge = %{}, _keep_nils = [:error, :jsonrpc, :id])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:error, :id, :jsonrpc])
 
   defschema %{
     description: ~SD"""
@@ -1159,9 +1145,9 @@ end
 defmodule GenMCP.MCP.ListPromptsRequest do
   use JSV.Schema
 
-  JsonDerive.auto(_merge = %{method: "prompts/list", jsonrpc: "2.0"}, _keep_nils = [])
+  JsonDerive.auto(_merge = %{method: "prompts/list", jsonrpc: "2.0"}, _keep_nils = [:id])
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -1174,7 +1160,7 @@ defmodule GenMCP.MCP.ListPromptsRequest do
       method: const("prompts/list"),
       params: GenMCP.MCP.PaginatedRequestParams
     },
-    required: [:jsonrpc, :method],
+    required: [:id, :jsonrpc, :method],
     title: "MCP:ListPromptsRequest",
     type: "object"
   }
@@ -1221,9 +1207,12 @@ end
 defmodule GenMCP.MCP.ListResourceTemplatesRequest do
   use JSV.Schema
 
-  JsonDerive.auto(_merge = %{method: "resources/templates/list", jsonrpc: "2.0"}, _keep_nils = [])
+  JsonDerive.auto(
+    _merge = %{method: "resources/templates/list", jsonrpc: "2.0"},
+    _keep_nils = [:id]
+  )
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -1236,7 +1225,7 @@ defmodule GenMCP.MCP.ListResourceTemplatesRequest do
       method: const("resources/templates/list"),
       params: GenMCP.MCP.PaginatedRequestParams
     },
-    required: [:jsonrpc, :method],
+    required: [:id, :jsonrpc, :method],
     title: "MCP:ListResourceTemplatesRequest",
     type: "object"
   }
@@ -1284,9 +1273,9 @@ end
 defmodule GenMCP.MCP.ListResourcesRequest do
   use JSV.Schema
 
-  JsonDerive.auto(_merge = %{method: "resources/list", jsonrpc: "2.0"}, _keep_nils = [])
+  JsonDerive.auto(_merge = %{method: "resources/list", jsonrpc: "2.0"}, _keep_nils = [:id])
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -1298,7 +1287,7 @@ defmodule GenMCP.MCP.ListResourcesRequest do
       method: const("resources/list"),
       params: GenMCP.MCP.PaginatedRequestParams
     },
-    required: [:jsonrpc, :method],
+    required: [:id, :jsonrpc, :method],
     title: "MCP:ListResourcesRequest",
     type: "object"
   }
@@ -1345,9 +1334,9 @@ end
 defmodule GenMCP.MCP.ListToolsRequest do
   use JSV.Schema
 
-  JsonDerive.auto(_merge = %{method: "tools/list", jsonrpc: "2.0"}, _keep_nils = [])
+  JsonDerive.auto(_merge = %{method: "tools/list", jsonrpc: "2.0"}, _keep_nils = [:id])
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -1359,7 +1348,7 @@ defmodule GenMCP.MCP.ListToolsRequest do
       method: const("tools/list"),
       params: GenMCP.MCP.PaginatedRequestParams
     },
-    required: [:jsonrpc, :method],
+    required: [:id, :jsonrpc, :method],
     title: "MCP:ListToolsRequest",
     type: "object"
   }
@@ -1419,7 +1408,7 @@ defmodule GenMCP.MCP.LoggingMessageNotification do
     _keep_nils = [:params]
   )
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -1513,7 +1502,7 @@ defmodule GenMCP.MCP.PaginatedRequestParams do
   defschema %{
     description: "Common parameters for paginated requests.",
     properties: %{
-      _meta: GenMCP.MCP.RequestMeta,
+      _meta: GenMCP.MCP.Meta,
       cursor:
         string(
           description: ~SD"""
@@ -1532,9 +1521,9 @@ end
 defmodule GenMCP.MCP.PingRequest do
   use JSV.Schema
 
-  JsonDerive.auto(_merge = %{method: "ping", jsonrpc: "2.0"}, _keep_nils = [])
+  JsonDerive.auto(_merge = %{method: "ping", jsonrpc: "2.0"}, _keep_nils = [:id])
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -1548,7 +1537,7 @@ defmodule GenMCP.MCP.PingRequest do
       method: const("ping"),
       params: GenMCP.MCP.RequestParams
     },
-    required: [:jsonrpc, :method],
+    required: [:id, :jsonrpc, :method],
     title: "MCP:PingRequest",
     type: "object"
   }
@@ -1564,7 +1553,7 @@ defmodule GenMCP.MCP.ProgressNotification do
     _keep_nils = [:params]
   )
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -1787,9 +1776,12 @@ end
 defmodule GenMCP.MCP.ReadResourceRequest do
   use JSV.Schema
 
-  JsonDerive.auto(_merge = %{method: "resources/read", jsonrpc: "2.0"}, _keep_nils = [:params])
+  JsonDerive.auto(
+    _merge = %{method: "resources/read", jsonrpc: "2.0"},
+    _keep_nils = [:id, :params]
+  )
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -1801,7 +1793,7 @@ defmodule GenMCP.MCP.ReadResourceRequest do
       method: const("resources/read"),
       params: GenMCP.MCP.ReadResourceRequestParams
     },
-    required: [:jsonrpc, :method, :params],
+    required: [:id, :jsonrpc, :method, :params],
     title: "MCP:ReadResourceRequest",
     type: "object"
   }
@@ -1817,7 +1809,7 @@ defmodule GenMCP.MCP.ReadResourceRequestParams do
   defschema %{
     description: "Parameters for a `resources/read` request.",
     properties: %{
-      _meta: GenMCP.MCP.RequestMeta,
+      _meta: GenMCP.MCP.Meta,
       uri:
         uri(
           description: ~SD"""
@@ -2213,7 +2205,7 @@ defmodule GenMCP.MCP.RootsListChangedNotification do
     _keep_nils = []
   )
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -2374,9 +2366,12 @@ end
 defmodule GenMCP.MCP.SetLevelRequest do
   use JSV.Schema
 
-  JsonDerive.auto(_merge = %{method: "logging/setLevel", jsonrpc: "2.0"}, _keep_nils = [:params])
+  JsonDerive.auto(
+    _merge = %{method: "logging/setLevel", jsonrpc: "2.0"},
+    _keep_nils = [:id, :params]
+  )
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -2388,7 +2383,7 @@ defmodule GenMCP.MCP.SetLevelRequest do
       method: const("logging/setLevel"),
       params: GenMCP.MCP.SetLevelRequestParams
     },
-    required: [:jsonrpc, :method, :params],
+    required: [:id, :jsonrpc, :method, :params],
     title: "MCP:SetLevelRequest",
     type: "object"
   }
@@ -2403,7 +2398,7 @@ defmodule GenMCP.MCP.SetLevelRequestParams do
 
   defschema %{
     description: "Parameters for a `logging/setLevel` request.",
-    properties: %{_meta: GenMCP.MCP.RequestMeta, level: GenMCP.MCP.LoggingLevel},
+    properties: %{_meta: GenMCP.MCP.Meta, level: GenMCP.MCP.LoggingLevel},
     required: [:level],
     title: "MCP:SetLevelRequestParams",
     type: "object"
@@ -2417,10 +2412,10 @@ defmodule GenMCP.MCP.SubscribeRequest do
 
   JsonDerive.auto(
     _merge = %{method: "resources/subscribe", jsonrpc: "2.0"},
-    _keep_nils = [:params]
+    _keep_nils = [:id, :params]
   )
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -2433,7 +2428,7 @@ defmodule GenMCP.MCP.SubscribeRequest do
       method: const("resources/subscribe"),
       params: GenMCP.MCP.SubscribeRequestParams
     },
-    required: [:jsonrpc, :method, :params],
+    required: [:id, :jsonrpc, :method, :params],
     title: "MCP:SubscribeRequest",
     type: "object"
   }
@@ -2449,7 +2444,7 @@ defmodule GenMCP.MCP.SubscribeRequestParams do
   defschema %{
     description: "Parameters for a `resources/subscribe` request.",
     properties: %{
-      _meta: GenMCP.MCP.RequestMeta,
+      _meta: GenMCP.MCP.Meta,
       uri:
         uri(
           description: ~SD"""
@@ -2762,10 +2757,10 @@ defmodule GenMCP.MCP.UnsubscribeRequest do
 
   JsonDerive.auto(
     _merge = %{method: "resources/unsubscribe", jsonrpc: "2.0"},
-    _keep_nils = [:params]
+    _keep_nils = [:id, :params]
   )
 
-  @skip_keys [:method, :jsonrpc]
+  @skip_keys [:jsonrpc, :method]
 
   defschema %{
     description: ~SD"""
@@ -2779,7 +2774,7 @@ defmodule GenMCP.MCP.UnsubscribeRequest do
       method: const("resources/unsubscribe"),
       params: GenMCP.MCP.UnsubscribeRequestParams
     },
-    required: [:jsonrpc, :method, :params],
+    required: [:id, :jsonrpc, :method, :params],
     title: "MCP:UnsubscribeRequest",
     type: "object"
   }
@@ -2795,7 +2790,7 @@ defmodule GenMCP.MCP.UnsubscribeRequestParams do
   defschema %{
     description: "Parameters for a `resources/unsubscribe` request.",
     properties: %{
-      _meta: GenMCP.MCP.RequestMeta,
+      _meta: GenMCP.MCP.Meta,
       uri:
         uri(
           description: ~SD"""

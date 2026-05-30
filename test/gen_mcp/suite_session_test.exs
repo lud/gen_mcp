@@ -150,13 +150,13 @@ defmodule GenMCP.SuiteSessionTest do
       state = init_initialize_create(extensions: [ExtensionMock])
 
       assert {:reply, {:result, _}, _} =
-               Suite.handle_request(%MCP.ListToolsRequest{}, build_channel(), state)
+               Suite.handle_request(%MCP.ListToolsRequest{id: 1}, build_channel(), state)
 
       assert {:reply, {:result, _}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{}, build_channel(), state)
+               Suite.handle_request(%MCP.ListResourcesRequest{id: 1}, build_channel(), state)
 
       assert {:reply, {:result, _}, _} =
-               Suite.handle_request(%MCP.ListPromptsRequest{}, build_channel(), state)
+               Suite.handle_request(%MCP.ListPromptsRequest{id: 1}, build_channel(), state)
     end
 
     test "session controller handle_info callback is called with new arg" do
@@ -340,13 +340,13 @@ defmodule GenMCP.SuiteSessionTest do
       state = init_with_restore(extensions: [ExtensionMock])
 
       assert {:reply, {:result, _}, state} =
-               Suite.handle_request(%MCP.ListToolsRequest{}, build_channel(), state)
+               Suite.handle_request(%MCP.ListToolsRequest{id: 1}, build_channel(), state)
 
       assert {:reply, {:result, _}, state} =
-               Suite.handle_request(%MCP.ListResourcesRequest{}, build_channel(), state)
+               Suite.handle_request(%MCP.ListResourcesRequest{id: 1}, build_channel(), state)
 
       assert {:reply, {:result, _}, _state} =
-               Suite.handle_request(%MCP.ListPromptsRequest{}, build_channel(), state)
+               Suite.handle_request(%MCP.ListPromptsRequest{id: 1}, build_channel(), state)
     end
 
     test "session controller handle_info callback is called with new arg" do
@@ -655,7 +655,7 @@ defmodule GenMCP.SuiteSessionTest do
       run_async(fn ->
         channel = build_channel()
         {:ok, session_pid} = Mux.ensure_started(session_id, channel, @default_opts)
-        Mux.request(session_pid, %MCP.ListToolsRequest{}, channel)
+        Mux.request(session_pid, %MCP.ListToolsRequest{id: 1}, channel)
       end)
 
       assert_receive :listener_change_on_restore_request
