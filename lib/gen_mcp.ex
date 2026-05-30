@@ -74,6 +74,20 @@ defmodule GenMCP do
     ["2025-11-25", "2025-06-18"]
   end
 
+  @doc """
+  Returns the protocol version this library targets.
+
+  The `2026-07-28` release candidate currently lives in the `schema/draft`
+  directory of the MCP repository and is the version named by the
+  `GenMCP.MCP.V2607` vocabulary. There is no `initialize` handshake under this
+  protocol; the version is carried by the `MCP-Protocol-Version` HTTP header and
+  the per-request `_meta` (`io.modelcontextprotocol/protocolVersion`), and is
+  advertised via `server/discover`.
+  """
+  def protocol_version do
+    "2026-07-28"
+  end
+
   @type state :: term
   @type session_id :: String.t()
   @type request ::

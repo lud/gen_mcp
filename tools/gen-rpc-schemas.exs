@@ -88,8 +88,14 @@ defmodule Context do
   def flagged?(ctx, name, flag) do
     case mod_config(ctx, name) do
       list when is_list(list) -> true == Keyword.get(list, flag)
-      :nogen -> raise "flags should no be called for :nogen modules"
+      other -> raise "flags should not be called for #{inspect(other)} modules"
     end
+  end
+
+  # `:lax` definitions are not generated as modules; a `$ref` to one is rendered
+  # as an accept-any schema (see Codegen.schema_with_jsv_helpers_deep/2).
+  def lax?(ctx, name) when is_binary(name) do
+    :lax == mod_config(ctx, String.to_atom(name))
   end
 end
 
@@ -116,7 +122,15 @@ defmodule Codegen do
     Traverse.postwalk(schema, fn
       {:val, %{"$ref": "#/$defs/" <> name} = schema} ->
         case Map.drop(schema, [:description, :"$schema"]) do
-          rest when map_size(rest) == 1 -> module_name(name, ctx)
+          rest when map_size(rest) == 1 ->
+            if Context.lax?(ctx, name) do
+              # Schema-in-data definitions (elicitation field descriptors:
+              # PrimitiveSchemaDefinition and the *Schema / *EnumSchema variants)
+              # are not modeled as structs; accept any value where they appear.
+              %{}
+            else
+              module_name(name, ctx)
+            end
         end
 
       {:val, %{"$ref": _} = schema} ->
@@ -186,10 +200,17 @@ defmodule Codegen do
 
     true = is_binary(value)
 
-    # Nothing else is present in const than :const and :type
-    true = %{} == Map.drop(schema, [:const, :type])
+    # Besides :const and :type, a const subschema may carry a :description
+    # (e.g. the `mode` discriminators on the elicitation request params). Keep
+    # it on the rendered `const/2` helper; nothing else is expected.
+    case Map.drop(schema, [:const, :type, :description]) do
+      empty when map_size(empty) == 0 -> :ok
+    end
 
-    CodeWrapper.of(:const, [value])
+    case schema do
+      %{description: descr} -> CodeWrapper.of(:const, [value, [description: descr]])
+      _ -> CodeWrapper.of(:const, [value])
+    end
   end
 
   defp format_schema_to_list(schema) do
@@ -299,19 +320,18 @@ defmodule Generator do
     File.write!(opts[:output_path], code)
     IO.puts("wrote #{opts[:output_path]}, formatting...")
 
-    case System.cmd("mix", ~w(format --migrate)) do
+    case System.cmd("mix", ~w(format --migrate), into: IO.stream()) do
       {_, 0} ->
         IO.puts("schemas module generated")
         :ok
 
-      {out, 1} ->
-        IO.puts(out)
+      {_, 1} ->
         IO.puts([IO.ANSI.red(), "Schemas generated with invalid syntax", IO.ANSI.reset()])
     end
   end
 
   defp skip_definition?(name, ctx) do
-    :nogen == Context.mod_config(ctx, name)
+    Context.mod_config(ctx, name) in [:nogen, :lax]
   end
 
   defp filter_schemas(defs, ctx) do
@@ -408,7 +428,7 @@ defmodule Generator do
     entity(schema: schema, name: name) = entity
 
     schema =
-      if Context.flagged?(ctx, name, :rpc_request_params) do
+      if Context.flagged?(ctx, name, :rpc_request_params) and not meta_is_typed_ref?(schema) do
         put_in(schema, [:properties, :_meta], %{
           "$ref": "#/$defs/Meta"
         })
@@ -417,6 +437,17 @@ defmodule Generator do
       end
 
     entity(entity, schema: schema)
+  end
+
+  # When the source schema already points `_meta` at a dedicated carrier
+  # (MetaObject / RequestMetaObject, introduced in the 2026 draft), keep that
+  # reference instead of clobbering it with the legacy custom `Meta` struct.
+  defp meta_is_typed_ref?(schema) do
+    case get_in(schema, [:properties, :_meta]) do
+      %{"$ref": "#/$defs/MetaObject"} -> true
+      %{"$ref": "#/$defs/RequestMetaObject"} -> true
+      _ -> false
+    end
   end
 
   defp skip_request_fields(entity) do
@@ -499,165 +530,163 @@ defmodule Generator do
   end
 end
 
-Generator.run("deps/modelcontextprotocol/schema/2025-11-25/schema.json",
-  output_path: "lib/gen_mcp/mcp/entities.ex",
-  mod_prefix: GenMCP.MCP,
+Generator.run("deps/modelcontextprotocol/schema/draft/schema.json",
+  output_path: "lib/gen_mcp/mcp/v2607/entities.ex",
+  mod_prefix: GenMCP.MCP.V2607,
+  # Allow/deny table reconciled against the 2026-07-28 draft `$defs`
+  # (150 definitions). The generate-set is the transitive `$ref` closure of the
+  # supported RPC surface; everything else is `:nogen`. Re-diff `$defs` vs this
+  # list whenever the schema SHA is bumped in mix.exs.
   mod_config: [
-    # -- Request params (custom extractions or from schema) -------------------
-
-    CallToolRequestParams: [rpc_request_params: true],
-    CancelledNotificationParams: [rpc_request_params: true],
-    GetPromptRequestParams: [rpc_request_params: true],
-    InitializeRequestParams: [rpc_request_params: true],
-    PaginatedRequestParams: [rpc_request_params: true],
-    ReadResourceRequestParams: [rpc_request_params: true],
-    SetLevelRequestParams: [rpc_request_params: true],
-
-    # -- RPC requests ---------------------------------------------------------
-
-    CallToolRequest: [],
-    GetPromptRequest: [],
-    InitializeRequest: [],
-    ListPromptsRequest: [],
-    ListResourcesRequest: [],
-    ListResourceTemplatesRequest: [],
-    ListToolsRequest: [],
-    PingRequest: [],
-    SetLevelRequest: [],
-    ReadResourceRequest: [],
-    SubscribeRequest: [],
-    UnsubscribeRequest: [],
-
-    # -- Generated structs/types ----------------------------------------------
-
     Annotations: [],
     AudioContent: [content_block: true],
-    BlobResourceContents: [],
-    BooleanSchema: [],
-    CallToolResult: [],
-    CancelledNotification: [],
-    ClientCapabilities: [],
-    ContentBlock: [],
-    EmbeddedResource: [content_block: true],
-    GetPromptResult: [],
-    Icon: [],
-    Icons: [],
-    ImageContent: [content_block: true],
-    Implementation: [],
-    InitializedNotification: [],
-    InitializeResult: [],
-    JSONRPCErrorResponse: [keep_nils: [:id]],
-    JSONRPCRequest: [],
-    JSONRPCResponse: [],
-    JSONRPCResultResponse: [],
-    ListPromptsResult: [],
-    ListResourcesResult: [],
-    LoggingLevel: [],
-    LoggingMessageNotification: [],
-    LoggingMessageNotificationParams: [],
-    ListResourceTemplatesResult: [],
-    ListToolsResult: [],
-    ProgressNotification: [],
-    ProgressToken: [],
-    Prompt: [],
-    PromptArgument: [],
-    PromptMessage: [],
-    ReadResourceResult: [],
-    RequestId: [],
-    Resource: [],
-    ResourceLink: [content_block: true],
-    ResourceTemplate: [],
-    Result: [],
-    Role: [],
-    RootsListChangedNotification: [],
-    ServerCapabilities: [],
-    TextContent: [content_block: true],
-    TextResourceContents: [],
-    Tool: [],
-    ToolAnnotations: [],
-
-    # -- Not generated (unsupported, abstract, or internal) -------------------
-
     BaseMetadata: :nogen,
-    CancelTaskRequest: :nogen,
-    CancelTaskResult: :nogen,
+    BlobResourceContents: [],
+    BooleanSchema: :lax,
+    CacheableResult: [],
+    CallToolRequest: [],
+    CallToolRequestParams: [rpc_request_params: true],
+    CallToolResult: [],
+    CallToolResultResponse: :nogen,
+    CancelledNotification: [],
+    CancelledNotificationParams: [rpc_request_params: true],
+    ClientCapabilities: [],
     ClientNotification: :nogen,
     ClientRequest: :nogen,
     ClientResult: :nogen,
     CompleteRequest: :nogen,
     CompleteRequestParams: :nogen,
     CompleteResult: :nogen,
-    CreateMessageRequest: :nogen,
-    CreateMessageRequestParams: :nogen,
-    CreateMessageResult: :nogen,
-    CreateTaskResult: :nogen,
+    CompleteResultResponse: :nogen,
+    ContentBlock: [],
+    CreateMessageRequest: [],
+    CreateMessageRequestParams: [],
+    CreateMessageResult: [],
     Cursor: :nogen,
-    ElicitRequest: :nogen,
-    ElicitRequestFormParams: :nogen,
-    ElicitRequestParams: :nogen,
-    ElicitRequestURLParams: :nogen,
-    ElicitResult: :nogen,
+    DiscoverRequest: [],
+    DiscoverResult: [],
+    DiscoverResultResponse: :nogen,
+    ElicitRequest: [],
+    ElicitRequestFormParams: [],
+    ElicitRequestParams: [],
+    ElicitRequestURLParams: [],
+    ElicitResult: [],
     ElicitationCompleteNotification: :nogen,
+    EmbeddedResource: [content_block: true],
     EmptyResult: :nogen,
-    EnumSchema: :nogen,
+    EnumSchema: :lax,
     Error: [],
-    GetTaskPayloadRequest: :nogen,
-    GetTaskPayloadResult: :nogen,
-    GetTaskRequest: :nogen,
-    GetTaskResult: :nogen,
+    GetPromptRequest: [],
+    GetPromptRequestParams: [rpc_request_params: true],
+    GetPromptResult: [],
+    GetPromptResultResponse: :nogen,
+    Icon: [],
+    Icons: [],
+    ImageContent: [content_block: true],
+    Implementation: [],
+    InputRequest: [],
+    InputRequests: [],
+    InputRequiredResult: [],
+    InputResponse: [],
+    InputResponseRequestParams: [rpc_request_params: true],
+    InputResponses: [],
+    InternalError: :nogen,
+    InvalidParamsError: :nogen,
+    InvalidRequestError: :nogen,
+    JSONArray: [],
+    JSONObject: [],
+    JSONRPCErrorResponse: [keep_nils: [:id]],
     JSONRPCMessage: :nogen,
     JSONRPCNotification: :nogen,
-    LegacyTitledEnumSchema: :nogen,
-    ListRootsRequest: :nogen,
-    ListRootsResult: :nogen,
-    ListTasksRequest: :nogen,
-    ListTasksResult: :nogen,
-    ModelHint: :nogen,
-    ModelPreferences: :nogen,
-    MultiSelectEnumSchema: :nogen,
+    JSONRPCRequest: [],
+    JSONRPCResponse: [],
+    JSONRPCResultResponse: [],
+    JSONValue: [],
+    LegacyTitledEnumSchema: :lax,
+    ListPromptsRequest: [],
+    ListPromptsResult: [],
+    ListPromptsResultResponse: :nogen,
+    ListResourceTemplatesRequest: [],
+    ListResourceTemplatesResult: [],
+    ListResourceTemplatesResultResponse: :nogen,
+    ListResourcesRequest: [],
+    ListResourcesResult: [],
+    ListResourcesResultResponse: :nogen,
+    ListRootsRequest: [],
+    ListRootsResult: [],
+    ListToolsRequest: [],
+    ListToolsResult: [],
+    ListToolsResultResponse: :nogen,
+    LoggingLevel: [],
+    LoggingMessageNotification: [],
+    LoggingMessageNotificationParams: [],
+    MetaObject: [],
+    MethodNotFoundError: :nogen,
+    MissingRequiredClientCapabilityError: :nogen,
+    ModelHint: [],
+    ModelPreferences: [],
+    MultiSelectEnumSchema: :lax,
     Notification: :nogen,
     NotificationParams: [],
-    NumberSchema: :nogen,
+    NumberSchema: :lax,
     PaginatedRequest: :nogen,
+    PaginatedRequestParams: [rpc_request_params: true],
     PaginatedResult: :nogen,
-    PrimitiveSchemaDefinition: :nogen,
+    ParseError: :nogen,
+    PrimitiveSchemaDefinition: :lax,
+    ProgressNotification: [],
     ProgressNotificationParams: [],
+    ProgressToken: [],
+    Prompt: [],
+    PromptArgument: [],
     PromptListChangedNotification: :nogen,
+    PromptMessage: [],
     PromptReference: :nogen,
-    RelatedTaskMetadata: :nogen,
+    ReadResourceRequest: [],
+    ReadResourceRequestParams: [rpc_request_params: true],
+    ReadResourceResult: [],
+    ReadResourceResultResponse: :nogen,
     Request: :nogen,
+    RequestId: [],
+    RequestMetaObject: [],
     RequestParams: [],
+    Resource: [],
     ResourceContents: :nogen,
+    ResourceLink: [content_block: true],
     ResourceListChangedNotification: :nogen,
     ResourceRequestParams: :nogen,
+    ResourceTemplate: [],
     ResourceTemplateReference: :nogen,
     ResourceUpdatedNotification: :nogen,
     ResourceUpdatedNotificationParams: :nogen,
-    Root: :nogen,
-    SamplingMessage: :nogen,
-    SamplingMessageContentBlock: :nogen,
+    Result: [],
+    ResultType: :nogen,
+    Role: [],
+    Root: [],
+    SamplingMessage: [],
+    SamplingMessageContentBlock: [],
+    ServerCapabilities: [],
     ServerNotification: :nogen,
-    ServerRequest: :nogen,
     ServerResult: :nogen,
-    SingleSelectEnumSchema: :nogen,
-    StringSchema: :nogen,
-    SubscribeRequestParams: [rpc_request_params: true],
-    Task: :nogen,
-    TaskAugmentedRequestParams: :nogen,
-    TaskMetadata: [],
-    TaskStatus: :nogen,
-    TaskStatusNotification: :nogen,
-    TaskStatusNotificationParams: :nogen,
-    TitledMultiSelectEnumSchema: :nogen,
-    TitledSingleSelectEnumSchema: :nogen,
-    ToolChoice: :nogen,
-    ToolExecution: [],
+    SingleSelectEnumSchema: :lax,
+    StringSchema: :lax,
+    SubscriptionFilter: [],
+    SubscriptionsAcknowledgedNotification: [],
+    SubscriptionsAcknowledgedNotificationParams: [],
+    SubscriptionsListenRequest: [],
+    SubscriptionsListenRequestParams: [rpc_request_params: true],
+    TextContent: [content_block: true],
+    TextResourceContents: [],
+    TitledMultiSelectEnumSchema: :lax,
+    TitledSingleSelectEnumSchema: :lax,
+    Tool: [],
+    ToolAnnotations: [],
+    ToolChoice: [],
     ToolListChangedNotification: :nogen,
-    ToolResultContent: :nogen,
-    ToolUseContent: :nogen,
-    URLElicitationRequiredError: :nogen,
-    UnsubscribeRequestParams: [rpc_request_params: true],
-    UntitledMultiSelectEnumSchema: :nogen,
-    UntitledSingleSelectEnumSchema: :nogen
+    ToolResultContent: [],
+    ToolUseContent: [],
+    UnsupportedProtocolVersionError: :nogen,
+    UntitledMultiSelectEnumSchema: :lax,
+    UntitledSingleSelectEnumSchema: :lax
   ]
 )
