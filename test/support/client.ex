@@ -54,17 +54,34 @@ defmodule GenMCP.Test.Client do
     Req.new(opts)
   end
 
-  def post_message(client, data, req_opts \\ []) do
-    post(client, data, req_opts, _validate_req? = true)
+  @doc """
+  Builds a valid request `_meta` map (a `RequestMetaObject`) with the three
+  required `io.modelcontextprotocol/*` fields defaulted:
+
+    * `protocolVersion` — `GenMCP.protocol_version/0` (matches the header set by
+      the test `client/1`, so header and body agree by default);
+    * `clientInfo` — a minimal `Implementation` (`name` + `version`);
+    * `clientCapabilities` — `%{}`.
+
+  Pass `overrides` (a map) to add or replace keys.
+
+      request_meta()
+      request_meta(%{progressToken: "tok"})
+      request_meta(%{"io.modelcontextprotocol/protocolVersion" => "1999-01-01"})
+  """
+  def request_meta(overrides \\ %{}) do
+    Map.merge(
+      %{
+        "io.modelcontextprotocol/protocolVersion" => GenMCP.protocol_version(),
+        "io.modelcontextprotocol/clientInfo" => %{"name" => "test-client", "version" => "1.0.0"},
+        "io.modelcontextprotocol/clientCapabilities" => %{}
+      },
+      Map.new(overrides)
+    )
   end
 
-  def get_stream(client, handler) do
-    resp = Req.get!(client, into: :self)
-
-    resp
-    |> expect_status(200)
-    |> stream_chunks()
-    |> Stream.map(handler)
+  def post_message(client, data, req_opts \\ []) do
+    post(client, data, req_opts, _validate_req? = true)
   end
 
   def post_invalid_message(client, data, req_opts \\ []) do
@@ -72,13 +89,68 @@ defmodule GenMCP.Test.Client do
   end
 
   defp post(client, data, req_opts, validate_req?) do
-    raw = JSON.decode!(JSON.encode!(data))
+    {mirror_headers?, req_opts} = Keyword.pop(req_opts, :mirror_headers, true)
+
+    raw = data |> ensure_request_meta() |> JSON.encode!() |> JSON.decode!()
 
     if validate_req? do
       assert :ok = validate_request(raw)
     end
 
+    req_opts =
+      if mirror_headers? do
+        [headers: routing_headers(raw)] ++ req_opts
+      else
+        req_opts
+      end
+
     Req.post!(client, [json: raw, receive_timeout: to_timeout(minute: 1)] ++ req_opts)
+  end
+
+  # A conforming client mirrors the routing headers from the body on every POST
+  # (draft transport spec, Request Metadata): `Mcp-Method` always, `Mcp-Name`
+  # for tools/call, resources/read and prompts/get. Pass `mirror_headers: false`
+  # to post without them (negative tests for the -32001 validation).
+  defp routing_headers(%{"method" => method} = raw) do
+    name_headers =
+      case raw do
+        %{"method" => "tools/call", "params" => %{"name" => name}} -> [{"mcp-name", name}]
+        %{"method" => "resources/read", "params" => %{"uri" => uri}} -> [{"mcp-name", uri}]
+        %{"method" => "prompts/get", "params" => %{"name" => name}} -> [{"mcp-name", name}]
+        _ -> []
+      end
+
+    [{"mcp-method", method} | name_headers]
+  end
+
+  defp routing_headers(_raw) do
+    []
+  end
+
+  # A request (one with an `id`) must carry a valid `_meta` (`RequestMetaObject`)
+  # or the server's `Validator.validate_request` (draft schema) rejects it before
+  # dispatch. Default a valid `_meta` into `params` when the request does not set
+  # its own; tests needing a custom or deliberately-invalid `_meta` set it
+  # explicitly (see `request_meta/1`). Notifications (no `id`) carry a `MetaObject`
+  # which has no required fields, so they are left untouched.
+  defp ensure_request_meta(%{params: params} = data) when is_map(params) do
+    if request?(data) and not has_meta?(params) do
+      %{data | params: Map.put(params, :_meta, request_meta())}
+    else
+      data
+    end
+  end
+
+  defp ensure_request_meta(data) do
+    data
+  end
+
+  defp request?(data) do
+    Map.has_key?(data, :id) or Map.has_key?(data, "id")
+  end
+
+  defp has_meta?(params) do
+    Map.has_key?(params, :_meta) or Map.has_key?(params, "_meta")
   end
 
   def expect_status(resp, status) when is_integer(status) do
@@ -102,6 +174,17 @@ defmodule GenMCP.Test.Client do
     inspect(other, pretty: true, limit: :infinity)
   end
 
+  @doc """
+  Asserts that the response carries no `mcp-session-id` header. The 2026-07-28
+  transport is stateless and must never mint or echo a session id.
+  """
+  def refute_session_header(resp) do
+    assert :error = Map.fetch(resp.headers, "mcp-session-id")
+    resp
+  end
+
+  # TODO(spec 004): only the skipped, session-based Suite tests still use this.
+  # Remove once those tests are rewritten for the stateless transport.
   def expect_session_header(resp) do
     _ = assert {:ok, [session_id]} = Map.fetch(resp.headers, "mcp-session-id")
     assert is_binary(session_id)

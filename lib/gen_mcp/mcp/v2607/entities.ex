@@ -1,3 +1,5 @@
+# quokka:skip-module-directives
+
 require GenMCP.JsonDerive, as: JsonDerive
 
 defmodule GenMCP.MCP.V2607.Meta do
@@ -478,8 +480,6 @@ end
 defmodule GenMCP.MCP.V2607.ClientCapabilities do
   use JSV.Schema
 
-  alias GenMCP.MCP.V2607.JSONObject
-
   JsonDerive.auto(_merge = %{}, _keep_nils = [])
 
   defschema %{
@@ -494,20 +494,20 @@ defmodule GenMCP.MCP.V2607.ClientCapabilities do
         Present if the client supports elicitation from the server.
         """,
         properties: %{
-          form: JSONObject,
-          url: JSONObject
+          form: GenMCP.MCP.V2607.JSONObject,
+          url: GenMCP.MCP.V2607.JSONObject
         },
         type: "object"
       },
       experimental: %{
-        additionalProperties: JSONObject,
+        additionalProperties: GenMCP.MCP.V2607.JSONObject,
         description: ~SD"""
         Experimental, non-standard capabilities that the client supports.
         """,
         type: "object"
       },
       extensions: %{
-        additionalProperties: JSONObject,
+        additionalProperties: GenMCP.MCP.V2607.JSONObject,
         description: ~SD"""
         Optional MCP extensions that the client supports. Keys are extension
         identifiers (e.g.,
@@ -527,8 +527,8 @@ defmodule GenMCP.MCP.V2607.ClientCapabilities do
         Present if the client supports sampling from an LLM.
         """,
         properties: %{
-          context: JSONObject,
-          tools: JSONObject
+          context: GenMCP.MCP.V2607.JSONObject,
+          tools: GenMCP.MCP.V2607.JSONObject
         },
         type: "object"
       }
@@ -2906,8 +2906,6 @@ end
 defmodule GenMCP.MCP.V2607.ServerCapabilities do
   use JSV.Schema
 
-  alias GenMCP.MCP.V2607.JSONObject
-
   JsonDerive.auto(_merge = %{}, _keep_nils = [])
 
   defschema %{
@@ -2917,16 +2915,16 @@ defmodule GenMCP.MCP.V2607.ServerCapabilities do
     define its own, additional capabilities.
     """,
     properties: %{
-      completions: JSONObject,
+      completions: GenMCP.MCP.V2607.JSONObject,
       experimental: %{
-        additionalProperties: JSONObject,
+        additionalProperties: GenMCP.MCP.V2607.JSONObject,
         description: ~SD"""
         Experimental, non-standard capabilities that the server supports.
         """,
         type: "object"
       },
       extensions: %{
-        additionalProperties: JSONObject,
+        additionalProperties: GenMCP.MCP.V2607.JSONObject,
         description: ~SD"""
         Optional MCP extensions that the server supports. Keys are extension
         identifiers (e.g., "io.modelcontextprotocol/tasks"), and values are
@@ -2935,7 +2933,7 @@ defmodule GenMCP.MCP.V2607.ServerCapabilities do
         """,
         type: "object"
       },
-      logging: JSONObject,
+      logging: GenMCP.MCP.V2607.JSONObject,
       prompts: %{
         description: "Present if the server offers any prompt templates.",
         properties: %{

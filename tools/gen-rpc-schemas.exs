@@ -350,6 +350,8 @@ defmodule Generator do
   def prelude(ctx) do
     [
       """
+      # quokka:skip-module-directives
+
       require GenMCP.JsonDerive, as: JsonDerive
       """,
       Codegen.render_schema_module(

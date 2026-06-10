@@ -10,23 +10,18 @@ defmodule GenMCP do
         @behaviour GenMCP
 
         alias GenMCP.MCP
+        alias GenMCP.Mux.Channel
 
+        # Runs per request (the transport is stateless). Receives the validated
+        # server opts; per-request data arrives via the request and channel.
         @impl true
-        def init(_session_id, _opts) do
+        def init(_opts) do
           {:ok, %{}}
         end
 
+        # Terminal blocking path: compute and return the result directly.
         @impl true
-        def handle_request(%MCP.InitializeRequest{} = req, _channel, state) do
-          # Protocol version check omitted for brevity
-          result = MCP.intialize_result(
-            capabilities: MCP.capabilities(tools: true),
-            server_info: MCP.server_info(name: "My Server", version: "1.0.0")
-          )
-          {:reply, {:result, result}, state}
-        end
-
-        def handle_request(%MCP.ListToolsRequest{}, _channel, state) do
+        def handle_request(%MCP.ListToolsRequest{}, _channel, _state) do
           result = MCP.list_tools_result([
             %MCP.Tool{
               name: "hello",
@@ -39,21 +34,26 @@ defmodule GenMCP do
               }
             }
           ])
-          {:reply, {:result, result}, state}
+          {:result, result}
+        end
+
+        # Continue as a stream: opt into the wrapper receive loop, carrying state.
+        # Subsequent messages are delivered to `handle_message/3`, which may emit
+        # progress and ultimately return the result.
+        def handle_request(%MCP.CallToolRequest{}, _channel, state) do
+          send(self(), :do_work)
+          {:stream, state}
         end
 
         @impl true
-        def handle_notification(%MCP.InitializedNotification{}, state) do
-          {:noreply, state}
-        end
-
-        def handle_notification(_notif, state) do
-          {:noreply, state}
+        def handle_notification(_notif, _state) do
+          :ok
         end
 
         @impl true
-        def handle_info(_msg, state) do
-          {:noreply, state}
+        def handle_message(:do_work, channel, _state) do
+          Channel.send_progress(channel, 1, 1, "done")
+          {:result, MCP.call_tool_result(text: "hello")}
         end
       end
   """
@@ -61,35 +61,12 @@ defmodule GenMCP do
   alias GenMCP.MCP
   alias GenMCP.MCP.ModMap
   alias GenMCP.Mux.Channel
-  alias GenMCP.Suite.SessionController
 
   require ModMap
 
   ModMap.require_all()
 
-  @doc """
-  Returns the supported protocol versions.
-  """
-  def supported_protocol_versions do
-    ["2025-11-25", "2025-06-18"]
-  end
-
-  @doc """
-  Returns the protocol version this library targets.
-
-  The `2026-07-28` release candidate currently lives in the `schema/draft`
-  directory of the MCP repository and is the version named by the
-  `GenMCP.MCP.V2607` vocabulary. There is no `initialize` handshake under this
-  protocol; the version is carried by the `MCP-Protocol-Version` HTTP header and
-  the per-request `_meta` (`io.modelcontextprotocol/protocolVersion`), and is
-  advertised via `server/discover`.
-  """
-  def protocol_version do
-    "2026-07-28"
-  end
-
   @type state :: term
-  @type session_id :: String.t()
   @type request ::
           MCP.InitializeRequest.t()
           | MCP.ListToolsRequest.t()
@@ -117,80 +94,91 @@ defmodule GenMCP do
           | MCP.RootsListChangedNotification.t()
           | MCP.ProgressNotification.t()
 
-  @type server_reply :: {:result, result} | :stream | {:error, term}
-  @type server_reply_nostream :: {:result, result} | :stream | {:error, term}
-
   @doc """
   Initializes the server state.
 
-  Called when a new MCP session is established.
+  The transport is stateless: this runs **per request**, receiving the validated
+  server opts. Per-request data (the request, client info/capabilities from
+  `_meta`) arrives via `c:handle_request/3` and the channel, not here.
   """
-  @callback init(session_id, init_arg :: term) :: {:ok, state} | {:stop, term}
+  @callback init(init_arg :: term) :: {:ok, state} | {:stop, term}
 
   @doc """
-  Handles an incoming MCP request and returns a result or stop the server.
+  Handles an incoming MCP request.
+
+  Every return either **terminates** the request or **continues** it as a stream.
+  State rides only on the continue return — terminal returns end the worker, so
+  their state would be discarded and is therefore not carried.
+
+  * `{:result, result}` / `{:error, reason}` — **terminal, blocking path**:
+    compute (optionally emitting `GenMCP.Mux.Channel.send_progress/4` or
+    `send_log/4`) and return the outcome directly. The worker owns its process,
+    so it may block as long as needed while the relay pumps the socket.
+  * `{:stream, state}` — **continue, streaming path**: hand control back to the
+    wrapper receive loop, carrying `state`. Subsequent process messages are
+    delivered to `c:handle_message/3`. This is the path for handlers driven by
+    external events (e.g. subscribing to a producer); it also commits the
+    response to `text/event-stream` immediately, even before the first
+    notification.
+
+  The channel is passed **in** (for `send_progress`/`send_log`) but never
+  returned — it is immutable per-request framework context, not handler state.
+
+  Never hand-roll a `receive` block here — it would miss the relay's `:DOWN`
+  (client disconnect) and system messages. Return `{:stream, state}` instead.
   """
   @callback handle_request(request, Channel.t(), state) ::
-              {:reply, server_reply, state}
-              | {:stop, reason :: term, server_reply_nostream, state}
+              {:result, result}
+              | {:error, reason :: term}
+              | {:stream, state}
 
   @doc """
   Handles an incoming MCP notification.
 
-  Notifications are one-way messages that do not expect a response.
+  Notifications are one-way messages: they get a `202 Accepted` with no body and
+  never stream, so there is nothing to return. No channel is provided.
   """
-  @callback handle_notification(notification, state) :: {:noreply, state}
+  @callback handle_notification(notification, state) :: :ok
 
   @doc """
-  Handles process messages.
+  Handles a process message during a streaming request.
 
-  Invoked when the server process receives a message that is not an MCP request
-  or notification.
+  Invoked only after `c:handle_request/3` returned `{:stream, state}`, for each
+  non-system message the worker receives. Shares `c:handle_request/3`'s return
+  vocabulary — every callback either terminates or continues the stream:
+
+  * `{:stream, state}` — keep streaming, carrying `state`.
+  * `{:result, result}` — emit the final result and end the request.
+  * `{:stop, reason}` — end the stream with no final result (e.g. a long-lived
+    listener's normal exit).
+  * `{:error, reason}` — emit an error and terminate the stream.
   """
-  @callback handle_info(term, state) :: {:noreply, state} | {:stop, reason :: term, state}
+  @callback handle_message(message :: term, Channel.t(), state) ::
+              {:stream, state}
+              | {:result, result}
+              | {:stop, reason :: term}
+              | {:error, reason :: term}
 
   @doc """
-  This callback is called during session initialization when a
-  non-initialization request (such as a call tool request) is received and there
-  is no current OTP process tied to the session id.
-
-  > #### This is a raw callback {: .warning}
-  >
-  > The call is made from the HTTP transport process, giving raw initialization
-  > args for the server. It is called _before_ the `c:init/2` callback is called
-  > and there is no possibility to return a new state or arg.
-  >
-  > The returned data will be passed to the `c:session_restore/3` callback after
-  > server process initialization.
+  Returns the supported protocol versions.
   """
-  @callback session_fetch(session_id, channel :: Channel.t(), init_arg :: term) ::
-              {:ok, SessionController.restore_data()} | {:error, :not_found}
+  def supported_protocol_versions do
+    ["2025-11-25", "2025-06-18"]
+  end
 
   @doc """
-  Called when a session is restored by the `GenMCP.Suite.SessionController`
-  implementation.
+  Returns the protocol version this library targets.
 
-  Your server `c:init/2` callback will have been called before, but there will
-  be no call of `c:handle_request/3` with an initialization request.
-
-  The next call will be either another request or a notification.
+  The `2026-07-28` release candidate currently lives in the `schema/draft`
+  directory of the MCP repository and is the version named by the
+  `GenMCP.MCP.V2607` vocabulary. There is no `initialize` handshake under this
+  protocol; the version is carried by the `MCP-Protocol-Version` HTTP header and
+  the per-request `_meta` (`io.modelcontextprotocol/protocolVersion`), and is
+  advertised via `server/discover`.
   """
-  @callback session_restore(SessionController.restore_data(), channel :: Channel.t(), state) ::
-              {:noreply, state} | {:stop, reason :: term, state}
-
-  @doc """
-  Called when a session is deleted by the client.
-
-  Return value is not checked, and the server is shut down immediately.
-  """
-  @callback session_delete(state) :: term
-
-  @doc """
-  Called when a session times out.
-  """
-  @callback session_timeout(state) :: term
-
-  @optional_callbacks session_restore: 3, session_delete: 1, session_timeout: 1
+  def protocol_version do
+    "2026-07-28"
+  end
 
   @doc """
   The gen_mcp application uses telemetry events to publish various application
@@ -221,6 +209,14 @@ defmodule GenMCP do
   @doc """
   Returns the default logging level used by the MCP logging features on session
   initialization.
+
+  > #### Deprecated {: .warning}
+  >
+  > Under the 2026-07-28 stateless core there is **no default log level**: the
+  > level is read per-request from `_meta` `io.modelcontextprotocol/logLevel`, and
+  > a request that omits it has logging **disabled** (the server MUST NOT emit
+  > `notifications/message`). This function only feeds the legacy session path and
+  > is removed with it (spec 011).
   """
   def default_channel_log_level do
     @default_channel_log_level

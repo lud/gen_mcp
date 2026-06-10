@@ -115,7 +115,29 @@
           {Credo.Check.Readability.UnnecessaryAliasExpansion, []},
           {Credo.Check.Readability.VariableNames, []},
           {Credo.Check.Readability.WithSingleClause, []},
-          {Credo.Check.Readability.StrictModuleLayout, []},
+          {Credo.Check.Readability.StrictModuleLayout,
+           [
+             order: [
+               :moduledoc,
+               :shortdoc,
+               :behaviour,
+               :use,
+               :import,
+               :alias,
+               :require,
+               :module,
+               :defstruct,
+               :opaque,
+               :type,
+               :typep,
+               :callback,
+               :macrocallback,
+               :optional_callbacks,
+               :public_guard,
+               :private_guard
+             ],
+             ignore: [:module_attribute, :module]
+           ]},
           {Credo.Check.Readability.MultiAlias, []},
 
           #

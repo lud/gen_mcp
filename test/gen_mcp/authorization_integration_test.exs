@@ -15,20 +15,19 @@ defmodule GenMCP.AuthorizationIntegrationTest do
   # authentication can be left to be implemented by users, relying on phoenix
   # router pipelines (or other plug systems).
   #
-  # The real test is the assigns management.
+  # The real test is the assigns management: router static assigns + auth-plug
+  # assigns + `copy_assigns` must reach the channel. This is a per-request
+  # transport concern under the stateless protocol — there is no session.
+
+  @protocol_version GenMCP.protocol_version()
 
   setup [:set_mox_global, :verify_on_exit!]
 
   def client(opts \\ []) do
-    opts = Keyword.put_new(opts, :url, "/mcp/mock-auth")
-    new(opts)
-  end
-
-  def client_with_session(session_id, opts \\ []) do
     opts =
       opts
-      |> Keyword.put(:url, "/mcp/mock-auth")
-      |> Keyword.put(:headers, %{"mcp-session-id" => session_id})
+      |> Keyword.put_new(:url, "/mcp/mock-auth")
+      |> Keyword.put_new(:headers, %{"mcp-protocol-version" => @protocol_version})
 
     new(opts)
   end
@@ -47,33 +46,13 @@ defmodule GenMCP.AuthorizationIntegrationTest do
       :ok
     end
 
-    test "initialize request returns 401 without invoking server handler" do
+    test "request returns 401 without invoking the server handler" do
       resp =
         client()
         |> post_message(%{
           jsonrpc: "2.0",
           id: 123,
-          method: "initialize",
-          params: %{
-            capabilities: %{},
-            clientInfo: %{name: "test client", version: "0.0.0"},
-            protocolVersion: "2025-06-18"
-          }
-        })
-        |> expect_status(401)
-
-      assert ["PlugWasCalled"] == resp.headers["www-authenticate"]
-
-      # Server was not called
-      Mox.verify!(ServerMock)
-    end
-
-    test "notification request returns 401 without invoking server handler" do
-      resp =
-        client()
-        |> post_message(%{
-          jsonrpc: "2.0",
-          method: "notifications/initialized",
+          method: "tools/list",
           params: %{}
         })
         |> expect_status(401)
@@ -84,17 +63,30 @@ defmodule GenMCP.AuthorizationIntegrationTest do
       Mox.verify!(ServerMock)
     end
 
-    test "tool call request returns 401 without invoking server handler" do
+    test "notification returns 401 without invoking the server handler" do
+      resp =
+        client()
+        |> post_message(%{
+          jsonrpc: "2.0",
+          method: "notifications/cancelled",
+          params: %{requestId: "x", reason: "y"}
+        })
+        |> expect_status(401)
+
+      assert ["PlugWasCalled"] == resp.headers["www-authenticate"]
+
+      # Server was not called
+      Mox.verify!(ServerMock)
+    end
+
+    test "tool call returns 401 without invoking the server handler" do
       resp =
         client()
         |> post_message(%{
           jsonrpc: "2.0",
           id: 123,
           method: "tools/call",
-          params: %{
-            name: "test_tool",
-            arguments: %{}
-          }
+          params: %{name: "test_tool", arguments: %{}}
         })
         |> expect_status(401)
 
@@ -118,113 +110,56 @@ defmodule GenMCP.AuthorizationIntegrationTest do
       :ok
     end
 
-    test "initialize request reaches server handler with merged assigns" do
+    test "request reaches the server handler with merged assigns" do
       ServerMock
-      |> expect(:init, fn sid, _ -> {:ok, {:sid, sid}} end)
-      |> expect(:handle_request, fn _req, channel, {:sid, sid} ->
+      |> expect(:init, fn _opts -> {:ok, :server_state} end)
+      |> expect(:handle_request, fn _req, channel, :server_state ->
         assert %Channel{assigns: assigns} = channel
 
-        # sessionid is set in the assigns by the client
-        assert ^sid = assigns.gen_mcp_session_id
-
-        # static assigns from router are present
+        # static assigns from the router forward are present
         assert "hello" == assigns.assign_from_forward
 
-        # assigns from auth plug are present
+        # assigns from the auth plug are present
         assert "value_from_auth" == assigns.assign_from_auth
 
-        # auth value takes precedence over static value
+        # auth value takes precedence over the static value
         assert "value_from_auth" == assigns.shared_assign
 
         # unexisting copy_assigns key is not set
         assert not Map.has_key?(assigns, :unexisting_assign)
 
-        init_result =
-          MCP.intialize_result(
-            capabilities: MCP.capabilities(tools: true),
-            server_info: MCP.server_info(name: "Mock Server", version: "0.0.1")
-          )
+        # the stateless transport mints no session id assign
+        assert not Map.has_key?(assigns, :gen_mcp_session_id)
 
-        {:reply, {:result, init_result}, :session_state}
+        {:result, MCP.list_tools_result([])}
       end)
 
-      resp =
-        client()
-        |> post_message(%{
-          jsonrpc: "2.0",
-          id: 123,
-          method: "initialize",
-          params: %{
-            capabilities: %{},
-            clientInfo: %{name: "test client", version: "0.0.0"},
-            protocolVersion: "2025-06-18"
-          }
-        })
-        |> expect_status(200)
-
-      _session_id = expect_session_header(resp)
+      client()
+      |> post_message(%{jsonrpc: "2.0", id: 123, method: "tools/list", params: %{}})
+      |> expect_status(200)
+      |> refute_session_header()
     end
 
-    test "tool call request reaches server handler with merged assigns" do
-      ServerMock
-      |> expect(:init, fn sid, _ -> {:ok, {:sid, sid}} end)
-      |> expect(:handle_request, fn _req, channel, {:sid, sid} ->
-        assert %Channel{assigns: assigns} = channel
+    test "two independent requests each reach the handler with merged assigns" do
+      # Statelessly each request stands alone: it is authenticated, builds fresh
+      # state via init/2, and carries the same merged assigns.
+      for id <- [123, 456] do
+        ServerMock
+        |> expect(:init, fn _opts -> {:ok, :server_state} end)
+        |> expect(:handle_request, fn _req, channel, :server_state ->
+          assert %Channel{assigns: assigns} = channel
+          assert assigns[:assign_from_forward] == "hello"
+          assert assigns[:assign_from_auth] == "value_from_auth"
+          assert assigns[:shared_assign] == "value_from_auth"
 
-        assert ^sid = assigns.gen_mcp_session_id
-        assert assigns[:assign_from_forward] == "hello"
-        assert assigns[:assign_from_auth] == "value_from_auth"
-        assert assigns[:shared_assign] == "value_from_auth"
+          {:result, MCP.list_tools_result([])}
+        end)
 
-        init_result =
-          MCP.intialize_result(
-            capabilities: MCP.capabilities(tools: true),
-            server_info: MCP.server_info(name: "Mock Server", version: "0.0.1")
-          )
-
-        {:reply, {:result, init_result}, :session_state_1}
-      end)
-      |> expect(:handle_request, fn _req, channel, :session_state_1 ->
-        assert %Channel{assigns: assigns} = channel
-
-        # assigns are properly merged for tool call
-        assert assigns[:assign_from_forward] == "hello"
-        assert assigns[:assign_from_auth] == "value_from_auth"
-        assert assigns[:shared_assign] == "value_from_auth"
-
-        call_tool_result = MCP.call_tool_result(text: "hello")
-
-        {:reply, {:result, call_tool_result}, :session_state_2}
-      end)
-
-      resp =
         client()
-        |> post_message(%{
-          jsonrpc: "2.0",
-          id: 123,
-          method: "initialize",
-          params: %{
-            capabilities: %{},
-            clientInfo: %{name: "test client", version: "0.0.0"},
-            protocolVersion: "2025-06-18"
-          }
-        })
+        |> post_message(%{jsonrpc: "2.0", id: id, method: "tools/list", params: %{}})
         |> expect_status(200)
-
-      session_id = expect_session_header(resp)
-
-      _resp =
-        client_with_session(session_id)
-        |> post_message(%{
-          jsonrpc: "2.0",
-          id: 456,
-          method: "tools/call",
-          params: %{
-            name: "test_tool",
-            arguments: %{}
-          }
-        })
-        |> expect_status(200)
+        |> refute_session_header()
+      end
     end
   end
 end

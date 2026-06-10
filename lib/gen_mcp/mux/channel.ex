@@ -4,7 +4,7 @@ defmodule GenMCP.Mux.Channel do
 
   @log_levels Enum.map(GenMCP.MCP.LoggingLevel.json_schema().enum, &String.to_atom/1)
 
-  @enforce_keys [:client, :progress_token, :status, :assigns, :log_level]
+  @enforce_keys [:client, :progress_token, :status, :assigns, :log_level, :meta]
   defstruct @enforce_keys
 
   @type status :: :request | :stream | :closed
@@ -12,39 +12,88 @@ defmodule GenMCP.Mux.Channel do
   @type log_level ::
           :debug | :info | :notice | :warning | :error | :critical | :alert | :emergency
 
+  @type meta :: %{
+          client_info: GenMCP.MCP.V2607.Implementation.t() | nil,
+          client_capabilities: GenMCP.MCP.V2607.ClientCapabilities.t() | nil,
+          protocol_version: binary | nil
+        }
+
   @type t :: %__MODULE__{
           client: pid | nil,
           status: status,
           progress_token: nil | binary | integer,
           assigns: map(),
-          log_level: log_level() | nil
+          log_level: log_level() | nil,
+          meta: meta
         }
+
+  @empty_meta %{client_info: nil, client_capabilities: nil, protocol_version: nil}
 
   @doc """
   Returns a channel identifying the calling process.
+
+  The progress token and the per-request log level are read from the request
+  `_meta`. The log level comes from `io.modelcontextprotocol/logLevel`; when it is
+  absent the channel's `log_level` is `nil` and logging is **disabled** (the
+  server MUST NOT emit `notifications/message` — see `send_log/4`). The transport
+  is expected to have already rejected an unrecognized level with `-32602`, so
+  only a valid level or `nil` reaches here.
+
+  The other `io.modelcontextprotocol/*` request `_meta` fields are extracted into
+  the write-once `meta` field: `client_info`, `client_capabilities` and
+  `protocol_version`. They are read-only request context, not handler state.
   """
   def from_request(req, assigns \\ %{}) do
-    progress_token =
-      case req do
-        %{params: %{_meta: %{"progressToken" => pt}}} -> pt
-        _ -> nil
-      end
+    progress_token = progress_token_from_request(req)
+    log_level = log_level_from_request(req)
+    meta = meta_from_request(req)
+    create_new(self(), progress_token, log_level, assigns, meta)
+  end
 
-    create_new(self(), progress_token, assigns)
+  defp progress_token_from_request(req) do
+    case req do
+      %{params: %{_meta: %{progressToken: pt}}} -> pt
+      _ -> nil
+    end
+  end
+
+  defp log_level_from_request(req) do
+    case req do
+      %{params: %{_meta: %{"io.modelcontextprotocol/logLevel": lvl}}} when lvl in @log_levels ->
+        lvl
+
+      _ ->
+        nil
+    end
+  end
+
+  defp meta_from_request(req) do
+    case req do
+      %{params: %{_meta: %{} = meta}} ->
+        %{
+          client_info: Map.get(meta, :"io.modelcontextprotocol/clientInfo"),
+          client_capabilities: Map.get(meta, :"io.modelcontextprotocol/clientCapabilities"),
+          protocol_version: Map.get(meta, :"io.modelcontextprotocol/protocolVersion")
+        }
+
+      _ ->
+        @empty_meta
+    end
   end
 
   @doc false
   def for_pid(pid, assigns \\ %{}) do
-    create_new(pid, nil, assigns)
+    create_new(pid, nil, nil, assigns, @empty_meta)
   end
 
-  defp create_new(owner_pid, progress_token, assigns) do
+  defp create_new(owner_pid, progress_token, log_level, assigns, meta) do
     %__MODULE__{
       client: owner_pid,
       progress_token: progress_token,
       assigns: assigns,
       status: :request,
-      log_level: GenMCP.default_channel_log_level()
+      log_level: log_level,
+      meta: meta
     }
   end
 
@@ -72,8 +121,14 @@ defmodule GenMCP.Mux.Channel do
   Sends a log message notification to the client if the message level is at or
   above the channel's configured log level.
 
-  Returns `:ok` if the message was sent or filtered out, `{:error, :closed}` if
-  the channel is closed.
+  Logging is **per-request and deprecated** (SEP-2577). When the request did not
+  declare `io.modelcontextprotocol/logLevel`, the channel's `log_level` is `nil`
+  and this is a **no-op**: the server MUST NOT emit `notifications/message` for
+  such a request. So `send_log/4` is safe to call unconditionally — it simply does
+  nothing when the client did not opt in.
+
+  Returns `:ok` if the message was sent, filtered out, or suppressed (disabled);
+  `{:error, :closed}` if the channel is closed.
   """
   def send_log(channel, level, data, logger \\ nil)
 
@@ -81,9 +136,9 @@ defmodule GenMCP.Mux.Channel do
     {:error, :closed}
   end
 
-  def send_log(%{log_level: min_level}, _level, _data, _logger)
-      when min_level not in @log_levels do
-    {:error, :invalid_min_level}
+  # Logging disabled: the request omitted io.modelcontextprotocol/logLevel.
+  def send_log(%{log_level: nil}, _level, _data, _logger) do
+    :ok
   end
 
   def send_log(%{log_level: _}, level, _data, _logger) when level not in @log_levels do
@@ -118,21 +173,6 @@ defmodule GenMCP.Mux.Channel do
 
   def send_error(channel, error) do
     send(channel.client, {:"$gen_mcp", :error, error})
-    {:ok, channel}
-  end
-
-  @doc """
-  Sends a message event with the given `data`, a binary that will be sent as-is
-  to the client.
-
-  To be a valid SSE event, the data must not contain any newlines.
-  """
-  def send_message(%{status: :closed}, data) when is_binary(data) do
-    {:error, :closed}
-  end
-
-  def send_message(channel, data) when is_binary(data) do
-    send(channel.client, {:"$gen_mcp", :raw_message, data})
     {:ok, channel}
   end
 

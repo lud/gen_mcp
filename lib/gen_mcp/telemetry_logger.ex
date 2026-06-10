@@ -1,5 +1,3 @@
-# quokka:skip-module-directives
-
 defmodule GenMCP.TelemetryLogger do
   events = %{
     # Cluster
@@ -7,11 +5,7 @@ defmodule GenMCP.TelemetryLogger do
     [:gen_mcp, :cluster, :error] => :error,
 
     # Session.
-    [:gen_mcp, :session, :init] => :debug,
-    [:gen_mcp, :session, :restore] => :debug,
-    [:gen_mcp, :session, :delete] => :debug,
-    [:gen_mcp, :session, :start_error] => :error,
-    [:gen_mcp, :session, :restore_error] => :error,
+    [:gen_mcp, :server, :init] => :debug,
 
     # Suite
     [:gen_mcp, :suite, :error, :unknown_request] => :error
@@ -90,53 +84,10 @@ defmodule GenMCP.TelemetryLogger do
     end)
   end
 
-  def handle_event(
-        [:gen_mcp, :session, :init] = p,
-        _,
-        %{server: server, session_id: session_id},
-        _
-      ) do
-    log(p, "gen_mcp session initializing with #{inspect(server)}", %{
-      gen_mcp_session_id: session_id
+  def handle_event([:gen_mcp, :server, :init] = p, _, %{server_mod: server_mod, server_arg: _}, _) do
+    log(p, "gen_mcp server initializing with #{inspect(server_mod)}", %{
+      gen_mcp_server_mod: server_mod
     })
-  end
-
-  def handle_event(
-        [:gen_mcp, :session, :restore] = p,
-        _,
-        %{server: server, session_id: session_id},
-        _
-      ) do
-    log(p, "gen_mcp restoring session with #{inspect(server)}", %{gen_mcp_session_id: session_id})
-  end
-
-  def handle_event(
-        [:gen_mcp, :session, :restore_error] = p,
-        _,
-        %{reason: reason, server: server, session_id: session_id},
-        _
-      ) do
-    log(p, "gen_mcp session restore error from server #{inspect(server)}: #{inspect(reason)}", %{
-      gen_mcp_session_id: session_id
-    })
-  end
-
-  def handle_event(
-        [:gen_mcp, :session, :delete] = p,
-        _,
-        %{reason: reason, session_id: session_id},
-        _
-      ) do
-    log(p, "gen_mcp delete session for: #{inspect(reason)}", %{gen_mcp_session_id: session_id})
-  end
-
-  def handle_event(
-        [:gen_mcp, :session, :start_error] = p,
-        _,
-        %{reason: reason, session_id: session_id},
-        _
-      ) do
-    log(p, "gen_mcp session start error: #{inspect(reason)}", %{gen_mcp_session_id: session_id})
   end
 
   def handle_event(

@@ -22,12 +22,12 @@ defmodule GenMCP.Suite.PersistedClientInfo do
             client_initialized:
               boolean(decription: "True when the server received notifications/initialized")
 
+  @opaque normalized :: %{optional(binary) => term}
+
   @type t :: %__MODULE__{
           client_capabilities: ClientCapabilities.t(),
           client_initialized: boolean()
         }
-
-  @opaque normalized :: %{optional(binary) => term}
 
   defimpl JSV.Normalizer.Normalize do
     def normalize(t) do

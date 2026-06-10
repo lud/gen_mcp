@@ -1,5 +1,34 @@
-# quokka:skip-module-directives
 defmodule GenMCP.Suite do
+  @moduledoc """
+  A `GenMCP` implementation providing tools, resources, and prompts through a
+  composable extension system.
+
+  This module does not directly export functions or callbacks. Please refer to
+  the [GenMCP Suite guide](guides/002.using-mcp-suite.md) to use the suite.
+  """
+
+  # TODO(spec 004): re-implement the stateless `GenMCP` behaviour. The module
+  # still has the pre-fork callback shape, so the `@behaviour` declaration and
+  # `@impl` annotations are dropped until the rewrite (they only produced
+  # stale-callback warnings).
+
+  import GenMCP.Utils.CallbackExt
+
+  alias GenMCP.MCP
+  alias GenMCP.Mux.Channel
+  alias GenMCP.Suite.Extension
+  alias GenMCP.Suite.PersistedClientInfo
+  alias GenMCP.Suite.PromptRepo
+  alias GenMCP.Suite.ResourceRepo
+  alias GenMCP.Suite.SessionController
+  alias GenMCP.Suite.SessionController.Noop
+  alias GenMCP.Suite.Tool
+  alias GenMCP.Utils.OptsValidator
+
+  require GenMCP
+  require Logger
+  require Record
+
   provider_list = fn doc ->
     [
       default: [],
@@ -42,33 +71,6 @@ defmodule GenMCP.Suite do
       ]
     )
 
-  @moduledoc """
-  A `GenMCP` implementation providing tools, resources, and prompts through a
-  composable extension system.
-
-  This module does not directly export functions or callbacks. Please refer to
-  the [GenMCP Suite guide](guides/002.using-mcp-suite.md) to use the suite.
-  """
-
-  @behaviour GenMCP
-
-  import GenMCP.Utils.CallbackExt
-
-  alias GenMCP.MCP
-  alias GenMCP.Mux.Channel
-  alias GenMCP.Suite.Extension
-  alias GenMCP.Suite.PersistedClientInfo
-  alias GenMCP.Suite.PromptRepo
-  alias GenMCP.Suite.ResourceRepo
-  alias GenMCP.Suite.SessionController
-  alias GenMCP.Suite.SessionController.Noop
-  alias GenMCP.Suite.Tool
-  alias GenMCP.Utils.OptsValidator
-
-  require Logger
-  require Record
-  require GenMCP
-
   @supported_protocol_versions GenMCP.supported_protocol_versions()
 
   defmodule State do
@@ -107,7 +109,6 @@ defmodule GenMCP.Suite do
     @init_opts_schema
   end
 
-  @impl true
   def init(session_id, opts) do
     pre_init(session_id, opts)
   end
@@ -119,7 +120,6 @@ defmodule GenMCP.Suite do
     end
   end
 
-  @impl true
   def handle_request(
         %MCP.InitializeRequest{} = req,
         channel,
@@ -335,7 +335,6 @@ defmodule GenMCP.Suite do
     {:reply, {:error, :unsupported_request, req}, state}
   end
 
-  @impl true
   def handle_notification(%MCP.InitializedNotification{}, state) do
     %{sc_mod: sc_mod, sc_channel: sc_channel, sc_state: sc_state} = state
 
@@ -363,7 +362,6 @@ defmodule GenMCP.Suite do
     {:noreply, state}
   end
 
-  @impl true
   def handle_info({task_ref, _} = msg, state) when is_reference(task_ref) do
     state =
       case handle_task_info(msg, state) do
@@ -430,7 +428,6 @@ defmodule GenMCP.Suite do
 
   @normalized_client_root JSV.build!(PersistedClientInfo)
 
-  @impl true
   def session_fetch(session_id, channel, opts) do
     case pre_init(session_id, opts) do
       {:stop, reason} ->
@@ -446,7 +443,6 @@ defmodule GenMCP.Suite do
     end
   end
 
-  @impl true
   def session_restore(restore_data, channel, {:__init__, session_id, opts} = state) do
     {sc_mod, sc_state} = normalize_session_controller(opts)
 
@@ -471,12 +467,6 @@ defmodule GenMCP.Suite do
   def session_restore(_session_data, _channel, state) do
     reason = :already_initialized
     {:stop, {:shutdown, {:init_failure, reason}}, {:error, reason}, state}
-  end
-
-  @impl true
-  def session_delete(state) do
-    %{session_id: session_id, sc_mod: sc_mod, sc_state: sc_state} = state
-    _ = sc_mod.delete(session_id, sc_state)
   end
 
   defp session_listener_channel_change(state, event) do

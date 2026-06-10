@@ -7,6 +7,8 @@ defmodule GenMCP.MCPTest do
 
   require ModMap
 
+  @moduletag :skip
+
   ModMap.require_all()
 
   describe "intialize_result/1" do

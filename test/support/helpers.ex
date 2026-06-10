@@ -12,8 +12,4 @@ defmodule GenMCP.Test.Helpers do
   def build_channel(assigns \\ %{}) do
     GenMCP.Mux.Channel.for_pid(self(), assigns)
   end
-
-  def random_session_id do
-    Base.url_encode64(:crypto.strong_rand_bytes(36))
-  end
 end

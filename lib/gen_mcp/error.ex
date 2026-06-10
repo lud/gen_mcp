@@ -37,20 +37,40 @@ defmodule GenMCP.Error do
   @rpc_method_not_found -32_601
   @rpc_internal_error -32_603
   @mcp_resource_not_found -32_002
+  @mcp_header_mismatch -32_001
   @mcp_prompt_not_found @rpc_invalid_params
 
   # https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1442
   @mcp_unsupported_protocol_version -32_000
 
-  defcasterror :missing_session_id, @rpc_invalid_params, 400 do
+  # The body of the 403 MAY be an id-less JSON-RPC error (draft transport spec,
+  # Security & Endpoint); no specific code is mandated.
+  defcasterror {:origin_forbidden, origin}, @rpc_invalid_request, 403 do
     %{
-      message: "Header mcp-session-id was not provided"
+      message: "Origin not allowed",
+      data: %{origin: origin}
     }
   end
 
-  defcasterror :unexpected_session_id, @rpc_invalid_params, 400 do
+  # The per-request worker exited without delivering a result (crash or silent
+  # stop). The relay converts it to a proper JSON-RPC error instead of leaking
+  # a generic Bandit 500. Crash details stay in the logs, not in the response.
+  defcasterror :server_crashed, @rpc_internal_error, 500 do
     %{
-      message: "Unexpected mcp-session-id header in initialize request"
+      message: "Internal server error"
+    }
+  end
+
+  defcasterror {:header_missing, header}, @mcp_header_mismatch, 400 do
+    %{
+      message: "Missing required header #{header}"
+    }
+  end
+
+  defcasterror {:header_mismatch, header, hv, bv}, @mcp_header_mismatch, 400 do
+    %{
+      message:
+        "Header mismatch: header #{header} with value #{inspect(hv)} does not match body value #{inspect(bv)}"
     }
   end
 
@@ -66,7 +86,7 @@ defmodule GenMCP.Error do
     }
   end
 
-  defcasterror %JSV.ValidationError{} = e, @rpc_invalid_params, 200 do
+  defcasterror {:invalid_body, %JSV.ValidationError{} = e}, @rpc_invalid_params, 400 do
     %{
       data: JSV.normalize_error(e),
       message: "Invalid Parameters"
@@ -184,7 +204,7 @@ defmodule GenMCP.Error do
     }
   end
 
-  defcasterror {:unknown_method, method} when is_binary(method), @rpc_method_not_found, 200 do
+  defcasterror {:unknown_method, method} when is_binary(method), @rpc_method_not_found, 404 do
     %{
       data: %{method: method},
       message: "Unknown method #{method}"

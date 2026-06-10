@@ -1,4 +1,4 @@
-defmodule GenMCP.Mux.SessionSupervisor do
+defmodule GenMCP.ServerSupervisor do
   @moduledoc false
 
   use DynamicSupervisor
