@@ -76,6 +76,8 @@ defmodule GenMCP.MCP.V2607 do
   """
   def discover_result(opts) do
     %DiscoverResult{
+      cacheScope: :private,
+      ttlMs: @no_cache_ttl_ms,
       resultType: @result_type_complete,
       capabilities: capabilities(Keyword.get(opts, :capabilities, %{})),
       serverInfo: server_info(opts),

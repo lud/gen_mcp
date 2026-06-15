@@ -75,17 +75,19 @@ defmodule GenMCP.MixProject do
   # The 2026-07-28 RC lives in `schema/draft` and is a moving target as SEP PRs
   # land, so we pin a commit SHA rather than a branch/tag ref. Re-run codegen +
   # `check-entities` whenever this SHA is bumped.
-  @schemas_ref "9d700ed62dcf86cb77475c9b81930611a9182f46"
+  @schemas_ref "98c49d9310697a105af8ba57fe3fdc23b833d7d2"
 
   defp mcp_schemas do
-    {:modelcontextprotocol,
-     git: "https://github.com/modelcontextprotocol/modelcontextprotocol.git",
-     sparse: "schema/draft",
-     ref: @schemas_ref,
-     only: [:dev, :test],
-     compile: false,
-     runtime: false,
-     app: false}
+    {
+      :modelcontextprotocol,
+      ref: @schemas_ref,
+      git: "https://github.com/modelcontextprotocol/modelcontextprotocol.git",
+      sparse: "schema/draft",
+      only: [:dev, :test],
+      compile: false,
+      runtime: false,
+      app: false
+    }
   end
 
   defp aliases do

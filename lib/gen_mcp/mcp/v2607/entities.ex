@@ -59,6 +59,8 @@ defmodule GenMCP.MCP.V2607.ModMap do
         "ElicitRequestParams" => GenMCP.MCP.V2607.ElicitRequestParams,
         "ElicitRequestURLParams" => GenMCP.MCP.V2607.ElicitRequestURLParams,
         "ElicitResult" => GenMCP.MCP.V2607.ElicitResult,
+        "ElicitationCompleteNotificationParams" =>
+          GenMCP.MCP.V2607.ElicitationCompleteNotificationParams,
         "EmbeddedResource" => GenMCP.MCP.V2607.EmbeddedResource,
         "Error" => GenMCP.MCP.V2607.Error,
         "GetPromptRequest" => GenMCP.MCP.V2607.GetPromptRequest,
@@ -514,6 +516,9 @@ defmodule GenMCP.MCP.V2607.ClientCapabilities do
         "io.modelcontextprotocol/oauth-client-credentials"), and values are
         per-extension settings objects. An empty object indicates support with
         no settings.
+
+        Keys MUST follow the {@link MetaObject`_meta` key naming rules}, with
+        a mandatory prefix.
         """,
         type: "object"
       },
@@ -718,7 +723,14 @@ defmodule GenMCP.MCP.V2607.DiscoverResult do
 
   JsonDerive.auto(
     _merge = %{},
-    _keep_nils = [:capabilities, :resultType, :serverInfo, :supportedVersions]
+    _keep_nils = [
+      :cacheScope,
+      :capabilities,
+      :resultType,
+      :serverInfo,
+      :supportedVersions,
+      :ttlMs
+    ]
   )
 
   defschema %{
@@ -728,6 +740,7 @@ defmodule GenMCP.MCP.V2607.DiscoverResult do
     """,
     properties: %{
       _meta: GenMCP.MCP.V2607.MetaObject,
+      cacheScope: string_enum_to_atom([:private, :public]),
       capabilities: GenMCP.MCP.V2607.ServerCapabilities,
       instructions:
         string(
@@ -761,9 +774,23 @@ defmodule GenMCP.MCP.V2607.DiscoverResult do
         """,
         items: string(),
         type: "array"
+      },
+      ttlMs: %{
+        description: ~SD"""
+        A hint from the server indicating how long (in milliseconds) the
+        client MAY cache this response before re-fetching. Semantics are
+        analogous to HTTP Cache-Control max-age.
+
+        - If 0, The response SHOULD be considered immediately stale, The
+        client MAY re-fetch every time the result is needed. - If positive,
+        the client SHOULD consider the result fresh for this many milliseconds
+        after receiving the response.
+        """,
+        minimum: 0,
+        type: "integer"
       }
     },
-    required: [:capabilities, :resultType, :serverInfo, :supportedVersions],
+    required: [:cacheScope, :capabilities, :resultType, :serverInfo, :supportedVersions, :ttlMs],
     title: "MCP:DiscoverResult",
     type: "object"
   }
@@ -912,6 +939,29 @@ defmodule GenMCP.MCP.V2607.ElicitResult do
     },
     required: [:action],
     title: "MCP:ElicitResult",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.V2607.ElicitationCompleteNotificationParams do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:elicitationId])
+
+  defschema %{
+    description: ~SD"""
+    Parameters for a {@link
+    ElicitationCompleteNotificationnotifications/elicitation/complete}
+    notification.
+    """,
+    properties: %{
+      _meta: GenMCP.MCP.V2607.MetaObject,
+      elicitationId: string(description: "The ID of the elicitation that completed.")
+    },
+    required: [:elicitationId],
+    title: "MCP:ElicitationCompleteNotificationParams",
     type: "object"
   }
 
@@ -2930,6 +2980,9 @@ defmodule GenMCP.MCP.V2607.ServerCapabilities do
         identifiers (e.g., "io.modelcontextprotocol/tasks"), and values are
         per-extension settings objects. An empty object indicates support with
         no settings.
+
+        Keys MUST follow the {@link MetaObject`_meta` key naming rules}, with
+        a mandatory prefix.
         """,
         type: "object"
       },
