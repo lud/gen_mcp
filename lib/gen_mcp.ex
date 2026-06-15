@@ -158,7 +158,7 @@ defmodule GenMCP do
   Returns the supported protocol versions.
   """
   def supported_protocol_versions do
-    ["2025-11-25", "2025-06-18"]
+    ["2026-07-28"]
   end
 
   @doc """
