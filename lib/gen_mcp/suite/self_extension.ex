@@ -3,19 +3,19 @@ defmodule GenMCP.Suite.SelfExtension do
 
   @behaviour GenMCP.Suite.Extension
 
-  def new(opts) do
-    %{mod: __MODULE__, arg: opts}
+  def new(tools, resources, prompts) do
+    %{mod: __MODULE__, arg: %{tools: tools, resources: resources, prompts: prompts}}
   end
 
-  def tools(_, opts) do
-    Keyword.get(opts, :tools, [])
+  def tools(_, arg) do
+    arg.tools
   end
 
-  def resources(_, opts) do
-    Keyword.get(opts, :resources, [])
+  def resources(_, arg) do
+    arg.resources
   end
 
-  def prompts(_, opts) do
-    Keyword.get(opts, :prompts, [])
+  def prompts(_, arg) do
+    arg.prompts
   end
 end

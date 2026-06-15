@@ -3,35 +3,37 @@ defmodule GenMCP.Test.Client do
 
   import ExUnit.Assertions
 
-  alias GenMCP.MCP.ModMap
+  alias GenMCP.MCP.V2607.ModMap
 
   require ModMap
 
   ModMap.require_all()
 
+  # Outgoing messages from `post_message/3` are validated against the V2607
+  # (2026-07-28) schemas, so the test client only speaks what a conforming
+  # client can send. `notifications/initialized` is deliberately absent: it
+  # does not exist in the 2026 schemas (transitional clients send it and the
+  # transport accepts-and-ignores it) — post it with `post_invalid_message/3`.
   [
     # Requests
 
-    GenMCP.MCP.InitializeRequest,
-    # GenMCP.MCP.PingRequest,
-    GenMCP.MCP.ListResourcesRequest,
-    GenMCP.MCP.ListResourceTemplatesRequest,
-    GenMCP.MCP.ReadResourceRequest,
-    # GenMCP.MCP.SubscribeRequest,
-    # GenMCP.MCP.UnsubscribeRequest,
-    GenMCP.MCP.ListPromptsRequest,
-    GenMCP.MCP.GetPromptRequest,
-    GenMCP.MCP.ListToolsRequest,
-    GenMCP.MCP.CallToolRequest,
-    GenMCP.MCP.SetLevelRequest,
-    # GenMCP.MCP.CompleteRequest,
+    GenMCP.MCP.V2607.DiscoverRequest,
+    # GenMCP.MCP.V2607.PingRequest,
+    GenMCP.MCP.V2607.ListResourcesRequest,
+    GenMCP.MCP.V2607.ListResourceTemplatesRequest,
+    GenMCP.MCP.V2607.ReadResourceRequest,
+    # GenMCP.MCP.V2607.SubscribeRequest,
+    # GenMCP.MCP.V2607.UnsubscribeRequest,
+    GenMCP.MCP.V2607.ListPromptsRequest,
+    GenMCP.MCP.V2607.GetPromptRequest,
+    GenMCP.MCP.V2607.ListToolsRequest,
+    GenMCP.MCP.V2607.CallToolRequest,
+    # GenMCP.MCP.V2607.CompleteRequest,
 
     # Notifications
 
-    GenMCP.MCP.CancelledNotification,
-    GenMCP.MCP.InitializedNotification,
-    GenMCP.MCP.ProgressNotification,
-    GenMCP.MCP.RootsListChangedNotification
+    GenMCP.MCP.V2607.CancelledNotification,
+    GenMCP.MCP.V2607.ProgressNotification
   ]
   |> Enum.map(fn mod ->
     method = mod.json_schema().properties.method.const
@@ -181,14 +183,6 @@ defmodule GenMCP.Test.Client do
   def refute_session_header(resp) do
     assert :error = Map.fetch(resp.headers, "mcp-session-id")
     resp
-  end
-
-  # TODO(spec 004): only the skipped, session-based Suite tests still use this.
-  # Remove once those tests are rewritten for the stateless transport.
-  def expect_session_header(resp) do
-    _ = assert {:ok, [session_id]} = Map.fetch(resp.headers, "mcp-session-id")
-    assert is_binary(session_id)
-    session_id
   end
 
   def body(%{body: body}) do

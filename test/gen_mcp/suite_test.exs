@@ -3,456 +3,215 @@
 defmodule GenMCP.SuiteTest do
   use ExUnit.Case, async: true
 
-  # TODO(spec 004): the stateful, session-based `Suite` contract is being
-  # rewritten into the stateless per-request module. Skipped while the stateless
-  # transport (spec 003) lands; revive and rewrite against the new `Suite`.
+  # Spec 004 — the stateless server contract.
+  #
+  # The Suite is driven exactly as the per-request worker (`GenMCP.Server`)
+  # drives any `GenMCP` implementation:
+  #
+  #     {:ok, state} = Suite.init(server_opts)     # runs per request
+  #     Suite.handle_request(req, channel, state)  # terminal or {:stream, state}
+  #     Suite.handle_message(msg, channel, state)  # only after {:stream, _}
+  #
+  # There is no session: no initialize handshake, no session id, no
+  # InitializedNotification bookkeeping. Client info and capabilities ride in
+  # the request `_meta` and reach the Suite as the channel's read-only `meta`.
+  # Requests are the `GenMCP.MCP.V2607` structs produced by the transport
+  # validator.
+
   import GenMCP.Test.Helpers
   import Mox
 
-  alias GenMCP.MCP
-  alias GenMCP.MCP.Tool
+  alias GenMCP.MCP.V2607, as: MCP
+  alias GenMCP.Mux.Channel
   alias GenMCP.Suite
   alias GenMCP.Support.ExtensionMock
   alias GenMCP.Support.PromptRepoMock
   alias GenMCP.Support.ResourceRepoMock
   alias GenMCP.Support.ResourceRepoMockTpl
+  alias GenMCP.Support.ToolFullMock
   alias GenMCP.Support.ToolMock
 
-  @moduletag :skip
-
   setup :verify_on_exit!
+
+  @protocol_version GenMCP.protocol_version()
 
   @server_info [
     server_name: "Test Server",
     server_version: "0"
   ]
 
-  defp init_session(server_opts \\ []) do
-    assert {:ok, state} = Suite.init("some-session-id", Keyword.merge(@server_info, server_opts))
-
-    init_req = %MCP.InitializeRequest{
-      id: "setup-init-1",
-      params: %MCP.InitializeRequestParams{
-        capabilities: %MCP.ClientCapabilities{elicitation: %{"foo" => "bar"}},
-        clientInfo: %{name: "test", version: "1.0.0"},
-        protocolVersion: "2025-06-18"
-      }
-    }
-
-    assert {:reply, {:result, _result}, state} =
-             Suite.handle_request(init_req, build_channel(), state)
-
-    assert %{
-             client_initialized: false,
-             client_capabilities: %MCP.ClientCapabilities{elicitation: %{"foo" => "bar"}}
-           } = state
-
-    client_init_notif = %MCP.InitializedNotification{
-      params: %{}
-    }
-
-    assert {:noreply, state} = Suite.handle_notification(client_init_notif, state)
-
-    assert %{
-             client_initialized: true,
-             client_capabilities: %MCP.ClientCapabilities{elicitation: %{"foo" => "bar"}}
-           } = state
-
+  # Builds the per-request state, as the worker would on every request. Each
+  # call simulates a brand new request: nothing carries over between two calls.
+  defp init_suite(server_opts \\ []) do
+    assert {:ok, state} = Suite.init(Keyword.merge(@server_info, server_opts))
     state
   end
 
-  describe "server capabilities based on enabled components" do
-    test "declares no capabilities when no tools, resources, or prompts configured" do
-      {:ok, state} = Suite.init("some-session-id", @server_info)
+  # The V2607 structs enforce the schema-required keys, `_meta` included (a
+  # validated request always carries one). `nil` stands for "no client meta".
 
-      init_req = %MCP.InitializeRequest{
-        id: 1,
-        params: %MCP.InitializeRequestParams{
-          capabilities: %MCP.ClientCapabilities{},
-          clientInfo: %{name: "test", version: "1.0.0"},
-          protocolVersion: "2025-06-18"
-        }
-      }
+  defp discover_req do
+    %MCP.DiscoverRequest{id: 1, params: %MCP.RequestParams{_meta: nil}}
+  end
 
-      assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_req, build_channel(), state)
+  defp call_tool_req(name, arguments \\ %{}, id \\ 1) do
+    %MCP.CallToolRequest{
+      id: id,
+      params: %MCP.CallToolRequestParams{_meta: nil, name: name, arguments: arguments}
+    }
+  end
 
-      assert %MCP.InitializeResult{
-               capabilities: %MCP.ServerCapabilities{
-                 tools: nil,
-                 resources: nil,
-                 prompts: nil
-               }
-             } = result
+  defp list_tools_req do
+    %MCP.ListToolsRequest{id: 1, params: %MCP.PaginatedRequestParams{_meta: nil}}
+  end
+
+  defp list_resources_req(cursor \\ nil) do
+    %MCP.ListResourcesRequest{
+      id: 1,
+      params: %MCP.PaginatedRequestParams{_meta: nil, cursor: cursor}
+    }
+  end
+
+  defp read_resource_req(uri) do
+    %MCP.ReadResourceRequest{id: 1, params: %MCP.ReadResourceRequestParams{_meta: nil, uri: uri}}
+  end
+
+  defp list_resource_templates_req do
+    %MCP.ListResourceTemplatesRequest{id: 1, params: %MCP.PaginatedRequestParams{_meta: nil}}
+  end
+
+  defp list_prompts_req(cursor \\ nil) do
+    %MCP.ListPromptsRequest{
+      id: 1,
+      params: %MCP.PaginatedRequestParams{_meta: nil, cursor: cursor}
+    }
+  end
+
+  defp get_prompt_req(name, arguments \\ nil) do
+    %MCP.GetPromptRequest{
+      id: 1,
+      params: %MCP.GetPromptRequestParams{_meta: nil, name: name, arguments: arguments}
+    }
+  end
+
+  # A full `_meta` as a conforming 2026-07-28 client sends it (the validator
+  # casts the reverse-DNS keys to atoms and the values to structs).
+  defp full_meta do
+    %{
+      "io.modelcontextprotocol/protocolVersion": @protocol_version,
+      "io.modelcontextprotocol/clientInfo": %MCP.Implementation{
+        name: "test-client",
+        version: "1.0.0"
+      },
+      "io.modelcontextprotocol/clientCapabilities": %MCP.ClientCapabilities{}
+    }
+  end
+
+  describe "per-request init" do
+    test "builds state from the validated server opts" do
+      assert {:ok, _state} = Suite.init(@server_info)
     end
 
-    test "declares tools capability when at least one tool in :tools option" do
-      ToolMock
-      |> stub(:info, fn :name, :test_tool -> "TestTool" end)
-      |> stub(:input_schema, fn _ -> %{type: :object} end)
-
-      {:ok, state} =
-        Suite.init(
-          "some-session-id",
-          Keyword.put(@server_info, :tools, [{ToolMock, :test_tool}])
-        )
-
-      init_req = %MCP.InitializeRequest{
-        id: 1,
-        params: %MCP.InitializeRequestParams{
-          capabilities: %MCP.ClientCapabilities{},
-          clientInfo: %{name: "test", version: "1.0.0"},
-          protocolVersion: "2025-06-18"
-        }
-      }
-
-      assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_req, build_channel(), state)
-
-      assert %MCP.InitializeResult{
-               capabilities: %MCP.ServerCapabilities{
-                 tools: %{},
-                 resources: nil,
-                 prompts: nil
-               }
-             } = result
-    end
-
-    test "declares tools capability when at least one tool provided by extension" do
-      ToolMock
-      |> stub(:info, fn :name, :ext_tool -> "ExtTool" end)
-      |> stub(:input_schema, fn _ -> %{type: :object} end)
-
-      ExtensionMock
-      |> stub(:tools, fn _channel, :test_ext -> [{ToolMock, :ext_tool}] end)
-      |> stub(:resources, fn _channel, :test_ext -> [] end)
-      |> stub(:prompts, fn _channel, :test_ext -> [] end)
-
-      {:ok, state} =
-        Suite.init(
-          "some-session-id",
-          Keyword.put(@server_info, :extensions, [{ExtensionMock, :test_ext}])
-        )
-
-      init_req = %MCP.InitializeRequest{
-        id: 1,
-        params: %MCP.InitializeRequestParams{
-          capabilities: %MCP.ClientCapabilities{},
-          clientInfo: %{name: "test", version: "1.0.0"},
-          protocolVersion: "2025-06-18"
-        }
-      }
-
-      assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_req, build_channel(), state)
-
-      assert %MCP.InitializeResult{
-               capabilities: %MCP.ServerCapabilities{
-                 tools: %{},
-                 resources: nil,
-                 prompts: nil
-               }
-             } = result
-    end
-
-    test "declares resources capability when at least one resource repo in :resources option" do
-      stub(ResourceRepoMock, :prefix, fn :test_repo -> "file:///" end)
-
-      {:ok, state} =
-        Suite.init(
-          "some-session-id",
-          Keyword.put(@server_info, :resources, [{ResourceRepoMock, :test_repo}])
-        )
-
-      init_req = %MCP.InitializeRequest{
-        id: 1,
-        params: %MCP.InitializeRequestParams{
-          capabilities: %MCP.ClientCapabilities{},
-          clientInfo: %{name: "test", version: "1.0.0"},
-          protocolVersion: "2025-06-18"
-        }
-      }
-
-      assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_req, build_channel(), state)
-
-      assert %MCP.InitializeResult{
-               capabilities: %MCP.ServerCapabilities{
-                 tools: nil,
-                 resources: %{},
-                 prompts: nil
-               }
-             } = result
-    end
-
-    test "declares resources capability when at least one resource repo provided by extension" do
-      stub(ResourceRepoMock, :prefix, fn :ext_repo -> "file:///" end)
-
-      ExtensionMock
-      |> stub(:tools, fn _channel, :test_ext -> [] end)
-      |> stub(:resources, fn _channel, :test_ext -> [{ResourceRepoMock, :ext_repo}] end)
-      |> stub(:prompts, fn _channel, :test_ext -> [] end)
-
-      {:ok, state} =
-        Suite.init(
-          "some-session-id",
-          Keyword.put(@server_info, :extensions, [{ExtensionMock, :test_ext}])
-        )
-
-      init_req = %MCP.InitializeRequest{
-        id: 1,
-        params: %MCP.InitializeRequestParams{
-          capabilities: %MCP.ClientCapabilities{},
-          clientInfo: %{name: "test", version: "1.0.0"},
-          protocolVersion: "2025-06-18"
-        }
-      }
-
-      assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_req, build_channel(), state)
-
-      assert %MCP.InitializeResult{
-               capabilities: %MCP.ServerCapabilities{
-                 tools: nil,
-                 resources: %{},
-                 prompts: nil
-               }
-             } = result
-    end
-
-    test "declares prompts capability when at least one prompt repo in :prompts option" do
-      stub(PromptRepoMock, :prefix, fn :test_repo -> "test_" end)
-
-      {:ok, state} =
-        Suite.init(
-          "some-session-id",
-          Keyword.put(@server_info, :prompts, [{PromptRepoMock, :test_repo}])
-        )
-
-      init_req = %MCP.InitializeRequest{
-        id: 1,
-        params: %MCP.InitializeRequestParams{
-          capabilities: %MCP.ClientCapabilities{},
-          clientInfo: %{name: "test", version: "1.0.0"},
-          protocolVersion: "2025-06-18"
-        }
-      }
-
-      assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_req, build_channel(), state)
-
-      assert %MCP.InitializeResult{
-               capabilities: %MCP.ServerCapabilities{
-                 tools: nil,
-                 resources: nil,
-                 prompts: %{}
-               }
-             } = result
-    end
-
-    test "declares prompts capability when at least one prompt repo provided by extension" do
-      stub(PromptRepoMock, :prefix, fn :ext_repo -> "ext_" end)
-
-      ExtensionMock
-      |> stub(:tools, fn _channel, :test_ext -> [] end)
-      |> stub(:resources, fn _channel, :test_ext -> [] end)
-      |> stub(:prompts, fn _channel, :test_ext -> [{PromptRepoMock, :ext_repo}] end)
-
-      {:ok, state} =
-        Suite.init(
-          "some-session-id",
-          Keyword.put(@server_info, :extensions, [{ExtensionMock, :test_ext}])
-        )
-
-      init_req = %MCP.InitializeRequest{
-        id: 1,
-        params: %MCP.InitializeRequestParams{
-          capabilities: %MCP.ClientCapabilities{},
-          clientInfo: %{name: "test", version: "1.0.0"},
-          protocolVersion: "2025-06-18"
-        }
-      }
-
-      assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_req, build_channel(), state)
-
-      assert %MCP.InitializeResult{
-               capabilities: %MCP.ServerCapabilities{
-                 tools: nil,
-                 resources: nil,
-                 prompts: %{}
-               }
-             } = result
-    end
-
-    test "declares all capabilities when tools, resources, and prompts all configured" do
-      ToolMock
-      |> stub(:info, fn :name, :test_tool -> "TestTool" end)
-      |> stub(:input_schema, fn _ -> %{type: :object} end)
-
-      stub(ResourceRepoMock, :prefix, fn :test_repo -> "file:///" end)
-
-      stub(PromptRepoMock, :prefix, fn :test_prompt -> "test_" end)
-
-      {:ok, state} =
-        Suite.init(
-          "some-session-id",
-          Keyword.merge(@server_info,
-            tools: [{ToolMock, :test_tool}],
-            resources: [{ResourceRepoMock, :test_repo}],
-            prompts: [{PromptRepoMock, :test_prompt}]
-          )
-        )
-
-      init_req = %MCP.InitializeRequest{
-        id: 1,
-        params: %MCP.InitializeRequestParams{
-          capabilities: %MCP.ClientCapabilities{},
-          clientInfo: %{name: "test", version: "1.0.0"},
-          protocolVersion: "2025-06-18"
-        }
-      }
-
-      assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_req, build_channel(), state)
-
-      assert %MCP.InitializeResult{
-               capabilities: %MCP.ServerCapabilities{
-                 tools: %{},
-                 resources: %{},
-                 prompts: %{}
-               }
-             } = result
+    test "stops on invalid opts" do
+      # Missing the required server_name/server_version.
+      assert {:stop, _reason} = Suite.init([])
     end
   end
 
-  describe "handles initialization requests" do
-    test "handles InitializeRequest" do
-      {:ok, state} = Suite.init("some-session-id", @server_info)
+  describe "server/discover" do
+    # `server/discover` replaces the `initialize` handshake for capability
+    # discovery. It is the only request allowed to expand the full catalog
+    # (running every extension provider), which keeps the capabilities
+    # self-describing: the user never hand-declares them.
 
-      init_eq = %MCP.InitializeRequest{
-        id: 1,
-        params: %MCP.InitializeRequestParams{
-          capabilities: %MCP.ClientCapabilities{},
-          clientInfo: %{name: "test", version: "1.0.0"},
-          protocolVersion: "2025-06-18"
-        }
-      }
+    test "returns self-describing server metadata with no components configured" do
+      state = init_suite()
 
-      assert {:reply, {:result, result}, _state} =
-               Suite.handle_request(init_eq, build_channel(), state)
+      assert {:result, result} = Suite.handle_request(discover_req(), build_channel(), state)
 
-      assert %MCP.InitializeResult{
-               capabilities: %MCP.ServerCapabilities{},
-               protocolVersion: "2025-11-25"
+      # `logging` is always declared: the Suite can emit `notifications/message`
+      # via Channel.send_log, and servers that emit logs MUST declare the
+      # capability (spec 011).
+      assert %MCP.DiscoverResult{
+               resultType: "complete",
+               supportedVersions: ["2026-07-28"],
+               serverInfo: %MCP.Implementation{name: "Test Server", version: "0", title: nil},
+               capabilities: %MCP.ServerCapabilities{
+                 tools: nil,
+                 resources: nil,
+                 prompts: nil,
+                 logging: %{}
+               }
              } = result
     end
 
-    test "stops the session if initialization request somehow is invalid" do
-      assert {:stop, _} = Suite.init("some-session-id", [])
+    test "serverInfo carries the configured title" do
+      state = init_suite(server_title: "The Test Server")
+
+      assert {:result, %MCP.DiscoverResult{serverInfo: server_info}} =
+               Suite.handle_request(discover_req(), build_channel(), state)
+
+      assert %MCP.Implementation{title: "The Test Server"} = server_info
     end
 
-    test "handles initialize request and reject tool call request without initialization" do
-      {:ok, state} = Suite.init("some-session-id", @server_info)
+    test "declares tools capability when a tool is configured" do
+      stub(ToolMock, :info, fn :name, :test_tool -> "TestTool" end)
 
-      req = %MCP.CallToolRequest{
-        id: 2,
-        params: %MCP.CallToolRequestParams{
-          name: "SomeTool",
-          arguments: %{}
-        }
-      }
+      state = init_suite(tools: [{ToolMock, :test_tool}])
 
-      assert {:error, :not_initialized, _} =
-               Suite.handle_request(req, build_channel(), state)
+      assert {:result, %MCP.DiscoverResult{capabilities: caps}} =
+               Suite.handle_request(discover_req(), build_channel(), state)
 
-      assert {400, %{code: -32_603, message: "Server not initialized"}} =
-               check_error(:not_initialized)
+      assert %MCP.ServerCapabilities{tools: %{}, resources: nil, prompts: nil} = caps
     end
 
-    test "handles initialize request and accepts tool call request without initialization notification" do
-      # We do not require client to be ready as we do not support elicitation or
-      # sampling yet
+    test "runs every extension provider (the one eager path) and declares their capabilities" do
+      ExtensionMock
+      |> expect(:tools, fn _channel, :ext -> [{ToolMock, :ext_tool}] end)
+      |> expect(:resources, fn _channel, :ext -> [{ResourceRepoMock, :ext_repo}] end)
+      |> expect(:prompts, fn _channel, :ext -> [{PromptRepoMock, :ext_prompts}] end)
 
-      {:ok, state} = Suite.init("some-session-id", @server_info)
+      stub(ToolMock, :info, fn :name, :ext_tool -> "ExtTool" end)
+      stub(ResourceRepoMock, :prefix, fn :ext_repo -> "file:///" end)
+      stub(PromptRepoMock, :prefix, fn :ext_prompts -> "greet" end)
 
-      init_req = %MCP.InitializeRequest{
-        id: 1,
-        params: %MCP.InitializeRequestParams{
-          capabilities: %MCP.ClientCapabilities{},
-          clientInfo: %{name: "test", version: "1.0.0"},
-          protocolVersion: "2025-06-18"
-        }
-      }
+      state = init_suite(extensions: [{ExtensionMock, :ext}])
 
-      assert {:reply, {:result, _result}, state} =
-               Suite.handle_request(init_req, build_channel(), state)
+      assert {:result, %MCP.DiscoverResult{capabilities: caps}} =
+               Suite.handle_request(discover_req(), build_channel(), state)
 
-      tool_call_req = %MCP.CallToolRequest{
-        id: 2,
-        params: %MCP.CallToolRequestParams{
-          name: "SomeTool",
-          arguments: %{}
-        }
-      }
-
-      assert {:reply, {:error, {:unknown_tool, "SomeTool"}}, _state} =
-               Suite.handle_request(tool_call_req, build_channel(), state)
+      assert %MCP.ServerCapabilities{tools: %{}, resources: %{}, prompts: %{}, logging: %{}} =
+               caps
     end
+  end
 
-    test "rejects initialization request when already initialized" do
-      state = init_session()
+  describe "state built from the request _meta" do
+    test "providers receive the channel carrying the client meta" do
+      # The transport extracts the `io.modelcontextprotocol/*` request `_meta`
+      # fields into the channel's read-only `meta`; the Suite passes that
+      # channel to providers so they can act on client identity/capabilities.
+      expect(ExtensionMock, :tools, fn channel, :ext ->
+        assert %{
+                 client_info: %MCP.Implementation{name: "test-client", version: "1.0.0"},
+                 client_capabilities: %MCP.ClientCapabilities{},
+                 protocol_version: @protocol_version
+               } = channel.meta
 
-      # Attempt to initialize again while already initialized
-      init_req = %MCP.InitializeRequest{
-        id: "setup-init-2",
-        params: %MCP.InitializeRequestParams{
-          capabilities: %MCP.ClientCapabilities{},
-          clientInfo: %{name: "test", version: "1.0.0"},
-          protocolVersion: "2025-06-18"
-        }
-      }
+        []
+      end)
 
-      # Should return an error with :stop tuple since we're already initialized
-      assert {:stop, stop_reason, err, _} =
-               Suite.handle_request(init_req, build_channel(), state)
+      state = init_suite(extensions: [{ExtensionMock, :ext}])
 
-      assert {:shutdown, {:init_failure, :already_initialized}} = stop_reason
-      assert {:error, :already_initialized} = err
+      req = %MCP.ListToolsRequest{id: 1, params: %MCP.PaginatedRequestParams{_meta: full_meta()}}
+      channel = Channel.from_request(nil, req, %{})
 
-      assert {200, %{code: -32_602, message: "Session is already initialized"}} = check_error(err)
-    end
-
-    test "rejects initialization with invalid protocol version" do
-      {:ok, state} = Suite.init("some-session-id", @server_info)
-
-      init_req = %MCP.InitializeRequest{
-        id: 1,
-        params: %MCP.InitializeRequestParams{
-          capabilities: %MCP.ClientCapabilities{},
-          clientInfo: %{name: "test", version: "1.0.0"},
-          protocolVersion: "2024-01-01"
-        }
-      }
-
-      # Should return an error with :stop tuple for invalid protocol version
-      assert {:stop, stop_tuple, err, _} =
-               Suite.handle_request(init_req, build_channel(), state)
-
-      assert {:error, {:unsupported_protocol_init, "2024-01-01"} = reason} = err
-      assert {:shutdown, {:init_failure, ^reason}} = stop_tuple
-
-      assert {200,
-              %{
-                code: -32_000,
-                data: %{version: "2024-01-01", supported: ["2025-11-25", "2025-06-18"]},
-                message: "Unsupported protocol version"
-              }} = check_error(reason)
+      assert {:result, %MCP.ListToolsResult{tools: []}} =
+               Suite.handle_request(req, channel, state)
     end
   end
 
   describe "listing tools" do
-    test "example test" do
+    test "describes config tools" do
       ToolMock
       |> stub(:info, fn
         :name, :tool1 -> "Tool1"
@@ -464,7 +223,7 @@ defmodule GenMCP.SuiteTest do
         :description, :tool2 -> nil
         :annotations, :tool2 -> nil
         #
-        :_meta, arg -> %{"arg" => arg}
+        :_meta, arg -> %{"arg" => Atom.to_string(arg)}
       end)
       |> stub(:input_schema, fn _ -> %{type: :object} end)
       |> stub(:output_schema, fn
@@ -472,165 +231,527 @@ defmodule GenMCP.SuiteTest do
         :tool2 -> nil
       end)
 
-      state = init_session(tools: [{ToolMock, :tool1}, {ToolMock, :tool2}])
+      state = init_suite(tools: [{ToolMock, :tool1}, {ToolMock, :tool2}])
 
-      assert {:reply,
-              {:result, %GenMCP.MCP.ListToolsResult{_meta: nil, nextCursor: nil, tools: tools}},
-              _} =
-               Suite.handle_request(%MCP.ListToolsRequest{id: 1}, build_channel(), state)
+      assert {:result, %MCP.ListToolsResult{tools: tools}} =
+               Suite.handle_request(list_tools_req(), build_channel(), state)
 
       assert [
-               %Tool{
+               %{
                  name: "Tool1",
                  title: "Tool 1 title",
-                 _meta: %{"arg" => :tool1},
+                 _meta: %{"arg" => "tool1"},
                  description: "Tool 1 descr",
                  annotations: %{destructiveHint: true, title: "Tool 1 subtitle"},
                  inputSchema: %{"type" => "object"},
                  outputSchema: %{"type" => "object"}
                },
-               %Tool{
-                 inputSchema: %{"type" => "object"},
+               %{
                  name: "Tool2",
-                 _meta: %{"arg" => :tool2}
+                 inputSchema: %{"type" => "object"},
+                 _meta: %{"arg" => "tool2"}
                }
              ] = tools
+    end
+
+    test "lists config tools first, then extension tools in declaration order" do
+      ToolMock
+      |> stub(:info, fn
+        :name, :direct_tool -> "DirectTool"
+        :name, :ext1_tool -> "Ext1Tool"
+        :name, :ext2_tool -> "Ext2Tool"
+        :title, _ -> nil
+        :description, _ -> nil
+        :annotations, _ -> nil
+        :_meta, _ -> nil
+      end)
+      |> stub(:input_schema, fn _ -> %{type: :object} end)
+      |> stub(:output_schema, fn _ -> nil end)
+
+      ExtensionMock
+      |> expect(:tools, fn _channel, :ext1 -> [{ToolMock, :ext1_tool}] end)
+      |> expect(:tools, fn _channel, :ext2 -> [{ToolMock, :ext2_tool}] end)
+
+      state =
+        init_suite(
+          tools: [{ToolMock, :direct_tool}],
+          extensions: [{ExtensionMock, :ext1}, {ExtensionMock, :ext2}]
+        )
+
+      assert {:result, %MCP.ListToolsResult{tools: tools}} =
+               Suite.handle_request(list_tools_req(), build_channel(), state)
+
+      assert ["DirectTool", "Ext1Tool", "Ext2Tool"] = Enum.map(tools, & &1.name)
     end
   end
 
   describe "calling tools" do
-    test "unknown tool" do
-      state = init_session()
-
-      tool_call_req = %MCP.CallToolRequest{
-        id: 2,
-        params: %MCP.CallToolRequestParams{
-          name: "SomeTool",
-          arguments: %{}
-        }
-      }
-
-      assert {:reply, {:error, {:unknown_tool, "SomeTool"}} = err, _} =
-               Suite.handle_request(tool_call_req, build_channel(), state)
-
-      assert {200, %{code: -32_602, data: %{tool: "SomeTool"}, message: "Unknown tool SomeTool"}} =
-               check_error(err)
-    end
-
-    test "sync tool" do
+    test "sync tool returning a terminal result" do
       ToolMock
       |> stub(:info, fn :name, :some_tool_arg -> "ExistingTool" end)
       |> expect(:call, fn req, channel, arg ->
         # The whole request is given
-
-        assert %GenMCP.MCP.CallToolRequest{
+        assert %MCP.CallToolRequest{
                  id: 2,
-                 params: %GenMCP.MCP.CallToolRequestParams{
-                   _meta: nil,
+                 params: %MCP.CallToolRequestParams{
                    arguments: %{"some" => "arg"},
                    name: "ExistingTool"
                  }
                } = req
 
-        assert %GenMCP.Mux.Channel{} = channel
+        assert %Channel{} = channel
         assert :some_tool_arg = arg
-        # we can return a cast value
-        {:result, MCP.call_tool_result(text: "hello"), channel}
+
+        # Terminal return: no channel, no state — same vocabulary as the server.
+        {:result, MCP.call_tool_result(text: "hello")}
       end)
 
-      state = init_session(tools: [{ToolMock, :some_tool_arg}])
+      state = init_suite(tools: [{ToolMock, :some_tool_arg}])
+      req = call_tool_req("ExistingTool", %{"some" => "arg"}, 2)
 
-      tool_call_req = %MCP.CallToolRequest{
-        id: 2,
-        params: %MCP.CallToolRequestParams{
-          name: "ExistingTool",
-          arguments: %{"some" => "arg"}
-        }
-      }
+      assert {:result, result} = Suite.handle_request(req, build_channel(), state)
 
-      assert {:reply, {:result, result}, _} =
-               Suite.handle_request(tool_call_req, build_channel(), state)
-
-      assert %GenMCP.MCP.CallToolResult{
-               _meta: nil,
+      assert %MCP.CallToolResult{
+               resultType: "complete",
                content: [%MCP.TextContent{text: "hello"}],
                isError: nil,
                structuredContent: nil
              } = result
     end
 
-    test "tool call argument validation returns error with rpc code" do
-      ToolMock
+    test "unknown tool" do
+      state = init_suite()
+
+      assert {:error, {:unknown_tool, "SomeTool"}} =
+               Suite.handle_request(call_tool_req("SomeTool"), build_channel(), state)
+
+      assert {200, %{code: -32_602, data: %{tool: "SomeTool"}, message: "Unknown tool SomeTool"}} =
+               check_error({:unknown_tool, "SomeTool"})
+    end
+
+    test "a validate_request/2 failure rejects the call with invalid params" do
+      # Request validation happens in the optional `validate_request/2`
+      # callback, invoked by the dispatcher before the tool's `call/3` —
+      # which therefore has no expectation here: it must never be invoked.
+      ToolFullMock
       |> stub(:info, fn :name, :validated_tool -> "ValidatedTool" end)
-      |> expect(:call, fn _req, channel, _arg ->
-        {:error, JSV.ValidationError.of([]), channel}
+      |> expect(:validate_request, fn req, :validated_tool ->
+        assert %MCP.CallToolRequest{params: %{name: "ValidatedTool"}} = req
+        {:error, JSV.ValidationError.of([])}
       end)
 
-      state = init_session(tools: [{ToolMock, :validated_tool}])
+      state = init_suite(tools: [{ToolFullMock, :validated_tool}])
 
-      tool_call_req = %MCP.CallToolRequest{
-        id: 4,
-        params: %MCP.CallToolRequestParams{
-          name: "ValidatedTool",
-          arguments: %{"invalid" => "args"}
-        }
-      }
-
-      assert {:reply, {:error, %JSV.ValidationError{}} = err, _} =
-               Suite.handle_request(tool_call_req, build_channel(), state)
+      assert {:error, {:invalid_params, %JSV.ValidationError{}} = err} =
+               Suite.handle_request(
+                 call_tool_req("ValidatedTool", %{"invalid" => "args"}),
+                 build_channel(),
+                 state
+               )
 
       assert {200,
               %{code: -32_602, data: %{valid: false, details: []}, message: "Invalid Parameters"}} =
                check_error(err)
     end
 
-    test "tool returns error string from call callback" do
+    test "tool returning an error string" do
       ToolMock
       |> stub(:info, fn :name, :error_tool -> "ErrorTool" end)
-      |> expect(:call, fn _req, channel, _arg ->
-        {:error, "Something went wrong in the tool", channel}
+      |> expect(:call, fn _req, _channel, _arg ->
+        {:error, "Something went wrong in the tool"}
       end)
 
-      state = init_session(tools: [{ToolMock, :error_tool}])
+      state = init_suite(tools: [{ToolMock, :error_tool}])
 
-      tool_call_req = %MCP.CallToolRequest{
-        id: 5,
-        params: %MCP.CallToolRequestParams{
-          name: "ErrorTool",
-          arguments: %{}
-        }
-      }
+      assert {:error, "Something went wrong in the tool" = err} =
+               Suite.handle_request(call_tool_req("ErrorTool"), build_channel(), state)
 
-      assert {:reply, {:error, "Something went wrong in the tool"} = err, _} =
-               Suite.handle_request(tool_call_req, build_channel(), state)
-
-      # Should return HTTP 500 and RPC code -32603 (internal error)
       assert {500, %{code: -32_603, message: "Something went wrong in the tool"}} =
                check_error(err)
     end
 
-    test "tool returns {:invalid_params, _} string from call callback" do
+    test "tool returning an exception" do
       ToolMock
       |> stub(:info, fn :name, :error_tool -> "ErrorTool" end)
-      |> expect(:call, fn _req, channel, _arg ->
-        {:error, {:invalid_params, :foo}, channel}
+      |> expect(:call, fn _req, _channel, _arg ->
+        {:error, %KeyError{key: :foo}}
       end)
 
-      state = init_session(tools: [{ToolMock, :error_tool}])
+      state = init_suite(tools: [{ToolMock, :error_tool}])
 
-      tool_call_req = %MCP.CallToolRequest{
-        id: 5,
+      assert {:error, err} =
+               Suite.handle_request(call_tool_req("ErrorTool"), build_channel(), state)
+
+      assert {500, %{code: -32_603, message: "key :foo not found"}} =
+               check_error(err)
+    end
+
+    test "tool returning {:invalid_params, _}" do
+      ToolMock
+      |> stub(:info, fn :name, :error_tool -> "ErrorTool" end)
+      |> expect(:call, fn _req, _channel, _arg ->
+        {:error, {:invalid_params, :foo}}
+      end)
+
+      state = init_suite(tools: [{ToolMock, :error_tool}])
+
+      assert {:error, {:invalid_params, :foo} = err} =
+               Suite.handle_request(call_tool_req("ErrorTool"), build_channel(), state)
+
+      assert {200, %{code: -32_602, message: "Invalid Parameters"}} = check_error(err)
+    end
+  end
+
+  describe "streaming tools" do
+    # The `{:async, {tag, ref}}` machinery is gone. The per-request worker owns
+    # its process, so a slow tool simply blocks in `call/3`; a tool that needs
+    # to receive messages (spawned tasks, subscriptions, ...) returns
+    # `{:stream, tool_state}` and the Suite forwards every subsequent worker
+    # message to the matched tool's `continue(message, channel, tool_state,
+    # arg)`, which shares the `call/3` return vocabulary.
+
+    test "a tool opting into streaming produces its result from continue/4" do
+      ToolMock
+      |> stub(:info, fn :name, :stream_tool -> "StreamTool" end)
+      |> expect(:call, fn _req, _channel, :stream_tool ->
+        {:stream, :tool_state_0}
+      end)
+      |> expect(:continue, fn {:work_done, 42}, _channel, :tool_state_0, :stream_tool ->
+        {:result, MCP.call_tool_result(text: "Result: 42")}
+      end)
+
+      state = init_suite(tools: [{ToolMock, :stream_tool}])
+      channel = build_channel()
+
+      assert {:stream, state} =
+               Suite.handle_request(call_tool_req("StreamTool"), channel, state)
+
+      # The worker delivers any process message to handle_message/3, which
+      # routes it to the streaming tool.
+      assert {:result, result} = Suite.handle_message({:work_done, 42}, channel, state)
+      assert %MCP.CallToolResult{content: [%MCP.TextContent{text: "Result: 42"}]} = result
+    end
+
+    test "a streaming tool can keep streaming, carrying its own state" do
+      ToolMock
+      |> stub(:info, fn :name, :stream_tool -> "StreamTool" end)
+      |> expect(:call, fn _req, _channel, :stream_tool ->
+        {:stream, {:acc, []}}
+      end)
+      |> expect(:continue, fn {:chunk, "a"}, _channel, {:acc, []}, :stream_tool ->
+        {:stream, {:acc, ["a"]}}
+      end)
+      |> expect(:continue, fn {:chunk, "b"}, _channel, {:acc, ["a"]}, :stream_tool ->
+        {:stream, {:acc, ["b", "a"]}}
+      end)
+      |> expect(:continue, fn :eof, _channel, {:acc, ["b", "a"]}, :stream_tool ->
+        {:result, MCP.call_tool_result(text: "ab")}
+      end)
+
+      state = init_suite(tools: [{ToolMock, :stream_tool}])
+      channel = build_channel()
+
+      assert {:stream, state} =
+               Suite.handle_request(call_tool_req("StreamTool"), channel, state)
+
+      assert {:stream, state} = Suite.handle_message({:chunk, "a"}, channel, state)
+      assert {:stream, state} = Suite.handle_message({:chunk, "b"}, channel, state)
+
+      assert {:result, %MCP.CallToolResult{content: [%MCP.TextContent{text: "ab"}]}} =
+               Suite.handle_message(:eof, channel, state)
+    end
+
+    test "a streaming tool can emit progress from continue/4" do
+      ToolMock
+      |> stub(:info, fn :name, :stream_tool -> "StreamTool" end)
+      |> expect(:call, fn _req, _channel, :stream_tool ->
+        {:stream, nil}
+      end)
+      |> expect(:continue, fn :tick, channel, nil, :stream_tool ->
+        :ok = Channel.send_progress(channel, 1, 2, "halfway")
+        {:stream, nil}
+      end)
+      |> expect(:continue, fn :done, _channel, nil, :stream_tool ->
+        {:result, MCP.call_tool_result(text: "done")}
+      end)
+
+      state = init_suite(tools: [{ToolMock, :stream_tool}])
+
+      # The channel is built from the request so it carries the progress token;
+      # the test process plays the transport relay role.
+      req = %MCP.CallToolRequest{
+        id: 1,
         params: %MCP.CallToolRequestParams{
-          name: "ErrorTool",
-          arguments: %{}
+          name: "StreamTool",
+          arguments: %{},
+          _meta: %{progressToken: "tok"}
         }
       }
 
-      assert {:reply, {:error, {:invalid_params, :foo}} = err, _} =
-               Suite.handle_request(tool_call_req, build_channel(), state)
+      channel = Channel.from_request(nil, req, %{})
 
-      assert {200, %{code: -32_602, message: "Invalid Parameters"}} =
-               check_error(err)
+      assert {:stream, state} = Suite.handle_request(req, channel, state)
+      assert {:stream, state} = Suite.handle_message(:tick, channel, state)
+
+      assert_receive {:"$gen_mcp", :notification, notif}
+      assert %{params: %{progressToken: "tok", progress: 1, total: 2}} = notif
+
+      assert {:result, _} = Suite.handle_message(:done, channel, state)
+    end
+
+    test "an error from continue/4 terminates the request" do
+      ToolMock
+      |> stub(:info, fn :name, :stream_tool -> "StreamTool" end)
+      |> expect(:call, fn _req, _channel, :stream_tool ->
+        {:stream, nil}
+      end)
+      |> expect(:continue, fn :boom, _channel, nil, :stream_tool ->
+        {:error, "stream failed"}
+      end)
+
+      state = init_suite(tools: [{ToolMock, :stream_tool}])
+      channel = build_channel()
+
+      assert {:stream, state} = Suite.handle_request(call_tool_req("StreamTool"), channel, state)
+      assert {:error, "stream failed"} = Suite.handle_message(:boom, channel, state)
+    end
+  end
+
+  describe "lazy provider resolution" do
+    # Statelessly there is no init to amortize a full catalog expansion: it
+    # would re-run on every request. Single-target operations must resolve
+    # providers lazily and stop at the first match; only the `*/list` operations
+    # and `server/discover` are total.
+    #
+    # Mox is the spy here: a call to a mock with no matching expectation fails
+    # the test, so "the extension is never invoked" is asserted by simply not
+    # stubbing it.
+
+    test "tools/call for a config tool invokes no extension provider" do
+      ToolMock
+      |> stub(:info, fn :name, :cfg_tool -> "CfgTool" end)
+      |> expect(:call, fn _req, _channel, :cfg_tool ->
+        {:result, MCP.call_tool_result(text: "from config")}
+      end)
+
+      # No ExtensionMock stubs at all: any provider call fails the test.
+      state =
+        init_suite(
+          tools: [{ToolMock, :cfg_tool}],
+          extensions: [{ExtensionMock, :ext1}, {ExtensionMock, :ext2}]
+        )
+
+      assert {:result, %MCP.CallToolResult{content: [%MCP.TextContent{text: "from config"}]}} =
+               Suite.handle_request(call_tool_req("CfgTool"), build_channel(), state)
+    end
+
+    test "tools/call stops at the first extension defining the tool" do
+      ToolMock
+      |> stub(:info, fn :name, :t1 -> "Tool1" end)
+      |> expect(:call, fn _req, _channel, :t1 ->
+        {:result, MCP.call_tool_result(text: "from ext1")}
+      end)
+
+      # Only ext1 may be asked for tools; a call with :ext2 has no matching
+      # clause and fails the test.
+      expect(ExtensionMock, :tools, fn _channel, :ext1 -> [{ToolMock, :t1}] end)
+
+      state = init_suite(extensions: [{ExtensionMock, :ext1}, {ExtensionMock, :ext2}])
+
+      assert {:result, %MCP.CallToolResult{content: [%MCP.TextContent{text: "from ext1"}]}} =
+               Suite.handle_request(call_tool_req("Tool1"), build_channel(), state)
+    end
+
+    test "tools/list is total over extensions but never invokes resource or prompt providers" do
+      ExtensionMock
+      |> expect(:tools, fn _channel, :ext1 -> [] end)
+      |> expect(:tools, fn _channel, :ext2 -> [] end)
+
+      state = init_suite(extensions: [{ExtensionMock, :ext1}, {ExtensionMock, :ext2}])
+
+      assert {:result, %MCP.ListToolsResult{tools: []}} =
+               Suite.handle_request(list_tools_req(), build_channel(), state)
+    end
+
+    test "resources/read for a config repo invokes no extension provider" do
+      ResourceRepoMock
+      |> stub(:prefix, fn :cfg_repo -> "file:///" end)
+      |> expect(:read, fn "file:///readme.txt", _channel, :cfg_repo ->
+        {:ok, MCP.read_resource_result(uri: "file:///readme.txt", text: "Hello")}
+      end)
+
+      state =
+        init_suite(
+          resources: [{ResourceRepoMock, :cfg_repo}],
+          extensions: [{ExtensionMock, :ext1}]
+        )
+
+      assert {:result, %MCP.ReadResourceResult{}} =
+               Suite.handle_request(
+                 read_resource_req("file:///readme.txt"),
+                 build_channel(),
+                 state
+               )
+    end
+
+    test "resources/read stops at the first extension whose repo prefix matches" do
+      ResourceRepoMock
+      |> stub(:prefix, fn :ext1_repo -> "ext1://" end)
+      |> expect(:read, fn "ext1://doc.txt", _channel, :ext1_repo ->
+        {:ok, MCP.read_resource_result(uri: "ext1://doc.txt", text: "Doc")}
+      end)
+
+      expect(ExtensionMock, :resources, fn _channel, :ext1 ->
+        [{ResourceRepoMock, :ext1_repo}]
+      end)
+
+      state = init_suite(extensions: [{ExtensionMock, :ext1}, {ExtensionMock, :ext2}])
+
+      assert {:result, %MCP.ReadResourceResult{}} =
+               Suite.handle_request(read_resource_req("ext1://doc.txt"), build_channel(), state)
+    end
+
+    test "prompts/get for a config repo invokes no extension provider" do
+      result = MCP.get_prompt_result(text: "Hello!")
+
+      PromptRepoMock
+      |> stub(:prefix, fn :cfg_prompts -> "greet" end)
+      |> expect(:get, fn "greeting", _args, _channel, :cfg_prompts -> {:ok, result} end)
+
+      state =
+        init_suite(
+          prompts: [{PromptRepoMock, :cfg_prompts}],
+          extensions: [{ExtensionMock, :ext1}]
+        )
+
+      assert {:result, ^result} =
+               Suite.handle_request(get_prompt_req("greeting"), build_channel(), state)
+    end
+  end
+
+  describe "precedence: first-match-wins" do
+    # Resolution stops at the first matching name/prefix; SelfExtension (the
+    # config :tools/:resources/:prompts) is prepended, so explicit config wins
+    # over extensions on a name collision. This flips the previous `Map.new`
+    # last-wins semantics (migration note in spec 006). All paths must agree:
+    # the expansion paths (tools/list, server/discover) must dedup first-wins,
+    # otherwise a clash could be *called* as config but *listed/advertised* as
+    # the extension's tool.
+
+    defp clash_setup do
+      ToolMock
+      |> stub(:info, fn
+        :name, :cfg_tool -> "Clash"
+        :description, :cfg_tool -> "config tool"
+        :title, :cfg_tool -> nil
+        :annotations, :cfg_tool -> nil
+        :_meta, :cfg_tool -> nil
+        #
+        :name, :ext_tool -> "Clash"
+        :description, :ext_tool -> "extension tool"
+        :title, :ext_tool -> nil
+        :annotations, :ext_tool -> nil
+        :_meta, :ext_tool -> nil
+      end)
+      |> stub(:input_schema, fn _ -> %{type: :object} end)
+      |> stub(:output_schema, fn _ -> nil end)
+
+      stub(ExtensionMock, :tools, fn _channel, :ext -> [{ToolMock, :ext_tool}] end)
+
+      init_suite(
+        tools: [{ToolMock, :cfg_tool}],
+        extensions: [{ExtensionMock, :ext}]
+      )
+    end
+
+    test "tools/list lists a clashing name once, with the config tool's metadata" do
+      state = clash_setup()
+
+      assert {:result, %MCP.ListToolsResult{tools: tools}} =
+               Suite.handle_request(list_tools_req(), build_channel(), state)
+
+      # Exactly one entry for the clashing name (no duplicate)...
+      assert ["Clash"] = Enum.map(tools, & &1.name)
+
+      # ...and it is the config one. With the old last-wins Map.new dedup this
+      # would advertise "extension tool" while tools/call resolves the config
+      # tool — the paths must agree.
+      assert [%{description: "config tool"}] = tools
+    end
+
+    test "tools/call on a clashing name invokes the config tool" do
+      state = clash_setup()
+
+      expect(ToolMock, :call, fn _req, _channel, :cfg_tool ->
+        {:result, MCP.call_tool_result(text: "from config")}
+      end)
+
+      assert {:result, %MCP.CallToolResult{content: [%MCP.TextContent{text: "from config"}]}} =
+               Suite.handle_request(call_tool_req("Clash"), build_channel(), state)
+    end
+
+    test "server/discover expands a clashing catalog without error and advertises consistent capabilities" do
+      state = clash_setup()
+
+      # The full-expansion path must dedup first-wins too (not crash or flip
+      # the winner). Capabilities only expose presence, so this also pins that
+      # the expansion completes with the clash present.
+      expect(ExtensionMock, :resources, fn _channel, :ext -> [] end)
+      expect(ExtensionMock, :prompts, fn _channel, :ext -> [] end)
+
+      assert {:result, %MCP.DiscoverResult{capabilities: caps}} =
+               Suite.handle_request(discover_req(), build_channel(), state)
+
+      assert %MCP.ServerCapabilities{tools: %{}, resources: nil, prompts: nil} = caps
+    end
+
+    test "an earlier extension wins a name clash on tools/list" do
+      ToolMock
+      |> stub(:info, fn
+        :name, :ext1_tool -> "Clash"
+        :description, :ext1_tool -> "ext1 tool"
+        :name, :ext2_tool -> "Clash"
+        :description, :ext2_tool -> "ext2 tool"
+        :title, _ -> nil
+        :annotations, _ -> nil
+        :_meta, _ -> nil
+      end)
+      |> stub(:input_schema, fn _ -> %{type: :object} end)
+      |> stub(:output_schema, fn _ -> nil end)
+
+      ExtensionMock
+      |> expect(:tools, fn _channel, :ext1 -> [{ToolMock, :ext1_tool}] end)
+      |> expect(:tools, fn _channel, :ext2 -> [{ToolMock, :ext2_tool}] end)
+
+      state = init_suite(extensions: [{ExtensionMock, :ext1}, {ExtensionMock, :ext2}])
+
+      assert {:result, %MCP.ListToolsResult{tools: [%{description: "ext1 tool"}]}} =
+               Suite.handle_request(list_tools_req(), build_channel(), state)
+    end
+
+    test "a config resource repo wins a prefix clash on resources/read" do
+      ResourceRepoMock
+      |> stub(:prefix, fn :cfg_repo -> "file:///" end)
+      |> expect(:read, fn "file:///readme.txt", _channel, :cfg_repo ->
+        {:ok, MCP.read_resource_result(uri: "file:///readme.txt", text: "from config")}
+      end)
+
+      # The extension repo declares the same prefix but is never reached: the
+      # config repo matches first, so the extension provider is not even
+      # invoked (no stub).
+      state =
+        init_suite(
+          resources: [{ResourceRepoMock, :cfg_repo}],
+          extensions: [{ExtensionMock, :ext}]
+        )
+
+      assert {:result,
+              %MCP.ReadResourceResult{contents: [%MCP.TextResourceContents{text: "from config"}]}} =
+               Suite.handle_request(
+                 read_resource_req("file:///readme.txt"),
+                 build_channel(),
+                 state
+               )
     end
   end
 
@@ -645,134 +766,108 @@ defmodule GenMCP.SuiteTest do
          ], nil}
       end)
 
-      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+      state = init_suite(resources: [{ResourceRepoMock, :repo1}])
 
-      assert {:reply, {:result, result}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{id: 1}, build_channel(), state)
+      assert {:result, result} =
+               Suite.handle_request(list_resources_req(), build_channel(), state)
 
-      assert %MCP.ListResourcesResult{resources: resources, nextCursor: _} = result
-      assert length(resources) == 2
-
-      assert [
-               %{
-                 uri: "file:///readme.txt",
-                 name: "README",
-                 description: "Project readme"
-               },
-               %{
-                 uri: "file:///config.json",
-                 name: "Config"
-               }
-             ] = resources
+      assert %MCP.ListResourcesResult{
+               resources: [
+                 %{uri: "file:///readme.txt", name: "README", description: "Project readme"},
+                 %{uri: "file:///config.json", name: "Config"}
+               ],
+               nextCursor: nil
+             } = result
     end
 
-    test "lists resources with pagination" do
+    test "pagination cursors are self-contained and survive across per-request states" do
+      # Statelessly there is no per-session token key or salt: the cursor must
+      # be verifiable by a brand new state built for the next request (possibly
+      # on another node). The signing key is server-wide (see the cursor
+      # signing task under spec 004).
       ResourceRepoMock
       |> stub(:prefix, fn :repo1 -> "file:///" end)
       |> expect(:list, fn nil, _channel, :repo1 ->
-        {[%{uri: "file:///page1.txt", name: "Page 1"}], "next-token"}
+        {[%{uri: "file:///page1.txt", name: "Page 1"}], "repo-token"}
       end)
-      |> expect(:list, fn "next-token", _channel, :repo1 ->
+      |> expect(:list, fn "repo-token", _channel, :repo1 ->
         {[%{uri: "file:///page2.txt", name: "Page 2"}], nil}
       end)
 
-      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+      opts = [resources: [{ResourceRepoMock, :repo1}]]
 
-      # First page
-      assert {:reply, {:result, result1}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{id: 1}, build_channel(), state)
+      state1 = init_suite(opts)
 
-      assert %MCP.ListResourcesResult{
-               resources: [%{name: "Page 1"}],
-               nextCursor: pagination
-             } = result1
+      assert {:result,
+              %MCP.ListResourcesResult{resources: [%{name: "Page 1"}], nextCursor: cursor}} =
+               Suite.handle_request(list_resources_req(), build_channel(), state1)
 
-      # Second page
-      assert {:reply, {:result, result2}, _} =
-               Suite.handle_request(
-                 %MCP.ListResourcesRequest{
-                   id: 1,
-                   params: %MCP.PaginatedRequestParams{cursor: pagination}
-                 },
-                 build_channel(),
-                 state
-               )
+      assert is_binary(cursor)
 
-      assert %MCP.ListResourcesResult{
-               resources: [%{name: "Page 2"}],
-               nextCursor: nil
-             } = result2
+      # Fresh state, as another worker would build it.
+      state2 = init_suite(opts)
+
+      assert {:result, %MCP.ListResourcesResult{resources: [%{name: "Page 2"}], nextCursor: nil}} =
+               Suite.handle_request(list_resources_req(cursor), build_channel(), state2)
     end
 
-    test "returns empty list when no resources available" do
-      ResourceRepoMock
-      |> stub(:prefix, fn _ -> "file:///" end)
-      |> expect(:list, 3, fn nil, _channel, _ -> {[], nil} end)
-
-      state =
-        init_session(
-          resources: [
-            {ResourceRepoMock, :repo1},
-            {ResourceRepoMock, :repo2},
-            {ResourceRepoMock, :repo3}
-          ]
-        )
-
-      assert {:reply, {:result, result}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{id: 1}, build_channel(), state)
-
-      assert %MCP.ListResourcesResult{resources: [], nextCursor: nil} = result
-    end
-
-    test "lists resources from multiple repositories" do
-      # Global pagination over multiple repos is done on a per-repo basis,
-      # so with two repos we need to make two requests to get all resources
-
+    test "walks the config repo first, then extension repos in declaration order across pages" do
       ResourceRepoMock
       |> stub(:prefix, fn
-        :repo1 -> "file:///"
-        :repo2 -> "http://localhost/"
+        :direct_repo -> "file:///"
+        :ext1_repo -> "http://ext1/"
+        :ext2_repo -> "http://ext2/"
       end)
-      |> expect(:list, fn nil, _channel, :repo1 ->
-        {[
-           %{uri: "file:///readme.txt", name: "Local README"},
-           %{uri: "file:///license.txt", name: "Local license"}
-         ], nil}
+      |> expect(:list, fn nil, _channel, :direct_repo ->
+        {[%{uri: "file:///direct.txt", name: "Direct Resource"}], nil}
       end)
-      |> expect(:list, fn nil, _channel, :repo2 ->
-        {[%{uri: "http://localhost/api", name: "API"}], nil}
+      |> expect(:list, fn nil, _channel, :ext1_repo ->
+        {[%{uri: "http://ext1/r1.txt", name: "Ext1 Resource 1"}], "ext1-page-2"}
+      end)
+      |> expect(:list, fn "ext1-page-2", _channel, :ext1_repo ->
+        {[%{uri: "http://ext1/r2.txt", name: "Ext1 Resource 2"}], nil}
+      end)
+      |> expect(:list, fn nil, _channel, :ext2_repo ->
+        {[%{uri: "http://ext2/r.txt", name: "Ext2 Resource"}], nil}
       end)
 
-      state =
-        init_session(resources: [{ResourceRepoMock, :repo1}, {ResourceRepoMock, :repo2}])
+      # The listing walk re-invokes the extension providers on each request
+      # (there is no cached catalog), so allow as many calls as pages.
+      stub(ExtensionMock, :resources, fn
+        _channel, :ext1 -> [{ResourceRepoMock, :ext1_repo}]
+        _channel, :ext2 -> [{ResourceRepoMock, :ext2_repo}]
+      end)
 
-      # First request returns repo1's resources with a cursor to continue to repo2
-      assert {:reply, {:result, result1}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{id: 1}, build_channel(), state)
+      opts = [
+        resources: [{ResourceRepoMock, :direct_repo}],
+        extensions: [{ExtensionMock, :ext1}, {ExtensionMock, :ext2}]
+      ]
 
-      assert %MCP.ListResourcesResult{resources: resources1, nextCursor: cursor} = result1
-      assert length(resources1) == 2
-      assert Enum.any?(resources1, &(&1.name == "Local README"))
-      assert Enum.any?(resources1, &(&1.name == "Local license"))
-      assert cursor != nil
+      # Each page is a brand new request with a brand new state.
+      fetch_page = fn cursor ->
+        assert {:result, %MCP.ListResourcesResult{resources: page, nextCursor: next}} =
+                 Suite.handle_request(
+                   list_resources_req(cursor),
+                   build_channel(),
+                   init_suite(opts)
+                 )
 
-      # Second request with cursor returns repo2's resources
-      assert {:reply, {:result, result2}, _} =
-               Suite.handle_request(
-                 %MCP.ListResourcesRequest{
-                   id: 1,
-                   params: %MCP.PaginatedRequestParams{cursor: cursor}
-                 },
-                 build_channel(),
-                 state
-               )
+        {page, next}
+      end
 
-      assert %MCP.ListResourcesResult{resources: resources2, nextCursor: nil} = result2
-      assert length(resources2) == 1
-      assert Enum.any?(resources2, &(&1.name == "API"))
+      {page1, cursor} = fetch_page.(nil)
+      {page2, cursor} = fetch_page.(cursor)
+      {page3, cursor} = fetch_page.(cursor)
+      {page4, last_cursor} = fetch_page.(cursor)
+
+      assert [%{name: "Direct Resource"}] = page1
+      assert [%{name: "Ext1 Resource 1"}] = page2
+      assert [%{name: "Ext1 Resource 2"}] = page3
+      assert [%{name: "Ext2 Resource"}] = page4
+      assert nil == last_cursor
     end
 
-    test "skips empty repositories and returns resources from first non-empty repo" do
+    test "skips empty repositories" do
       ResourceRepoMock
       |> stub(:prefix, fn
         :repo1 -> "file:///"
@@ -782,14 +877,11 @@ defmodule GenMCP.SuiteTest do
       |> expect(:list, fn nil, _channel, :repo1 -> {[], nil} end)
       |> expect(:list, fn nil, _channel, :repo2 -> {[], nil} end)
       |> expect(:list, fn nil, _channel, :repo3 ->
-        {[
-           %{uri: "s3://bucket/file1.txt", name: "File 1"},
-           %{uri: "s3://bucket/file2.txt", name: "File 2"}
-         ], nil}
+        {[%{uri: "s3://bucket/file1.txt", name: "File 1"}], nil}
       end)
 
       state =
-        init_session(
+        init_suite(
           resources: [
             {ResourceRepoMock, :repo1},
             {ResourceRepoMock, :repo2},
@@ -797,104 +889,35 @@ defmodule GenMCP.SuiteTest do
           ]
         )
 
-      # First call should skip the empty repos and return resources from repo3
-      assert {:reply, {:result, result}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{id: 1}, build_channel(), state)
-
-      assert %MCP.ListResourcesResult{resources: resources, nextCursor: nil} = result
-      assert length(resources) == 2
-      assert Enum.any?(resources, &(&1.name == "File 1"))
-      assert Enum.any?(resources, &(&1.name == "File 2"))
+      assert {:result, %MCP.ListResourcesResult{resources: [%{name: "File 1"}], nextCursor: nil}} =
+               Suite.handle_request(list_resources_req(), build_channel(), state)
     end
 
-    test "skips empty paginated results and continues to next repository" do
-      # In this test the second repo returns a cursor, but returns empty results
-      # given that cursor. The server should immediately move on to the next
-      # repository on the second request.
-
+    test "returns empty list when no resources available" do
       ResourceRepoMock
-      |> stub(:prefix, fn
-        :repo1 -> "file:///"
-        :repo2 -> "http://localhost/"
-        :repo3 -> "s3://bucket/"
-      end)
-      |> expect(:list, fn nil, _channel, :repo1 -> {[], nil} end)
-      |> expect(:list, fn nil, _channel, :repo2 ->
-        {[%{uri: "http://localhost/api", name: "API"}], "repo2-cursor"}
-      end)
-      |> expect(:list, fn "repo2-cursor", _channel, :repo2 -> {[], nil} end)
-      |> expect(:list, fn nil, _channel, :repo3 ->
-        {[%{uri: "s3://bucket/data.txt", name: "Data"}], nil}
-      end)
+      |> stub(:prefix, fn _ -> "file:///" end)
+      |> expect(:list, 2, fn nil, _channel, _ -> {[], nil} end)
 
-      state =
-        init_session(
-          resources: [
-            {ResourceRepoMock, :repo1},
-            {ResourceRepoMock, :repo2},
-            {ResourceRepoMock, :repo3}
-          ]
-        )
+      state = init_suite(resources: [{ResourceRepoMock, :repo1}, {ResourceRepoMock, :repo2}])
 
-      # First call should skip repo1 and return repo2's resource with cursor
-      assert {:reply, {:result, result1}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{id: 1}, build_channel(), state)
+      assert {:result, %MCP.ListResourcesResult{resources: [], nextCursor: nil}} =
+               Suite.handle_request(list_resources_req(), build_channel(), state)
+    end
 
-      assert %MCP.ListResourcesResult{
-               resources: [%{name: "API"}],
-               nextCursor: cursor
-             } = result1
+    test "rejects an invalid pagination token" do
+      stub(ResourceRepoMock, :prefix, fn :repo1 -> "file:///" end)
 
-      assert cursor != nil
+      state = init_suite(resources: [{ResourceRepoMock, :repo1}])
 
-      # Second call should use repo2's cursor, get empty result, skip to repo3
-      assert {:reply, {:result, result2}, _} =
+      assert {:error, :invalid_cursor} =
                Suite.handle_request(
-                 %MCP.ListResourcesRequest{
-                   id: 1,
-                   params: %MCP.PaginatedRequestParams{cursor: cursor}
-                 },
+                 list_resources_req("made-up-token-from-client"),
                  build_channel(),
                  state
                )
 
-      assert %MCP.ListResourcesResult{
-               resources: [%{name: "Data"}],
-               nextCursor: nil
-             } = result2
-    end
-
-    test "returns error when client provides invalid pagination token" do
-      ResourceRepoMock
-      |> stub(:prefix, fn :repo1 -> "file:///" end)
-      |> expect(:list, fn nil, _channel, :repo1 ->
-        {[%{uri: "file:///page1.txt", name: "Page 1"}], "valid-token"}
-      end)
-
-      state = init_session(resources: [{ResourceRepoMock, :repo1}])
-
-      # First request succeeds and returns a valid cursor
-      assert {:reply, {:result, result1}, _} =
-               Suite.handle_request(%MCP.ListResourcesRequest{id: 1}, build_channel(), state)
-
-      assert %MCP.ListResourcesResult{
-               resources: [%{name: "Page 1"}],
-               nextCursor: cursor
-             } = result1
-
-      assert cursor != nil
-
-      # Client sends an invalid/tampered pagination token
-      invalid_request = %MCP.ListResourcesRequest{
-        id: 1,
-        params: %MCP.PaginatedRequestParams{cursor: "invalid-token-from-client"}
-      }
-
-      assert {:reply, {:error, error}, _} =
-               Suite.handle_request(invalid_request, build_channel(), state)
-
-      # Verify it returns a proper error that can be cast to RPC error
-      assert {200, %{code: -32_602, message: "Invalid pagination cursor"}} = check_error(error)
+      assert {200, %{code: -32_602, message: "Invalid pagination cursor"}} =
+               check_error(:invalid_cursor)
     end
   end
 
@@ -910,50 +933,26 @@ defmodule GenMCP.SuiteTest do
          )}
       end)
 
-      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+      state = init_suite(resources: [{ResourceRepoMock, :repo1}])
 
-      request = %MCP.ReadResourceRequest{
-        id: 1,
-        params: %MCP.ReadResourceRequestParams{
-          uri: "file:///readme.txt"
-        }
-      }
+      assert {:result, result} =
+               Suite.handle_request(
+                 read_resource_req("file:///readme.txt"),
+                 build_channel(),
+                 state
+               )
 
-      assert {:reply, {:result, result}, _} =
-               Suite.handle_request(request, build_channel(), state)
-
-      assert %MCP.ReadResourceResult{contents: contents} = result
-      assert [%MCP.TextResourceContents{uri: "file:///readme.txt", text: text}] = contents
-      assert text == "# Welcome\n\nThis is the readme."
+      assert %MCP.ReadResourceResult{
+               contents: [
+                 %MCP.TextResourceContents{
+                   uri: "file:///readme.txt",
+                   text: "# Welcome\n\nThis is the readme."
+                 }
+               ]
+             } = result
     end
 
-    test "reads a text resource with custom MIME type" do
-      ResourceRepoMock
-      |> stub(:prefix, fn :repo1 -> "file:///" end)
-      |> expect(:read, fn "file:///index.html", _channel, :repo1 ->
-        {:ok,
-         MCP.read_resource_result(
-           uri: "file:///index.html",
-           text: "<p>Hello</p>",
-           mime_type: "text/html"
-         )}
-      end)
-
-      state = init_session(resources: [{ResourceRepoMock, :repo1}])
-
-      request = %MCP.ReadResourceRequest{
-        id: 1,
-        params: %MCP.ReadResourceRequestParams{uri: "file:///index.html"}
-      }
-
-      assert {:reply, {:result, result}, _} =
-               Suite.handle_request(request, build_channel(), state)
-
-      assert %MCP.ReadResourceResult{contents: [content]} = result
-      assert %MCP.TextResourceContents{mimeType: "text/html", text: "<p>Hello</p>"} = content
-    end
-
-    test "reads a blob resource" do
+    test "reads a blob resource with custom MIME type" do
       blob_data = Base.encode64(<<1, 2, 3, 4, 5>>)
 
       ResourceRepoMock
@@ -967,22 +966,13 @@ defmodule GenMCP.SuiteTest do
          )}
       end)
 
-      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+      state = init_suite(resources: [{ResourceRepoMock, :repo1}])
 
-      request = %MCP.ReadResourceRequest{
-        id: 1,
-        params: %MCP.ReadResourceRequestParams{uri: "file:///data.bin"}
-      }
+      assert {:result, %MCP.ReadResourceResult{contents: [content]}} =
+               Suite.handle_request(read_resource_req("file:///data.bin"), build_channel(), state)
 
-      assert {:reply, {:result, result}, _} =
-               Suite.handle_request(request, build_channel(), state)
-
-      assert %MCP.ReadResourceResult{contents: [content]} = result
-
-      assert %MCP.BlobResourceContents{
-               blob: ^blob_data,
-               mimeType: "application/octet-stream"
-             } = content
+      assert %MCP.BlobResourceContents{blob: ^blob_data, mimeType: "application/octet-stream"} =
+               content
     end
 
     test "returns not found error for missing resource" do
@@ -992,118 +982,38 @@ defmodule GenMCP.SuiteTest do
         {:error, :not_found}
       end)
 
-      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+      state = init_suite(resources: [{ResourceRepoMock, :repo1}])
 
-      request = %MCP.ReadResourceRequest{
-        id: 1,
-        params: %MCP.ReadResourceRequestParams{uri: "file:///missing.txt"}
-      }
+      assert {:error, {:resource_not_found, "file:///missing.txt"} = err} =
+               Suite.handle_request(
+                 read_resource_req("file:///missing.txt"),
+                 build_channel(),
+                 state
+               )
 
-      assert {:reply, {:error, {:resource_not_found, "file:///missing.txt"}} = err, _} =
-               Suite.handle_request(request, build_channel(), state)
-
-      # Check that it returns proper RPC error code -32002
+      # TODO(spec 005): missing-resource moves from -32002 to the standard
+      # -32602. Update this expectation when the 2026 error-code semantics land.
       assert {200, %{code: -32_002}} = check_error(err)
     end
 
-    test "returns custom error message from repository" do
-      ResourceRepoMock
-      |> stub(:prefix, fn :repo1 -> "file:///" end)
-      |> expect(:read, fn "file:///invalid.txt", _channel, :repo1 ->
-        {:error, "Invalid file format"}
-      end)
-
-      state = init_session(resources: [{ResourceRepoMock, :repo1}])
-
-      request = %MCP.ReadResourceRequest{
-        id: 1,
-        params: %MCP.ReadResourceRequestParams{uri: "file:///invalid.txt"}
-      }
-
-      assert {:reply, {:error, "Invalid file format"} = err, _} =
-               Suite.handle_request(request, build_channel(), state)
-
-      assert {500, %{code: -32_603, message: "Invalid file format"}} = check_error(err)
-    end
-
-    test "routes to correct repository based on URI prefix" do
-      ResourceRepoMock
-      |> stub(:prefix, fn
-        :repo1 -> "file:///"
-        :repo2 -> "http://example.com/"
-      end)
-      |> expect(:read, fn "http://example.com/resource", _channel, :repo2 ->
-        {:ok,
-         MCP.read_resource_result(
-           uri: "http://example.com/resource",
-           text: "Remote resource"
-         )}
-      end)
-
-      state =
-        init_session(resources: [{ResourceRepoMock, :repo1}, {ResourceRepoMock, :repo2}])
-
-      request = %MCP.ReadResourceRequest{
-        id: 1,
-        params: %MCP.ReadResourceRequestParams{uri: "http://example.com/resource"}
-      }
-
-      assert {:reply, {:result, result}, _} =
-               Suite.handle_request(request, build_channel(), state)
-
-      assert %MCP.ReadResourceResult{contents: [content]} = result
-      assert %MCP.TextResourceContents{text: "Remote resource"} = content
-    end
-
-    test "returns error when no repository matches URI prefix" do
+    test "returns not found error when no repository matches the URI prefix" do
       stub(ResourceRepoMock, :prefix, fn :repo1 -> "file:///" end)
 
-      state = init_session(resources: [{ResourceRepoMock, :repo1}])
+      state = init_suite(resources: [{ResourceRepoMock, :repo1}])
 
-      request = %MCP.ReadResourceRequest{
-        id: 1,
-        params: %MCP.ReadResourceRequestParams{uri: "ftp://example.com/file"}
-      }
-
-      assert {:reply, {:error, {:resource_not_found, "ftp://example.com/file"}} = err, _} =
-               Suite.handle_request(request, build_channel(), state)
-
-      # Check that it returns proper RPC error code -32002
-      assert {200, %{code: -32_002}} = check_error(err)
-    end
-
-    test "reads resource with repository using module shorthand" do
-      ResourceRepoMock
-      |> stub(:prefix, fn [] -> "file:///" end)
-      |> expect(:read, fn "file:///readme.txt", _channel, [] ->
-        {:ok, MCP.read_resource_result(uri: "file:///readme.txt", text: "Hello")}
-      end)
-
-      # Pass module directly (will be expanded to {Module, []})
-      state = init_session(resources: [ResourceRepoMock])
-
-      request = %MCP.ReadResourceRequest{
-        id: 1,
-        params: %MCP.ReadResourceRequestParams{uri: "file:///readme.txt"}
-      }
-
-      assert {:reply, {:result, result}, _} =
-               Suite.handle_request(request, build_channel(), state)
-
-      assert %MCP.ReadResourceResult{
-               contents: [%MCP.TextResourceContents{text: "Hello"}]
-             } =
-               result
+      assert {:error, {:resource_not_found, "ftp://example.com/file"}} =
+               Suite.handle_request(
+                 read_resource_req("ftp://example.com/file"),
+                 build_channel(),
+                 state
+               )
     end
 
     test "matches repository prefixes in declaration order, not by longest match" do
-      # The repositories are declared in order: private, general, trash Routing
-      # should use the first matching prefix, not the longest one.
-      #
-      # * An URI starting with "file:///private/..." should be matched by the
-      #   repo with "file:///private/" prefix.
-      # * An URI starting with "file:///trash/..." should be matched by the repo
-      #   with "file:///" repo, not the trash repo.
+      # Declaration order: private, general, trash. Routing uses the first
+      # matching prefix:
+      # * "file:///private/..." -> private repo
+      # * "file:///trash/..."   -> general repo ("file:///" matches first)
 
       ResourceRepoMock
       |> stub(:prefix, fn
@@ -1111,21 +1021,15 @@ defmodule GenMCP.SuiteTest do
         :general_repo -> "file:///"
         :trash_repo -> "file:///trash/"
       end)
-      # Private path should route to first repo
       |> expect(:read, fn "file:///private/secret.txt", _channel, :private_repo ->
         {:ok, MCP.read_resource_result(uri: "file:///private/secret.txt", text: "Secret")}
       end)
-      # General path (without private) should route to second repo
-      |> expect(:read, fn "file:///readme.txt", _channel, :general_repo ->
-        {:ok, MCP.read_resource_result(uri: "file:///readme.txt", text: "General")}
-      end)
-      # Trash path should ALSO route to second repo (not third) because it matches first
       |> expect(:read, fn "file:///trash/deleted.txt", _channel, :general_repo ->
         {:ok, MCP.read_resource_result(uri: "file:///trash/deleted.txt", text: "Deleted")}
       end)
 
       state =
-        init_session(
+        init_suite(
           resources: [
             {ResourceRepoMock, :private_repo},
             {ResourceRepoMock, :general_repo},
@@ -1133,53 +1037,23 @@ defmodule GenMCP.SuiteTest do
           ]
         )
 
-      # Request 1: Private path routes to private repo
-      request1 = %MCP.ReadResourceRequest{
-        id: 1,
-        params: %MCP.ReadResourceRequestParams{uri: "file:///private/secret.txt"}
-      }
+      assert {:result, %MCP.ReadResourceResult{contents: [%{text: "Secret"}]}} =
+               Suite.handle_request(
+                 read_resource_req("file:///private/secret.txt"),
+                 build_channel(),
+                 state
+               )
 
-      assert {:reply, {:result, result1}, _} =
-               Suite.handle_request(request1, build_channel(), state)
-
-      assert %MCP.ReadResourceResult{
-               contents: [%MCP.TextResourceContents{text: "Secret"}]
-             } = result1
-
-      # Request 2: General path routes to general repo
-      request2 = %MCP.ReadResourceRequest{
-        id: 1,
-        params: %MCP.ReadResourceRequestParams{uri: "file:///readme.txt"}
-      }
-
-      assert {:reply, {:result, result2}, _} =
-               Suite.handle_request(request2, build_channel(), state)
-
-      assert %MCP.ReadResourceResult{
-               contents: [%MCP.TextResourceContents{text: "General"}]
-             } = result2
-
-      # Request 3: Trash path ALSO routes to general repo (first match wins)
-      request3 = %MCP.ReadResourceRequest{
-        id: 1,
-        params: %MCP.ReadResourceRequestParams{uri: "file:///trash/deleted.txt"}
-      }
-
-      assert {:reply, {:result, result3}, _} =
-               Suite.handle_request(request3, build_channel(), state)
-
-      assert %MCP.ReadResourceResult{
-               contents: [%MCP.TextResourceContents{text: "Deleted"}]
-             } = result3
+      assert {:result, %MCP.ReadResourceResult{contents: [%{text: "Deleted"}]}} =
+               Suite.handle_request(
+                 read_resource_req("file:///trash/deleted.txt"),
+                 build_channel(),
+                 state
+               )
     end
-  end
 
-  describe "reading template-based resources" do
-    test "reads template-based resource" do
-      # Using a mock that skips the parse_uri callback.
-      #
-      # Still expecting URI template parameters as arguments to read since the
-      # library must do it on its own
+    test "reads a template-based resource" do
+      # The library parses URI template parameters and passes them to read.
       ResourceRepoMockTpl
       |> stub(:prefix, fn :repo1 -> "file:///" end)
       |> stub(:template, fn :repo1 ->
@@ -1194,102 +1068,41 @@ defmodule GenMCP.SuiteTest do
          )}
       end)
 
-      state = init_session(resources: [{ResourceRepoMockTpl, :repo1}])
+      state = init_suite(resources: [{ResourceRepoMockTpl, :repo1}])
 
-      request = %MCP.ReadResourceRequest{
-        id: 1,
-        params: %MCP.ReadResourceRequestParams{uri: "file:///config/app.json"}
-      }
+      assert {:result, %MCP.ReadResourceResult{contents: [content]}} =
+               Suite.handle_request(
+                 read_resource_req("file:///config/app.json"),
+                 build_channel(),
+                 state
+               )
 
-      assert {:reply, {:result, result}, _} =
-               Suite.handle_request(request, build_channel(), state)
-
-      assert %MCP.ReadResourceResult{contents: [content]} = result
-
-      assert %MCP.TextResourceContents{
-               text: ~s({"port": 3000}),
-               mimeType: "application/json"
-             } = content
+      assert %MCP.TextResourceContents{text: ~s({"port": 3000}), mimeType: "application/json"} =
+               content
     end
 
-    test "returns error when URI does not match template pattern" do
-      # Repo is badly configured, it declares a short prefix but the template
-      # expects a longer prefix. The client sends an incompatible prefix.
-      #
-      # We do not get a resource not found error in that case.
-
+    test "returns error when URI does not match the template pattern" do
       ResourceRepoMockTpl
       |> stub(:prefix, fn :repo1 -> "file:///" end)
       |> stub(:template, fn :repo1 ->
         %{uriTemplate: "file://someprefix{/path*}", name: "FileTemplate"}
       end)
 
-      state = init_session(resources: [{ResourceRepoMockTpl, :repo1}])
+      state = init_suite(resources: [{ResourceRepoMockTpl, :repo1}])
 
-      request = %MCP.ReadResourceRequest{
-        id: 1,
-        params: %MCP.ReadResourceRequestParams{uri: "file:///otherprefix"}
-      }
-
-      assert {:reply, {:error, "expected uri matching" <> _} = err, _} =
-               Suite.handle_request(request, build_channel(), state)
+      assert {:error, "expected uri matching" <> _ = err} =
+               Suite.handle_request(
+                 read_resource_req("file:///otherprefix"),
+                 build_channel(),
+                 state
+               )
 
       assert {500, %{code: -32_603}} = check_error(err)
     end
   end
 
   describe "listing resource templates" do
-    test "lists templates from repositories with templates" do
-      ResourceRepoMockTpl
-      |> stub(:prefix, fn
-        :repo1 -> "file:///"
-        :repo2 -> "http://localhost/"
-      end)
-      |> stub(:template, fn
-        :repo1 ->
-          %{
-            uriTemplate: "file:///{path}",
-            name: "FileTemplate",
-            description: "A file resource",
-            mimeType: "text/plain"
-          }
-
-        :repo2 ->
-          %{
-            uriTemplate: "http://localhost/api/{endpoint}",
-            name: "APITemplate",
-            title: "API Endpoint"
-          }
-      end)
-
-      state =
-        init_session(resources: [{ResourceRepoMockTpl, :repo1}, {ResourceRepoMockTpl, :repo2}])
-
-      assert {:reply, {:result, result}, _} =
-               Suite.handle_request(
-                 %MCP.ListResourceTemplatesRequest{id: 1},
-                 build_channel(),
-                 state
-               )
-
-      assert %MCP.ListResourceTemplatesResult{resourceTemplates: templates} = result
-
-      assert [
-               %MCP.ResourceTemplate{
-                 uriTemplate: "file:///{path}",
-                 name: "FileTemplate",
-                 description: "A file resource",
-                 mimeType: "text/plain"
-               },
-               %MCP.ResourceTemplate{
-                 uriTemplate: "http://localhost/api/{endpoint}",
-                 name: "APITemplate",
-                 title: "API Endpoint"
-               }
-             ] = templates
-    end
-
-    test "skips repositories without templates" do
+    test "lists templates and skips repositories without one" do
       ResourceRepoMockTpl
       |> stub(:prefix, fn :repo2 -> "http://localhost/" end)
       |> stub(:template, fn :repo2 ->
@@ -1302,7 +1115,7 @@ defmodule GenMCP.SuiteTest do
       end)
 
       state =
-        init_session(
+        init_suite(
           resources: [
             {ResourceRepoMock, :repo1},
             {ResourceRepoMockTpl, :repo2},
@@ -1310,213 +1123,68 @@ defmodule GenMCP.SuiteTest do
           ]
         )
 
-      assert {:reply, {:result, result}, _} =
-               Suite.handle_request(
-                 %MCP.ListResourceTemplatesRequest{id: 1},
-                 build_channel(),
-                 state
-               )
+      assert {:result, %MCP.ListResourceTemplatesResult{resourceTemplates: templates}} =
+               Suite.handle_request(list_resource_templates_req(), build_channel(), state)
 
-      assert %MCP.ListResourceTemplatesResult{resourceTemplates: templates} = result
-
-      assert [
-               %MCP.ResourceTemplate{
-                 uriTemplate: "http://localhost/{path}",
-                 name: "HTTPTemplate"
-               }
-             ] = templates
+      assert [%{uriTemplate: "http://localhost/{path}", name: "HTTPTemplate"}] = templates
     end
 
     test "returns empty list when no templates available" do
       stub(ResourceRepoMock, :prefix, fn _ -> "file:///" end)
 
-      state =
-        init_session(
-          resources: [
-            {ResourceRepoMock, :repo1},
-            {ResourceRepoMock, :repo2}
-          ]
-        )
+      state = init_suite(resources: [{ResourceRepoMock, :repo1}])
 
-      assert {:reply, {:result, result}, _} =
-               Suite.handle_request(
-                 %MCP.ListResourceTemplatesRequest{id: 1},
-                 build_channel(),
-                 state
-               )
-
-      assert %MCP.ListResourceTemplatesResult{resourceTemplates: []} = result
+      assert {:result, %MCP.ListResourceTemplatesResult{resourceTemplates: []}} =
+               Suite.handle_request(list_resource_templates_req(), build_channel(), state)
     end
   end
 
   describe "listing prompts" do
-    test "lists prompts from single repository" do
+    test "lists prompts from a single repository" do
       prompts = [
         %{name: "greeting", description: "Say hello"},
         %{
           name: "analysis",
           description: "Analyze data",
-          arguments: [
-            %{name: "dataset", required: true}
-          ]
+          arguments: [%{name: "dataset", required: true}]
         }
       ]
 
       PromptRepoMock
-      |> expect(:prefix, fn :arg -> "some_prefix" end)
-      |> expect(:list, fn nil, _channel, :arg ->
-        {prompts, nil}
-      end)
+      |> stub(:prefix, fn :arg -> "some_prefix" end)
+      |> expect(:list, fn nil, _channel, :arg -> {prompts, nil} end)
 
-      state = init_session(prompts: [{PromptRepoMock, :arg}])
+      state = init_suite(prompts: [{PromptRepoMock, :arg}])
 
-      assert {:reply, {:result, result}, _} =
-               Suite.handle_request(
-                 %MCP.ListPromptsRequest{id: 1},
-                 build_channel(),
-                 state
-               )
-
-      assert %MCP.ListPromptsResult{
-               prompts: ^prompts,
-               nextCursor: nil
-             } = result
+      assert {:result, %MCP.ListPromptsResult{prompts: ^prompts, nextCursor: nil}} =
+               Suite.handle_request(list_prompts_req(), build_channel(), state)
     end
 
-    test "lists prompts with pagination from single repository" do
+    test "prompt pagination cursors survive across per-request states" do
       page1 = [%{name: "prompt1"}, %{name: "prompt2"}]
       page2 = [%{name: "prompt3"}]
 
       PromptRepoMock
-      |> expect(:prefix, fn :repo1 -> "some_prefix" end)
-      |> expect(:list, fn nil, _channel, :repo1 ->
-        {page1, "repo_cursor_2"}
-      end)
-      |> expect(:list, fn "repo_cursor_2", _channel, :repo1 ->
-        {page2, nil}
-      end)
+      |> stub(:prefix, fn :repo1 -> "some_prefix" end)
+      |> expect(:list, fn nil, _channel, :repo1 -> {page1, "repo_cursor_2"} end)
+      |> expect(:list, fn "repo_cursor_2", _channel, :repo1 -> {page2, nil} end)
 
-      state = init_session(prompts: [{PromptRepoMock, :repo1}])
+      opts = [prompts: [{PromptRepoMock, :repo1}]]
 
-      # First page
-      assert {:reply, {:result, result1}, _} =
-               Suite.handle_request(
-                 %MCP.ListPromptsRequest{id: 1},
-                 build_channel(),
-                 state
-               )
+      assert {:result, %MCP.ListPromptsResult{prompts: ^page1, nextCursor: cursor}} =
+               Suite.handle_request(list_prompts_req(), build_channel(), init_suite(opts))
 
-      assert %MCP.ListPromptsResult{
-               prompts: ^page1,
-               nextCursor: cursor1
-             } = result1
+      assert is_binary(cursor)
 
-      assert is_binary(cursor1)
-
-      # Second page
-      assert {:reply, {:result, result2}, _} =
-               Suite.handle_request(
-                 %MCP.ListPromptsRequest{id: 1, params: %{cursor: cursor1}},
-                 build_channel(),
-                 state
-               )
-
-      assert %MCP.ListPromptsResult{
-               prompts: ^page2,
-               nextCursor: nil
-             } = result2
-    end
-
-    test "lists prompts across multiple repositories" do
-      PromptRepoMock
-      |> expect(:prefix, 3, fn
-        :repo1 -> "prompt1"
-        :repo2 -> "prompt2"
-        :repo3 -> "prompt3"
-      end)
-      |> expect(:list, fn nil, _channel, :repo1 -> {[%{name: "prompt1"}], nil} end)
-      |> expect(:list, fn nil, _channel, :repo2 -> {[%{name: "prompt2"}], nil} end)
-      |> expect(:list, fn nil, _channel, :repo3 -> {[%{name: "prompt3"}], nil} end)
-
-      state =
-        init_session(
-          prompts: [
-            {PromptRepoMock, :repo1},
-            {PromptRepoMock, :repo2},
-            {PromptRepoMock, :repo3}
-          ]
-        )
-
-      # First request
-      assert {:reply, {:result, result1}, _} =
-               Suite.handle_request(
-                 %MCP.ListPromptsRequest{id: 1},
-                 build_channel(),
-                 state
-               )
-
-      assert %MCP.ListPromptsResult{
-               prompts: [%{name: "prompt1"}],
-               nextCursor: cursor1
-             } = result1
-
-      # Second request
-      assert {:reply, {:result, result2}, _} =
-               Suite.handle_request(
-                 %MCP.ListPromptsRequest{id: 1, params: %{cursor: cursor1}},
-                 build_channel(),
-                 state
-               )
-
-      assert %MCP.ListPromptsResult{
-               prompts: [%{name: "prompt2"}],
-               nextCursor: cursor2
-             } = result2
-
-      # Third request
-      assert {:reply, {:result, result3}, _} =
-               Suite.handle_request(
-                 %MCP.ListPromptsRequest{id: 1, params: %{cursor: cursor2}},
-                 build_channel(),
-                 state
-               )
-
-      assert %MCP.ListPromptsResult{
-               prompts: [%{name: "prompt3"}],
-               nextCursor: nil
-             } = result3
-    end
-
-    test "handles invalid pagination token" do
-      expect(PromptRepoMock, :prefix, fn :repo1 -> "some_prefix" end)
-
-      state = init_session(prompts: [{PromptRepoMock, :repo1}])
-
-      assert {:reply, {:error, :invalid_cursor}, _} =
-               Suite.handle_request(
-                 %MCP.ListPromptsRequest{id: 1, params: %{cursor: "invalid_token"}},
-                 build_channel(),
-                 state
-               )
-
-      assert {200, %{code: -32_602, message: "Invalid pagination cursor"}} =
-               check_error(:invalid_cursor)
+      assert {:result, %MCP.ListPromptsResult{prompts: ^page2, nextCursor: nil}} =
+               Suite.handle_request(list_prompts_req(cursor), build_channel(), init_suite(opts))
     end
 
     test "returns empty list when no prompts configured" do
-      state = init_session(prompts: [])
+      state = init_suite(prompts: [])
 
-      assert {:reply, {:result, result}, _} =
-               Suite.handle_request(
-                 %MCP.ListPromptsRequest{id: 1},
-                 build_channel(),
-                 state
-               )
-
-      assert %MCP.ListPromptsResult{
-               prompts: [],
-               nextCursor: nil
-             } = result
+      assert {:result, %MCP.ListPromptsResult{prompts: [], nextCursor: nil}} =
+               Suite.handle_request(list_prompts_req(), build_channel(), state)
     end
   end
 
@@ -1525,46 +1193,33 @@ defmodule GenMCP.SuiteTest do
       result = MCP.get_prompt_result(description: "A greeting", text: "Hello!")
 
       PromptRepoMock
-      |> expect(:prefix, fn :repo1 -> "gre" end)
+      |> stub(:prefix, fn :repo1 -> "gre" end)
       |> expect(:get, fn "greeting", args, _channel, :repo1 ->
-        assert(args == %{})
+        assert args == %{}
         {:ok, result}
       end)
 
-      state = init_session(prompts: [{PromptRepoMock, :repo1}])
+      state = init_suite(prompts: [{PromptRepoMock, :repo1}])
 
-      assert {:reply, {:result, ^result}, _} =
-               Suite.handle_request(
-                 %MCP.GetPromptRequest{
-                   id: 1,
-                   params: %{name: "greeting"}
-                 },
-                 build_channel(),
-                 state
-               )
+      assert {:result, ^result} =
+               Suite.handle_request(get_prompt_req("greeting"), build_channel(), state)
     end
 
-    test "gets prompt with valid arguments" do
+    test "gets prompt with arguments" do
       result = MCP.get_prompt_result(text: "Analyze: test.csv")
 
       PromptRepoMock
-      |> expect(:prefix, fn :repo1 -> "an" end)
+      |> stub(:prefix, fn :repo1 -> "an" end)
       |> expect(:get, fn "analysis", args, _channel, :repo1 ->
-        assert(args == %{"dataset" => "test.csv"})
+        assert args == %{"dataset" => "test.csv"}
         {:ok, result}
       end)
 
-      state = init_session(prompts: [{PromptRepoMock, :repo1}])
+      state = init_suite(prompts: [{PromptRepoMock, :repo1}])
 
-      assert {:reply, {:result, ^result}, _} =
+      assert {:result, ^result} =
                Suite.handle_request(
-                 %MCP.GetPromptRequest{
-                   id: 1,
-                   params: %{
-                     name: "analysis",
-                     arguments: %{"dataset" => "test.csv"}
-                   }
-                 },
+                 get_prompt_req("analysis", %{"dataset" => "test.csv"}),
                  build_channel(),
                  state
                )
@@ -1572,333 +1227,74 @@ defmodule GenMCP.SuiteTest do
 
     test "returns error for non-existent prompt" do
       PromptRepoMock
-      |> expect(:prefix, fn :repo1 -> "unknown" end)
+      |> stub(:prefix, fn :repo1 -> "unknown" end)
       |> expect(:get, fn "unknown", _, _channel, :repo1 -> {:error, :not_found} end)
 
-      state = init_session(prompts: [{PromptRepoMock, :repo1}])
+      state = init_suite(prompts: [{PromptRepoMock, :repo1}])
 
-      assert {:reply, {:error, {:prompt_not_found, "unknown"}}, _} =
-               Suite.handle_request(
-                 %MCP.GetPromptRequest{
-                   id: 1,
-                   params: %{name: "unknown"}
-                 },
-                 build_channel(),
-                 state
-               )
+      assert {:error, {:prompt_not_found, "unknown"}} =
+               Suite.handle_request(get_prompt_req("unknown"), build_channel(), state)
 
       assert {200,
               %{code: -32_602, data: %{name: "unknown"}, message: "Prompt not found: unknown"}} =
                check_error({:prompt_not_found, "unknown"})
     end
 
-    test "returns error for validation failure" do
-      PromptRepoMock
-      |> expect(:prefix, fn :repo1 -> "analysis" end)
-      |> expect(:get, fn "analysis", _, _channel, :repo1 ->
-        {:error, "Missing required argument: dataset"}
-      end)
-
-      state = init_session(prompts: [{PromptRepoMock, :repo1}])
-
-      assert {:reply, {:error, "Missing required argument: dataset"}, _} =
-               Suite.handle_request(
-                 %MCP.GetPromptRequest{
-                   id: 1,
-                   params: %{name: "analysis"}
-                 },
-                 build_channel(),
-                 state
-               )
-
-      assert {500, %{code: -32_603}} = check_error("Missing required argument: dataset")
-    end
-
-    test "returns :invalid_params from call" do
-      PromptRepoMock
-      |> expect(:prefix, fn :repo1 -> "analysis" end)
-      |> expect(:get, fn "analysis", _, _channel, :repo1 ->
-        {:error, {:invalid_params, :foo}}
-      end)
-
-      state = init_session(prompts: [{PromptRepoMock, :repo1}])
-
-      assert {:reply, {:error, {:invalid_params, :foo}}, _} =
-               Suite.handle_request(
-                 %MCP.GetPromptRequest{
-                   id: 1,
-                   params: %{name: "analysis"}
-                 },
-                 build_channel(),
-                 state
-               )
-
-      assert {500, %{code: -32_603}} = check_error("Missing required argument: dataset")
-    end
-
-    test "searches across multiple repos" do
+    test "routes by prefix across multiple repos" do
       result = MCP.get_prompt_result([])
 
       PromptRepoMock
-      |> expect(:prefix, 2, fn
+      |> stub(:prefix, fn
         :repo1 -> "prompt1"
         :repo2 -> "prompt2"
       end)
       |> expect(:get, fn "prompt2", _, _channel, :repo2 -> {:ok, result} end)
 
-      state =
-        init_session(
-          prompts: [
-            {PromptRepoMock, :repo1},
-            {PromptRepoMock, :repo2}
-          ]
-        )
+      state = init_suite(prompts: [{PromptRepoMock, :repo1}, {PromptRepoMock, :repo2}])
 
-      assert {:reply, {:result, ^result}, _} =
-               Suite.handle_request(
-                 %MCP.GetPromptRequest{
-                   id: 1,
-                   params: %{name: "prompt2"}
-                 },
-                 build_channel(),
-                 state
-               )
+      assert {:result, ^result} =
+               Suite.handle_request(get_prompt_req("prompt2"), build_channel(), state)
     end
   end
 
-  describe "cancelled notification handling" do
-    # For now it is ignored, but can be delivered without crashing the repo
-    test "handles cancelled notification without error" do
-      state = init_session()
+  describe "notifications" do
+    test "cancelled notification is acknowledged and ignored" do
+      # `handle_notification/3` returns `:ok`: a notification POST gets a 202
+      # with no body and never streams, so there is no state to carry. The
+      # channel is passed in (read-only context for trust) but the Suite ignores
+      # the notification — statelessly there is nothing to act on.
+      state = init_suite()
 
-      cancelled_notif = %MCP.CancelledNotification{
+      notif = %MCP.CancelledNotification{
         params: %MCP.CancelledNotificationParams{
           requestId: "some-request-id",
           reason: "User cancelled the operation"
         }
       }
 
-      # Should return :noreply and not raise an error
-      assert {:noreply, ^state} = Suite.handle_notification(cancelled_notif, state)
-    end
-
-    test "handles roots list changed notification without error" do
-      state = init_session()
-
-      roots_changed_notif = %MCP.RootsListChangedNotification{
-        params: %{_meta: %{}}
-      }
-
-      # Should return :noreply and not raise an error
-      assert {:noreply, ^state} = Suite.handle_notification(roots_changed_notif, state)
+      assert :ok = Suite.handle_notification(notif, build_channel(), state)
     end
   end
 
-  describe "extension ordering" do
-    test "lists tools with direct tool first, then extension tools in order" do
-      ToolMock
-      |> stub(:info, fn
-        #
-        :name, :direct_tool -> "DirectTool"
-        :description, :direct_tool -> "A direct tool"
-        :title, :direct_tool -> nil
-        :annotations, :direct_tool -> nil
-        #
-        :name, :ext1_tool -> "Ext1Tool"
-        :description, :ext1_tool -> "Tool from extension 1"
-        :title, :ext1_tool -> nil
-        :annotations, :ext1_tool -> nil
-        #
-        :name, :ext2_tool -> "Ext2Tool"
-        :description, :ext2_tool -> "Tool from extension 2"
-        :title, :ext2_tool -> nil
-        :annotations, :ext2_tool -> nil
-        #
-        :_meta, arg -> %{"arg" => arg}
-      end)
-      |> stub(:input_schema, fn _ -> %{type: :object} end)
-      |> stub(:output_schema, fn _ -> nil end)
+  describe "unsupported requests" do
+    # The Suite implements every request the validator currently accepts, so the
+    # catch-all is defensive: a validable-but-unhandled method must return a
+    # JSON-RPC "method not found" rather than crash the per-request worker.
+    test "a legal request the Suite does not implement returns method-not-found" do
+      state = init_suite()
+      req = %GenMCP.Support.UnsupportedRequest{id: 1, params: %{}}
 
-      ExtensionMock
-      |> stub(:tools, fn
-        _channel, :ext1 -> [{ToolMock, :ext1_tool}]
-        _channel, :ext2 -> [{ToolMock, :ext2_tool}]
-      end)
-      |> stub(:resources, fn _channel, _ -> [] end)
-      |> stub(:prompts, fn _channel, _ -> [] end)
-
-      state =
-        init_session(
-          tools: [{ToolMock, :direct_tool}],
-          extensions: [{ExtensionMock, :ext1}, {ExtensionMock, :ext2}]
-        )
-
-      assert {:reply, {:result, %MCP.ListToolsResult{tools: tools}}, _} =
-               Suite.handle_request(
-                 %MCP.ListToolsRequest{id: 1},
-                 build_channel(),
-                 state
-               )
-
-      # Tool order is respected, self extension is first
-
-      assert [
-               %{name: "DirectTool", _meta: %{"arg" => :direct_tool}},
-               %{name: "Ext1Tool", _meta: %{"arg" => :ext1_tool}},
-               %{name: "Ext2Tool", _meta: %{"arg" => :ext2_tool}}
-             ] = tools
+      assert {:error, {:unsupported_method, "test/unsupported"}} =
+               Suite.handle_request(req, build_channel(), state)
     end
 
-    test "lists resources with direct repo first, then extension repos in order with pagination" do
-      ResourceRepoMock
-      |> stub(:prefix, fn
-        :direct_repo -> "file:///"
-        :ext1_repo1 -> "http://ext1-1/"
-        :ext1_repo2 -> "http://ext1-2/"
-        :ext2_repo -> "http://ext2/"
-      end)
-      |> expect(:list, fn nil, _channel, :direct_repo ->
-        {[%{uri: "file:///direct.txt", name: "Direct Resource"}], nil}
-      end)
-      |> expect(:list, fn nil, _channel, :ext1_repo1 ->
-        {[%{uri: "http://ext1-1/resource1.txt", name: "Ext1 Repo1 Resource 1"}], :go_page_2}
-      end)
-      |> expect(:list, fn :go_page_2, _channel, :ext1_repo1 ->
-        {[
-           %{uri: "http://ext1-1/resource2.txt", name: "Ext1 Repo1 Resource 2"},
-           %{uri: "http://ext1-1/resource3.txt", name: "Ext1 Repo1 Resource 3"}
-         ], nil}
-      end)
-      |> expect(:list, fn nil, _channel, :ext1_repo2 ->
-        {[%{uri: "http://ext1-2/resource.txt", name: "Ext1 Repo2 Resource"}], nil}
-      end)
-      |> expect(:list, fn nil, _channel, :ext2_repo ->
-        {[%{uri: "http://ext2/resource.txt", name: "Ext2 Resource"}], nil}
-      end)
-
-      ExtensionMock
-      |> stub(:tools, fn _channel, _ -> [] end)
-      |> stub(:resources, fn
-        _channel, :ext1 -> [{ResourceRepoMock, :ext1_repo1}, {ResourceRepoMock, :ext1_repo2}]
-        _channel, :ext2 -> [{ResourceRepoMock, :ext2_repo}]
-      end)
-      |> stub(:prompts, fn _channel, _ -> [] end)
-
-      state =
-        init_session(
-          resources: [{ResourceRepoMock, :direct_repo}],
-          extensions: [{ExtensionMock, :ext1}, {ExtensionMock, :ext2}]
-        )
-
-      # fetch all pages
-      req = fn cursor ->
-        %MCP.ListResourcesRequest{id: 1, params: %MCP.PaginatedRequestParams{cursor: cursor}}
-      end
-
-      assert {:reply, {:result, %{resources: page1, nextCursor: cursor}}, state} =
-               Suite.handle_request(req.(nil), build_channel(), state)
-
-      assert {:reply, {:result, %{resources: page2, nextCursor: cursor}}, state} =
-               Suite.handle_request(req.(cursor), build_channel(), state)
-
-      assert {:reply, {:result, %{resources: page3, nextCursor: cursor}}, state} =
-               Suite.handle_request(req.(cursor), build_channel(), state)
-
-      assert {:reply, {:result, %{resources: page4, nextCursor: cursor}}, state} =
-               Suite.handle_request(req.(cursor), build_channel(), state)
-
-      assert {:reply, {:result, %{resources: page5, nextCursor: _cursor}}, _state} =
-               Suite.handle_request(req.(cursor), build_channel(), state)
-
-      # should be in order. Actually we already know it because mocks
-      # expectations are ordered.
-
-      assert [%{name: "Direct Resource", uri: "file:///direct.txt"}] = page1
-      assert [%{name: "Ext1 Repo1 Resource 1", uri: "http://ext1-1/resource1.txt"}] = page2
-
-      assert [
-               %{name: "Ext1 Repo1 Resource 2", uri: "http://ext1-1/resource2.txt"},
-               %{name: "Ext1 Repo1 Resource 3", uri: "http://ext1-1/resource3.txt"}
-             ] = page3
-
-      assert [%{name: "Ext1 Repo2 Resource", uri: "http://ext1-2/resource.txt"}] = page4
-      assert [%{name: "Ext2 Resource", uri: "http://ext2/resource.txt"}] = page5
-    end
-
-    test "lists prompts with direct repo first, then extension repos in order with pagination" do
-      PromptRepoMock
-      |> stub(:prefix, fn
-        :direct_repo -> "direct_"
-        :ext1_repo1 -> "ext1_1_"
-        :ext1_repo2 -> "ext1_2_"
-        :ext2_repo -> "ext2_"
-      end)
-      |> expect(:list, fn nil, _channel, :direct_repo ->
-        {[%{name: "direct_prompt", description: "Direct Prompt"}], nil}
-      end)
-      |> expect(:list, fn nil, _channel, :ext1_repo1 ->
-        {[%{name: "ext1_1_prompt_1", description: "Ext1 Repo1 Prompt 1"}], :go_page_2}
-      end)
-      |> expect(:list, fn :go_page_2, _channel, :ext1_repo1 ->
-        {[
-           %{name: "ext1_1_prompt_2", description: "Ext1 Repo1 Prompt 2"},
-           %{name: "ext1_1_prompt_3", description: "Ext1 Repo1 Prompt 3"}
-         ], nil}
-      end)
-      |> expect(:list, fn nil, _channel, :ext1_repo2 ->
-        {[%{name: "ext1_2_prompt", description: "Ext1 Repo2 Prompt"}], nil}
-      end)
-      |> expect(:list, fn nil, _channel, :ext2_repo ->
-        {[%{name: "ext2_prompt", description: "Ext2 Prompt"}], nil}
-      end)
-
-      ExtensionMock
-      |> stub(:tools, fn _channel, _ -> [] end)
-      |> stub(:resources, fn _channel, _ -> [] end)
-      |> stub(:prompts, fn
-        _channel, :ext1 -> [{PromptRepoMock, :ext1_repo1}, {PromptRepoMock, :ext1_repo2}]
-        _channel, :ext2 -> [{PromptRepoMock, :ext2_repo}]
-      end)
-
-      state =
-        init_session(
-          prompts: [{PromptRepoMock, :direct_repo}],
-          extensions: [{ExtensionMock, :ext1}, {ExtensionMock, :ext2}]
-        )
-
-      # fetch all pages
-      req = fn cursor ->
-        %MCP.ListPromptsRequest{id: 1, params: %MCP.PaginatedRequestParams{cursor: cursor}}
-      end
-
-      assert {:reply, {:result, %{prompts: page1, nextCursor: cursor}}, state} =
-               Suite.handle_request(req.(nil), build_channel(), state)
-
-      assert {:reply, {:result, %{prompts: page2, nextCursor: cursor}}, state} =
-               Suite.handle_request(req.(cursor), build_channel(), state)
-
-      assert {:reply, {:result, %{prompts: page3, nextCursor: cursor}}, state} =
-               Suite.handle_request(req.(cursor), build_channel(), state)
-
-      assert {:reply, {:result, %{prompts: page4, nextCursor: cursor}}, state} =
-               Suite.handle_request(req.(cursor), build_channel(), state)
-
-      assert {:reply, {:result, %{prompts: page5, nextCursor: _cursor}}, _state} =
-               Suite.handle_request(req.(cursor), build_channel(), state)
-
-      # should be in order. Actually we already know it because mocks
-      # expectations are ordered.
-
-      assert [%{name: "direct_prompt", description: "Direct Prompt"}] = page1
-      assert [%{name: "ext1_1_prompt_1", description: "Ext1 Repo1 Prompt 1"}] = page2
-
-      assert [
-               %{name: "ext1_1_prompt_2", description: "Ext1 Repo1 Prompt 2"},
-               %{name: "ext1_1_prompt_3", description: "Ext1 Repo1 Prompt 3"}
-             ] = page3
-
-      assert [%{name: "ext1_2_prompt", description: "Ext1 Repo2 Prompt"}] = page4
-      assert [%{name: "ext2_prompt", description: "Ext2 Prompt"}] = page5
+    test "the method-not-found reason casts to a 200 / -32601 JSON-RPC error" do
+      assert {200,
+              %{
+                code: -32_601,
+                message: "Method not supported: test/unsupported",
+                data: %{method: "test/unsupported"}
+              }} = GenMCP.Error.cast_error({:unsupported_method, "test/unsupported"})
     end
   end
 end

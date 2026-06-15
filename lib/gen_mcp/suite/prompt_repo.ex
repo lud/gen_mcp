@@ -40,7 +40,7 @@ defmodule GenMCP.Suite.PromptRepo do
   """
   import GenMCP.Utils.CallbackExt
 
-  alias GenMCP.MCP
+  alias GenMCP.MCP.V2607, as: MCP
   alias GenMCP.Mux.Channel
 
   @type prompt_repo :: module | {module, arg} | prompt_repo_descriptor

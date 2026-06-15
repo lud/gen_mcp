@@ -36,7 +36,7 @@ defmodule GenMCP.Suite.ResourceRepo do
 
   import GenMCP.Utils.CallbackExt
 
-  alias GenMCP.MCP
+  alias GenMCP.MCP.V2607, as: MCP
   alias GenMCP.Mux.Channel
 
   @type resource_item :: %{

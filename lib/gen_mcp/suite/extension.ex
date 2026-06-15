@@ -34,7 +34,7 @@ defmodule GenMCP.Suite.Extension do
 
         @impl true
         def tools(channel, _arg) do
-          if channel.assigns.admin do
+          if channel.meta.admin do
             [AdminTool]
           else
             []

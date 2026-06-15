@@ -102,19 +102,13 @@ defmodule GenMCP.Error do
 
   defcasterror {:invalid_params, errmsg} when is_binary(errmsg), @rpc_invalid_params, 200 do
     %{
-      message: errmsg
+      message: "Invalid Parameters: " <> errmsg
     }
   end
 
   defcasterror {:invalid_params, _}, @rpc_invalid_params, 200 do
     %{
       message: "Invalid Parameters"
-    }
-  end
-
-  defcasterror :already_initialized, @rpc_invalid_params, 200 do
-    %{
-      message: "Session is already initialized"
     }
   end
 
@@ -126,19 +120,6 @@ defmodule GenMCP.Error do
       message: "Unsupported protocol version"
     }
   end
-
-  # HTTP header level: client sent an invalid MCP-Protocol-Version HTTP header.
-  # Per spec, this MUST return HTTP 400.
-  #
-  # Protocol header is not implemented yet
-  #
-  # defcasterror {:unsupported_protocol_header, version},
-  #              @mcp_unsupported_protocol_version, 400 do
-  #   %{
-  #     data: %{version: version, supported: GenMCP.supported_protocol_versions()},
-  #     message: "Unsupported protocol version"
-  #   }
-  # end
 
   defcasterror {:unknown_tool, name} when is_binary(name), @rpc_invalid_params, 200 do
     %{
@@ -173,34 +154,21 @@ defmodule GenMCP.Error do
     }
   end
 
+  # A legal MCP method that this server does not implement (e.g. an optional
+  # capability it never advertised). The request validated fine and was
+  # dispatched, so this is an application-level JSON-RPC error in a 200 response
+  # — distinct from {:unknown_method, _}, a method outside the protocol entirely
+  # that the transport rejects with 404 before dispatch.
+  defcasterror {:unsupported_method, method} when is_binary(method), @rpc_method_not_found, 200 do
+    %{
+      data: %{method: method},
+      message: "Method not supported: #{method}"
+    }
+  end
+
   defcasterror message when is_binary(message), @rpc_internal_error, 500 do
     %{
       message: message
-    }
-  end
-
-  defcasterror :not_initialized, @rpc_internal_error, 400 do
-    %{
-      message: "Server not initialized"
-    }
-  end
-
-  defcasterror {:mcp_server_init_failure, _reason}, @rpc_internal_error, 500 do
-    %{
-      message: "Session Start Error"
-    }
-  end
-
-  defcasterror {:session_not_found, sid} when is_binary(sid), @rpc_internal_error, 404 do
-    %{
-      data: %{session_id: sid},
-      message: "Session not found"
-    }
-  end
-
-  defcasterror {:mcp_session_restore_failure, _reason}, @rpc_internal_error, 404 do
-    %{
-      message: "Session Lost"
     }
   end
 

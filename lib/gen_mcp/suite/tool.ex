@@ -92,7 +92,7 @@ defmodule GenMCP.Suite.Tool do
 
   import GenMCP.Utils.CallbackExt
 
-  alias GenMCP.MCP
+  alias GenMCP.MCP.V2607, as: MCP
   alias GenMCP.Mux.Channel
 
   @type tool_annotations :: %{
@@ -112,13 +112,8 @@ defmodule GenMCP.Suite.Tool do
   @type info_key :: :name | :title | :description | :annotations | :_meta
   @type arg :: term
   @type schema :: term
-  @type tag :: term
-  @type call_result ::
-          {:result, MCP.CallToolResult.t(), Channel.t()}
-          # TODO allow elicitation/sampling request
-          # | {:request, {tag, term}, Channel.t()}
-          | {:async, {tag, reference() | Task.t()}, Channel.t()}
-          | {:error, String.t(), Channel.t()}
+  @type state :: term
+  @type call_result :: {:result, MCP.CallToolResult.t()} | {:stream, state} | {:error, String.t()}
 
   @type request :: term
 
@@ -215,7 +210,7 @@ defmodule GenMCP.Suite.Tool do
       end
   """
   @callback validate_request(MCP.CallToolRequest.t(), arg) ::
-              {:ok, MCP.CallToolRequest.t()} | {:error, String.t()}
+              {:ok, MCP.CallToolRequest.t()} | {:error, String.t() | Exception.t()}
 
   @doc """
   Executes the tool call and returns a result, error, or async continuation.
@@ -322,15 +317,12 @@ defmodule GenMCP.Suite.Tool do
         {:async, {:step2, task}, channel}
       end
   """
-  @callback continue({tag, {:ok, term} | {:error, term}}, Channel.t(), arg) ::
-              call_result
+  @callback continue(term, Channel.t(), state, arg) :: call_result
 
-  @optional_callbacks validate_request: 2, continue: 3, output_schema: 1
+  @optional_callbacks validate_request: 2, continue: 4, output_schema: 1
 
   defmacro __using__(opts) do
     quote do
-      import GenMCP.Mux.Channel, only: [assign: 3]
-
       @gen_mcp_suite_too_opts unquote(Macro.escape(opts))
       @before_compile unquote(__MODULE__)
     end
@@ -567,20 +559,12 @@ defmodule GenMCP.Suite.Tool do
           "option #{inspect(key)} given to `use #{inspect(__MODULE__)}` #{errmsg}, got: #{inspect(value)}"
   end
 
-  defmacrop handle_result(call) do
+  defmacrop __handle_result({_, _, _} = call) do
     quote do
       callback __MODULE__, unquote(call) do
-        {:result, %MCP.CallToolResult{}, %Channel{}} = result ->
-          result
-
-        {:async, {tag, %Task{ref: ref}}, %Channel{} = channel} ->
-          {:async, {tag, ref}, channel}
-
-        {:async, {tag, ref}, %Channel{} = channel} when is_reference(ref) ->
-          {:async, {tag, ref}, channel}
-
-        {:error, _reason, %Channel{}} = err ->
-          err
+        {:result, %MCP.CallToolResult{}} = result -> result
+        {:stream, state} -> {:stream, state}
+        {:error, reason} = err -> {:error, cast_error(reason)}
       end
     end
   end
@@ -611,8 +595,9 @@ defmodule GenMCP.Suite.Tool do
     %{mod: mod, arg: arg, name: ^name} = tool
 
     case validate_request(tool, req) do
-      {:ok, req} -> handle_result(mod.call(req, channel, arg))
-      {:error, term} -> invalid_params(req, term, channel)
+      {:ok, req} -> __handle_result(mod.call(req, channel, arg))
+      {:error, {:invalid_params, reason}} -> {:error, {:invalid_params, reason}}
+      {:error, reason} -> {:error, {:invalid_params, reason}}
     end
   end
 
@@ -630,8 +615,29 @@ defmodule GenMCP.Suite.Tool do
     end
   end
 
-  defp invalid_params(_req, reason, channel) do
-    {:error, {:invalid_params, reason}, channel}
+  defp cast_error(e) when is_binary(e) do
+    e
+  end
+
+  defp cast_error(%JSV.ValidationError{} = e) do
+    e
+  end
+
+  # We allow Tool.call callback to return invalid params if users want to
+  # perform parameter validation here directly. The errors module will skip the
+  # reason if it does not know how to stringify it.
+  defp cast_error({:invalid_params, _} = e) do
+    e
+  end
+
+  defp cast_error(%{__exception__: true} = e) do
+    Exception.message(e)
+  end
+
+  defp cast_error(e) do
+    to_string(e)
+  rescue
+    Protocol.UndefinedError -> inspect(e)
   end
 
   @doc """
@@ -650,9 +656,9 @@ defmodule GenMCP.Suite.Tool do
       Tool.continue(tool_descriptor, {:search_task, {:error, :timeout}}, channel)
       #=> {:error, "Search timed out", channel}
   """
-  @spec continue(tool_descriptor, {tag, client_response | term}, Channel.t()) :: call_result
-  def continue(tool, {_tag, _result} = cont, channel) do
+  @spec continue(tool_descriptor, term, Channel.t(), state) :: call_result
+  def continue(tool, message, channel, state) do
     %{mod: mod, arg: arg} = tool
-    handle_result(mod.continue(cont, channel, arg))
+    __handle_result(mod.continue(message, channel, state, arg))
   end
 end

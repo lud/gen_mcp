@@ -1,10 +1,7 @@
 defmodule GenMCP.Mux.Channel do
-  alias GenMCP.MCP.LoggingMessageNotification
-  alias GenMCP.MCP.ProgressNotification
+  @log_levels Enum.map(GenMCP.MCP.V2607.LoggingLevel.json_schema().enum, &String.to_atom/1)
 
-  @log_levels Enum.map(GenMCP.MCP.LoggingLevel.json_schema().enum, &String.to_atom/1)
-
-  @enforce_keys [:client, :progress_token, :status, :assigns, :log_level, :meta]
+  @enforce_keys [:client, :progress_token, :status, :log_level, :meta, :endpoint]
   defstruct @enforce_keys
 
   @type status :: :request | :stream | :closed
@@ -22,9 +19,9 @@ defmodule GenMCP.Mux.Channel do
           client: pid | nil,
           status: status,
           progress_token: nil | binary | integer,
-          assigns: map(),
           log_level: log_level() | nil,
-          meta: meta
+          meta: meta,
+          endpoint: nil | module
         }
 
   @empty_meta %{client_info: nil, client_capabilities: nil, protocol_version: nil}
@@ -43,11 +40,18 @@ defmodule GenMCP.Mux.Channel do
   the write-once `meta` field: `client_info`, `client_capabilities` and
   `protocol_version`. They are read-only request context, not handler state.
   """
-  def from_request(req, assigns \\ %{}) do
+  def from_request(conn, req, meta_assigns \\ %{}) do
     progress_token = progress_token_from_request(req)
     log_level = log_level_from_request(req)
     meta = meta_from_request(req)
-    create_new(self(), progress_token, log_level, assigns, meta)
+
+    endpoint =
+      case conn do
+        %{private: %{phoenix_endpoint: endpoint}} -> endpoint
+        _ -> nil
+      end
+
+    create_new(self(), endpoint, progress_token, log_level, meta_assigns, meta)
   end
 
   defp progress_token_from_request(req) do
@@ -82,18 +86,18 @@ defmodule GenMCP.Mux.Channel do
   end
 
   @doc false
-  def for_pid(pid, assigns \\ %{}) do
-    create_new(pid, nil, nil, assigns, @empty_meta)
+  def for_pid(pid, meta_assigns \\ %{}) do
+    create_new(pid, nil, nil, nil, meta_assigns, @empty_meta)
   end
 
-  defp create_new(owner_pid, progress_token, log_level, assigns, meta) do
+  defp create_new(owner_pid, endpoint, progress_token, log_level, meta_assigns, meta) do
     %__MODULE__{
       client: owner_pid,
+      endpoint: endpoint,
       progress_token: progress_token,
-      assigns: assigns,
       status: :request,
       log_level: log_level,
-      meta: meta
+      meta: Map.merge(meta_assigns, meta)
     }
   end
 
@@ -109,7 +113,7 @@ defmodule GenMCP.Mux.Channel do
 
   def send_progress(%{progress_token: token} = channel, progress, total, message) do
     payload =
-      %ProgressNotification{
+      %GenMCP.MCP.V2607.ProgressNotification{
         params: %{progress: progress, progressToken: token, total: total, message: message}
       }
 
@@ -148,7 +152,7 @@ defmodule GenMCP.Mux.Channel do
   def send_log(%{log_level: min_level} = channel, level, data, logger)
       when min_level in @log_levels and level in @log_levels do
     if :logger.compare_levels(level, min_level) in [:gt, :eq] do
-      payload = %LoggingMessageNotification{
+      payload = %GenMCP.MCP.V2607.LoggingMessageNotification{
         params: %{level: level, data: data, logger: logger}
       }
 
@@ -189,11 +193,6 @@ defmodule GenMCP.Mux.Channel do
   def close(%{status: status} = channel) when status in [:stream, :request] do
     send(channel.client, {:"$gen_mcp", :close})
     {:ok, %{channel | status: :closed}}
-  end
-
-  @spec assign(t, atom, term) :: t
-  def assign(%__MODULE__{assigns: assigns} = channel, key, value) when is_atom(key) do
-    %{channel | assigns: Map.put(assigns, key, value)}
   end
 
   def set_streaming(%__MODULE__{status: :request} = t) do

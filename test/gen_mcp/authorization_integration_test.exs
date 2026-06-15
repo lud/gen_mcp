@@ -4,7 +4,7 @@ defmodule GenMCP.AuthorizationIntegrationTest do
   import GenMCP.Test.Client
   import Mox
 
-  alias GenMCP.MCP
+  alias GenMCP.MCP.V2607, as: MCP
   alias GenMCP.Mux.Channel
   alias GenMCP.Support.AuthorizationMock
   alias GenMCP.Support.ServerMock
@@ -16,7 +16,8 @@ defmodule GenMCP.AuthorizationIntegrationTest do
   # router pipelines (or other plug systems).
   #
   # The real test is the assigns management: router static assigns + auth-plug
-  # assigns + `copy_assigns` must reach the channel. This is a per-request
+  # assigns + `copy_assigns` must reach the channel's read-only `meta` (the
+  # channel `assigns` field is gone — spec 004). This is a per-request
   # transport concern under the stateless protocol — there is no session.
 
   @protocol_version GenMCP.protocol_version()
@@ -110,26 +111,26 @@ defmodule GenMCP.AuthorizationIntegrationTest do
       :ok
     end
 
-    test "request reaches the server handler with merged assigns" do
+    test "request reaches the server handler with merged assigns in the channel meta" do
       ServerMock
       |> expect(:init, fn _opts -> {:ok, :server_state} end)
       |> expect(:handle_request, fn _req, channel, :server_state ->
-        assert %Channel{assigns: assigns} = channel
+        assert %Channel{meta: meta} = channel
 
         # static assigns from the router forward are present
-        assert "hello" == assigns.assign_from_forward
+        assert "hello" == meta.assign_from_forward
 
         # assigns from the auth plug are present
-        assert "value_from_auth" == assigns.assign_from_auth
+        assert "value_from_auth" == meta.assign_from_auth
 
         # auth value takes precedence over the static value
-        assert "value_from_auth" == assigns.shared_assign
+        assert "value_from_auth" == meta.shared_assign
 
         # unexisting copy_assigns key is not set
-        assert not Map.has_key?(assigns, :unexisting_assign)
+        assert not Map.has_key?(meta, :unexisting_assign)
 
-        # the stateless transport mints no session id assign
-        assert not Map.has_key?(assigns, :gen_mcp_session_id)
+        # the stateless transport mints no session id
+        assert not Map.has_key?(meta, :gen_mcp_session_id)
 
         {:result, MCP.list_tools_result([])}
       end)
@@ -142,15 +143,15 @@ defmodule GenMCP.AuthorizationIntegrationTest do
 
     test "two independent requests each reach the handler with merged assigns" do
       # Statelessly each request stands alone: it is authenticated, builds fresh
-      # state via init/2, and carries the same merged assigns.
+      # state via init/1, and carries the same merged assigns in its meta.
       for id <- [123, 456] do
         ServerMock
         |> expect(:init, fn _opts -> {:ok, :server_state} end)
         |> expect(:handle_request, fn _req, channel, :server_state ->
-          assert %Channel{assigns: assigns} = channel
-          assert assigns[:assign_from_forward] == "hello"
-          assert assigns[:assign_from_auth] == "value_from_auth"
-          assert assigns[:shared_assign] == "value_from_auth"
+          assert %Channel{meta: meta} = channel
+          assert meta[:assign_from_forward] == "hello"
+          assert meta[:assign_from_auth] == "value_from_auth"
+          assert meta[:shared_assign] == "value_from_auth"
 
           {:result, MCP.list_tools_result([])}
         end)

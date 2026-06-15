@@ -33,7 +33,7 @@ defmodule GenMCP.StreamableHTTPTest do
 
   # The 2026-07-28 transport is stateless: for every JSON-RPC message the
   # transport builds ephemeral server state with `init/1`, then dispatches the
-  # message with `handle_request/3` (or `handle_notification/2`). State is never
+  # message with `handle_request/3` (or `handle_notification/3`). State is never
   # carried between requests. `init/1` no longer receives a session id; it gets
   # the validated server opts, and per-request data arrives via the request and
   # channel.
@@ -45,10 +45,6 @@ defmodule GenMCP.StreamableHTTPTest do
   # `{:stream, state}` to continue or `{:result, _}` / `{:error, _}` /
   # `{:stop, _}` to end. Notifications return `:ok`. The channel is input-only
   # and never returned.
-  #
-  # TODO(tighten): once the per-request `init/1` contract is final, assert the
-  # request context and the `_meta` `io.modelcontextprotocol/*` fields the
-  # transport extracts and hands to the state-building step.
   defp expect_request(handler, init_state \\ :server_state) do
     ServerMock
     |> expect(:init, fn _opts -> {:ok, init_state} end)
@@ -157,6 +153,24 @@ defmodule GenMCP.StreamableHTTPTest do
     test "DELETE to the MCP endpoint is 405 Method Not Allowed" do
       # No sessions to terminate.
       assert %{status: 405} = Req.delete!(client(url: @mcp_url))
+    end
+
+    test "init/1 receives the forwarded server options on every request" do
+      # The /mcp/mock route forwards `foo: :bar` past the wrapper options; the
+      # per-request worker hands them to `init/1` verbatim (there is no session
+      # id argument anymore).
+      ServerMock
+      |> expect(:init, fn opts ->
+        assert :bar = Keyword.fetch!(opts, :foo)
+        {:ok, :server_state}
+      end)
+      |> expect(:handle_request, fn %MCP.ListToolsRequest{}, _channel, :server_state ->
+        {:result, MCP.list_tools_result([])}
+      end)
+
+      client(url: @mcp_url)
+      |> post_message(%{jsonrpc: "2.0", id: 1, method: "tools/list", params: %{}})
+      |> expect_status(200)
     end
 
     test "two sequential requests with no shared state each succeed independently" do
@@ -340,29 +354,34 @@ defmodule GenMCP.StreamableHTTPTest do
   end
 
   describe "server/discover" do
-    # TODO(spec 004): `server/discover` is added in spec 004 (the `MCP` facade
-    # must alias the V2607 Discover entities and the method must route). Skipped
-    # until then so a completed 003 transport rework leaves the suite green.
-
     test "discovery request round-trips through the transport" do
       # `server/discover` replaces the `initialize` handshake for capability
-      # discovery. Here we only assert the transport routes the method to the
-      # server behaviour and serializes its reply; the DiscoverResult shape is
-      # exercised in the Suite specs.
-      # TODO(tighten): match `%MCP.DiscoverRequest{} = req` and return a real
-      # `MCP.DiscoverResult` once the `MCP` facade aliases the V2607 Discover
-      # entities (004). For now we avoid referencing the struct module (it is not
-      # on the facade yet) and only assert the method is routed and serialized.
-      expect_request(fn req, _channel, _state ->
-        assert inspect(req.__struct__) =~ "DiscoverRequest"
-        {:result, MCP.discover_result(name: "foo", version: "0.0.1")}
+      # discovery. The transport routes the method to the server behaviour and
+      # serializes its DiscoverResult; what the Suite puts in it is exercised
+      # in the Suite tests.
+      expect_request(fn %MCP.DiscoverRequest{} = req, _channel, _state ->
+        assert %MCP.DiscoverRequest{id: 1} = req
+
+        {:result,
+         MCP.discover_result(
+           name: "foo",
+           version: "0.0.1",
+           capabilities: MCP.capabilities(tools: true, logging: true)
+         )}
       end)
 
-      # TODO(tighten): assert the DiscoverResult body (capabilities, server info,
-      # advertised protocol version) instead of an empty result map.
-      assert %{"id" => 1, "jsonrpc" => "2.0", "result" => %{}} =
+      assert %{
+               "id" => 1,
+               "jsonrpc" => "2.0",
+               "result" => %{
+                 "resultType" => "complete",
+                 "capabilities" => %{"tools" => %{}, "logging" => %{}},
+                 "serverInfo" => %{"name" => "foo", "version" => "0.0.1"},
+                 "supportedVersions" => ["2026-07-28"]
+               }
+             } =
                client(url: @mcp_url)
-               |> post_invalid_message(%{
+               |> post_message(%{
                  jsonrpc: "2.0",
                  id: 1,
                  method: "server/discover",
@@ -546,11 +565,12 @@ defmodule GenMCP.StreamableHTTPTest do
     end
 
     test "calling an unknown tool" do
-      # TODO(tighten): restore the full `%MCP.CallToolRequestParams{_meta: nil,
-      # arguments: %{}, name: "SomeUnknownTool"}` match (loosened during the
-      # stateless rewrite).
       expect_request(fn req, _channel, _state ->
-        assert %MCP.CallToolRequest{id: 456, params: %{name: "SomeUnknownTool"}} = req
+        assert %MCP.CallToolRequest{
+                 id: 456,
+                 params: %MCP.CallToolRequestParams{arguments: %{}, name: "SomeUnknownTool"}
+               } = req
+
         {:error, {:unknown_tool, "swapped-tool-name"}}
       end)
 
@@ -578,12 +598,17 @@ defmodule GenMCP.StreamableHTTPTest do
       # Returning `{:stream, state}` commits the response to `text/event-stream`
       # (eager SSE) even when no intermediate progress is emitted; the result is
       # produced from a continuation in `handle_message/3`.
-      # TODO(tighten): restore the full `%MCP.CallToolRequestParams{arguments:
-      # %{"arg" => 123}, name: "SomeAsyncTool"}` match.
       ServerMock
       |> expect(:init, fn _opts -> {:ok, :server_state} end)
       |> expect(:handle_request, fn req, _channel, state ->
-        assert %MCP.CallToolRequest{id: 456, params: %{name: "SomeAsyncTool"}} = req
+        assert %MCP.CallToolRequest{
+                 id: 456,
+                 params: %MCP.CallToolRequestParams{
+                   arguments: %{"arg" => 123},
+                   name: "SomeAsyncTool"
+                 }
+               } = req
+
         send(self(), :produce_result)
         {:stream, state}
       end)
@@ -601,7 +626,6 @@ defmodule GenMCP.StreamableHTTPTest do
 
       # SSE responses use the event-stream content type and disable reverse-proxy
       # buffering so events are flushed immediately (spec SHOULD).
-      IO.puts(resp.body)
       assert ["text/event-stream" <> _] = resp.headers["content-type"]
       assert ["no"] = resp.headers["x-accel-buffering"]
 
@@ -689,12 +713,17 @@ defmodule GenMCP.StreamableHTTPTest do
     end
 
     test "async tool that errors from a continuation terminates the stream" do
-      # TODO(tighten): restore the full `%MCP.CallToolRequestParams{arguments:
-      # %{"arg" => 123}, name: "AsyncToolWithError"}` match.
       ServerMock
       |> expect(:init, fn _opts -> {:ok, :server_state} end)
       |> expect(:handle_request, fn req, _channel, state ->
-        assert %MCP.CallToolRequest{id: 457, params: %{name: "AsyncToolWithError"}} = req
+        assert %MCP.CallToolRequest{
+                 id: 457,
+                 params: %MCP.CallToolRequestParams{
+                   arguments: %{"arg" => 123},
+                   name: "AsyncToolWithError"
+                 }
+               } = req
+
         send(self(), :async_error)
         {:stream, state}
       end)
@@ -821,7 +850,7 @@ defmodule GenMCP.StreamableHTTPTest do
     end
 
     test "cancelled notification is accepted with 202 and an empty body" do
-      expect_notification(fn notif, _state ->
+      expect_notification(fn notif, _channel, _state ->
         assert %MCP.CancelledNotification{
                  params: %MCP.CancelledNotificationParams{
                    requestId: "request-to-cancel",
@@ -849,7 +878,7 @@ defmodule GenMCP.StreamableHTTPTest do
       # Spec: a notification the server cannot accept gets an HTTP error
       # status; the optional JSON-RPC error body has no id. The worker crash is
       # converted by the transport, like for requests.
-      expect_notification(fn %MCP.CancelledNotification{}, _state ->
+      expect_notification(fn %MCP.CancelledNotification{}, _channel, _state ->
         raise "boom"
       end)
 
@@ -864,27 +893,23 @@ defmodule GenMCP.StreamableHTTPTest do
       assert %{"error" => %{"code" => -32_603}, "id" => nil} = resp.body
     end
 
-    test "initialized notification is accepted as a no-op with 202" do
+    test "initialized notification is accepted as a no-op with 202, without invoking the server" do
       # `notifications/initialized` is an accept-and-ignore no-op for
-      # transitional clients (SEP-1442). We assert only the transport-level
-      # contract (202, empty body); whether the server behaviour is invoked is
-      # left to the dispatch implementation, so this case stays tolerant.
-      # TODO(tighten): once the no-op handling is decided, pin it down — either
-      # assert the transport short-circuits (no `init`/`handle_notification`
-      # call), or assert `handle_notification` receives a
-      # `%MCP.InitializedNotification{}` struct.
-      stub(ServerMock, :init, fn _opts -> {:ok, :server_state} end)
-      stub(ServerMock, :handle_notification, fn _notif, _state -> :ok end)
-
+      # transitional clients (SEP-1442). It does not exist in the 2026 schemas
+      # (hence `post_invalid_message`): the transport short-circuits it before
+      # validation and dispatch, so the server behaviour is never invoked — no
+      # stubs, and any `init`/`handle_notification` call fails the test.
       assert "" =
                client(url: @mcp_url)
-               |> post_message(%{
+               |> post_invalid_message(%{
                  jsonrpc: "2.0",
                  method: "notifications/initialized",
                  params: %{}
                })
                |> expect_status(202)
                |> body()
+
+      Mox.verify!(ServerMock)
     end
   end
 

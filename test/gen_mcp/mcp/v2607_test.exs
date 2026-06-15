@@ -1,59 +1,59 @@
-defmodule GenMCP.MCPTest do
+defmodule GenMCP.MCP.V2607Test do
   use ExUnit.Case, async: true
 
-  alias GenMCP.MCP
-  alias GenMCP.MCP.ModMap
-  alias GenMCP.MCP.TextContent
+  alias GenMCP.MCP.V2607, as: MCP
+  alias GenMCP.MCP.V2607.ModMap
+  alias GenMCP.MCP.V2607.TextContent
 
   require ModMap
 
-  @moduletag :skip
-
   ModMap.require_all()
 
-  describe "intialize_result/1" do
-    test "creates initialize result with required server_info" do
+  describe "discover_result/1" do
+    test "creates discover result with required server_info and default capabilities" do
       server_info = %MCP.Implementation{
         name: "TestServer",
         version: "1.0.0"
       }
 
-      result = MCP.intialize_result(server_info: server_info)
+      result = MCP.discover_result(name: "TestServer", version: "1.0.0")
 
-      assert %MCP.InitializeResult{
-               capabilities: %{},
+      assert %MCP.DiscoverResult{
+               resultType: "complete",
+               capabilities: %MCP.ServerCapabilities{
+                 tools: nil,
+                 resources: nil,
+                 prompts: nil
+               },
                serverInfo: ^server_info,
-               protocolVersion: "2025-11-25"
+               supportedVersions: ["2026-07-28"]
              } = result
     end
 
-    test "creates initialize result with custom capabilities" do
-      server_info = %MCP.Implementation{
-        name: "TestServer",
-        version: "1.0.0"
-      }
-
+    test "creates discover result with custom capabilities" do
       capabilities = %MCP.ServerCapabilities{
         tools: %{},
         resources: %{}
       }
 
       result =
-        MCP.intialize_result(
-          server_info: server_info,
+        MCP.discover_result(
+          name: "TestServer",
+          version: "1.0.0",
           capabilities: capabilities
         )
 
-      assert %MCP.InitializeResult{
+      assert %MCP.DiscoverResult{
+               resultType: "complete",
                capabilities: ^capabilities,
-               serverInfo: ^server_info,
-               protocolVersion: "2025-11-25"
+               serverInfo: %MCP.Implementation{name: "TestServer", version: "1.0.0"},
+               supportedVersions: ["2026-07-28"]
              } = result
     end
 
-    test "raises when server_info is missing" do
-      assert_raise KeyError, fn ->
-        MCP.intialize_result([])
+    test "raises when server name is missing" do
+      assert_raise KeyError, ~r/option :name is required/, fn ->
+        MCP.discover_result(version: "1.0.0")
       end
     end
   end
@@ -102,6 +102,12 @@ defmodule GenMCP.MCPTest do
                prompts: ^prompts
              } = result
     end
+
+    test "a ServerCapabilities struct is returned as-is" do
+      caps = %MCP.ServerCapabilities{tools: %{}, resources: %{listChanged: true}}
+
+      assert ^caps = MCP.capabilities(caps)
+    end
   end
 
   describe "server_info/1" do
@@ -131,13 +137,13 @@ defmodule GenMCP.MCPTest do
     end
 
     test "raises when name is missing" do
-      assert_raise KeyError, "option :name is required by GenMCP.MCP.cur_fun/0", fn ->
+      assert_raise KeyError, ~r/option :name is required/, fn ->
         MCP.server_info(version: "1.0.0")
       end
     end
 
     test "raises when version is missing" do
-      assert_raise KeyError, "option :version is required by GenMCP.MCP.cur_fun/0", fn ->
+      assert_raise KeyError, ~r/option :version is required/, fn ->
         MCP.server_info(name: "MyServer")
       end
     end
@@ -302,6 +308,7 @@ defmodule GenMCP.MCPTest do
         )
 
       assert %MCP.CallToolResult{
+               resultType: "complete",
                content: [
                  %MCP.TextContent{text: 123, annotations: 123},
                  %MCP.AudioContent{data: 123, mimeType: 123, annotations: 123},
@@ -324,12 +331,14 @@ defmodule GenMCP.MCPTest do
           %{foo: :bar}
         ])
 
-      assert %GenMCP.MCP.CallToolResult{
+      assert %MCP.CallToolResult{
+               resultType: "complete",
                content: [
                  %TextContent{text: "foo"},
                  %TextContent{text: ~s({"foo":"bar"})}
                ],
-               structuredContent: %{foo: :bar}
+               structuredContent: %{foo: :bar},
+               isError: nil
              } == result
     end
 
@@ -341,6 +350,7 @@ defmodule GenMCP.MCPTest do
         )
 
       assert %MCP.CallToolResult{
+               resultType: "complete",
                content: [
                  %TextContent{text: "summary"},
                  %TextContent{text: ~s({"rows":3})}
@@ -358,6 +368,7 @@ defmodule GenMCP.MCPTest do
         )
 
       assert %MCP.CallToolResult{
+               resultType: "complete",
                content: [
                  %TextContent{text: "summary"}
                ],
@@ -370,6 +381,7 @@ defmodule GenMCP.MCPTest do
       result = MCP.call_tool_result(_data: %{ok: true})
 
       assert %MCP.CallToolResult{
+               resultType: "complete",
                content: [],
                structuredContent: %{ok: true},
                isError: nil
@@ -902,14 +914,22 @@ defmodule GenMCP.MCPTest do
   end
 
   describe "structs generate valid json" do
-    test "initialize request" do
-      # Given a struct
-      data = %MCP.InitializeRequest{
+    test "discover request" do
+      # Given a struct. Under the 2026 stateless core there is no `initialize`
+      # handshake: the client info, capabilities and protocol version travel in
+      # the request `_meta` instead. `server/discover` is the canonical
+      # client->server request.
+      data = %MCP.DiscoverRequest{
         id: 123,
-        params: %MCP.InitializeRequestParams{
-          capabilities: %MCP.ClientCapabilities{},
-          clientInfo: %MCP.Implementation{name: "clientname", version: "clientversion"},
-          protocolVersion: "foo"
+        params: %MCP.RequestParams{
+          _meta: %MCP.RequestMetaObject{
+            "io.modelcontextprotocol/clientCapabilities": %MCP.ClientCapabilities{},
+            "io.modelcontextprotocol/clientInfo": %MCP.Implementation{
+              name: "clientname",
+              version: "clientversion"
+            },
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+          }
         }
       }
 
@@ -920,27 +940,22 @@ defmodule GenMCP.MCPTest do
       raw = JSON.decode!(json)
 
       # Raw map should have RPC request fields
-      assert %{"jsonrpc" => "2.0", "method" => "initialize"} = raw
+      assert %{"jsonrpc" => "2.0", "method" => "server/discover"} = raw
 
-      # It should produce a valid initialize request
+      # It should produce a valid discover request
       assert {:ok, :request, new_data} = GenMCP.Validator.validate_request(raw)
 
-      assert %GenMCP.MCP.InitializeRequest{
+      assert %MCP.DiscoverRequest{
                id: 123,
-               params: %GenMCP.MCP.InitializeRequestParams{
-                 _meta: nil,
-                 capabilities: %GenMCP.MCP.ClientCapabilities{
-                   elicitation: nil,
-                   experimental: nil,
-                   roots: nil,
-                   sampling: nil
-                 },
-                 clientInfo: %GenMCP.MCP.Implementation{
-                   name: "clientname",
-                   title: nil,
-                   version: "clientversion"
-                 },
-                 protocolVersion: "foo"
+               params: %MCP.RequestParams{
+                 _meta: %MCP.RequestMetaObject{
+                   "io.modelcontextprotocol/clientCapabilities": %MCP.ClientCapabilities{},
+                   "io.modelcontextprotocol/clientInfo": %MCP.Implementation{
+                     name: "clientname",
+                     version: "clientversion"
+                   },
+                   "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+                 }
                }
              } = new_data
     end

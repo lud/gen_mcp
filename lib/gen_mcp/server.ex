@@ -40,11 +40,8 @@ defmodule GenMCP.Server do
     start_worker(Keyword.put(opts, :owner, channel.client), {:request, req, channel})
   end
 
-  # Notifications are one-way and carry no channel — there is nothing to send
-  # back. The worker emits `{:"$gen_mcp", :accepted}` once handle_notification/2
-  # returned, so the transport replies 202 only after the handler ran.
-  def start_notification(opts, notif) do
-    start_worker(Keyword.put(opts, :owner, self()), {:notification, notif})
+  def start_notification(opts, notif, channel) do
+    start_worker(Keyword.put(opts, :owner, channel.client), {:notification, notif, channel})
   end
 
   defp start_worker(opts, initiator) do
@@ -115,8 +112,8 @@ defmodule GenMCP.Server do
     channel
   end
 
-  defp initiator_channel({:notification, _notif}) do
-    nil
+  defp initiator_channel({:notification, _notif, channel}) do
+    channel
   end
 
   def handle_continue({:request, req, _channel}, state) do
@@ -142,17 +139,15 @@ defmodule GenMCP.Server do
     end
   end
 
-  def handle_continue({:notification, notif}, state) do
-    callback GenMCP, state.server_mod.handle_notification(notif, state.server_state) do
+  def handle_continue({:notification, notif, _channel}, state) do
+    callback GenMCP,
+             state.server_mod.handle_notification(notif, state.channel, state.server_state) do
       :ok ->
         send(state.owner, {:"$gen_mcp", :accepted})
         {:stop, {:shutdown, :reply}, state}
     end
   end
 
-  # The transport relay is gone: the client disconnected. This is the
-  # stateless-core cancellation story — there is no registry to find an
-  # in-flight request, but the relay's death is observable and sufficient.
   def handle_info({:CHAN_DOWN, mref, :process, _pid, _reason}, %__MODULE__{mref: mref} = state) do
     {:stop, {:shutdown, :client_disconnected}, state}
   end
@@ -178,10 +173,10 @@ defmodule GenMCP.Server do
         send(owner, {:"$gen_mcp", :stream})
         {:noreply, %{state | server_state: server_state}}
 
-      # End the stream with no final result (a listener's exit). The relay
-      # observes the clean shutdown and terminates the stream.
+      # End the stream with no final result (a listener's exit). Implementations
+      # should return :normal, :shutdown or {:shutdown, term} for a clean exit.
       {:stop, reason} ->
-        {:stop, {:shutdown, reason}, state}
+        {:stop, reason, state}
     end
   end
 end

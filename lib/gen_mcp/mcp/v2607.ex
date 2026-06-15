@@ -77,7 +77,7 @@ defmodule GenMCP.MCP.V2607 do
   def discover_result(opts) do
     %DiscoverResult{
       resultType: @result_type_complete,
-      capabilities: Keyword.get(opts, :capabilities, %{}),
+      capabilities: capabilities(Keyword.get(opts, :capabilities, %{})),
       serverInfo: server_info(opts),
       supportedVersions: ["2026-07-28"]
     }
@@ -87,9 +87,14 @@ defmodule GenMCP.MCP.V2607 do
   Normalizes capability flags/maps into `%GenMCP.MCP.V2607.ServerCapabilities{}`.
 
   Passing `true` for a key yields an empty map; maps pass through; anything else
-  leaves the field `nil`.
+  leaves the field `nil`. A `%GenMCP.MCP.V2607.ServerCapabilities{}` struct is
+  returned as-is.
   """
-  @spec capabilities(keyword()) :: ServerCapabilities.t()
+  @spec capabilities(keyword() | ServerCapabilities.t()) :: ServerCapabilities.t()
+  def capabilities(%ServerCapabilities{} = caps) do
+    caps
+  end
+
   def capabilities(opts) do
     attrs =
       Enum.flat_map(opts, fn

@@ -141,27 +141,29 @@ defmodule GenMCP.MixProject do
     [
       main: "GenMCP",
       extra_section: "GUIDES",
-      nest_modules_by_prefix: [GenMCP.MCP],
+      nest_modules_by_prefix: [GenMCP.MCP.V2607],
       groups_for_modules: [
         Core: [
           GenMCP,
-          GenMCP.MCP,
-          GenMCP.Transport.StreamableHTTP
+          GenMCP.MCP
+        ],
+        Transport: [
+          GenMCP.Transport.StreamableHTTP,
+          GenMCP.Mux.Channel
         ],
         Suite: [
           GenMCP.Suite,
           GenMCP.Suite.Tool,
           GenMCP.Suite.PromptRepo,
           GenMCP.Suite.ResourceRepo,
-          GenMCP.Suite.Extension,
-          GenMCP.Suite.SessionController,
-          GenMCP.Suite.PersistedClientInfo,
-          ~r{^GenMCP\.Suite\.SessionController\..*}
+          GenMCP.Suite.Extension
         ],
         Sessions: [
           ~r/GenMCP\.Mux\..*/
         ],
         Utilities: [
+          GenMCP.Token,
+          GenMCP.Validator.Formats,
           GenMCP.Error,
           GenMCP.TelemetryLogger
         ],

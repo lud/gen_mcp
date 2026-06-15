@@ -18,6 +18,10 @@ Mox.defmock(GenMCP.Support.ExtensionMock, for: Extension)
 
 Mox.defmock(GenMCP.Support.ToolMock, for: Tool, skip_optional_callbacks: [validate_request: 2])
 
+# Implements all optional callbacks, for tests exercising the optional
+# `validate_request/2` path (the dispatcher only invokes it when exported).
+Mox.defmock(GenMCP.Support.ToolFullMock, for: Tool)
+
 #
 # -- Resources ----------------------------------------------------------------
 
@@ -39,8 +43,3 @@ Mox.defmock(GenMCP.Support.PromptRepoMock, for: PromptRepo)
 # -- Plugs --------------------------------------------------------------------
 
 Mox.defmock(GenMCP.Support.AuthorizationMock, for: Plug)
-
-#
-# -- Session Controller -------------------------------------------------------
-
-Mox.defmock(GenMCP.Support.SessionControllerMock, for: GenMCP.Suite.SessionController)

@@ -164,8 +164,7 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
   import Plug.Conn
 
   alias GenMCP.Error
-  alias GenMCP.MCP.JSONRPCErrorResponse
-  alias GenMCP.MCP.JSONRPCResultResponse
+  alias GenMCP.MCP.V2607.JSONRPCResultResponse
   alias GenMCP.Mux.Channel
   alias GenMCP.Server
   alias GenMCP.Validator
@@ -295,12 +294,15 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
 
   # Notifications run through the same receive loop as requests; theirs is the
   # degenerate conversation ending at {:"$gen_mcp", :accepted}, emitted by the
-  # worker once handle_notification/2 returned — so the 202 goes out only after
+  # worker once handle_notification/3 returned — so the 202 goes out only after
   # the handler ran. A worker crash becomes an id-less JSON-RPC error on an
   # HTTP error status (spec: the server MUST return an HTTP error status for a
-  # notification it cannot accept).
+  # notification it cannot accept). A channel is built the same way as for a
+  # request, so the handler gets the notification's read-only `_meta` context.
   defp dispatch_notif(conn, notif, conf) do
-    case Server.start_notification(conf.server_opts, notif) do
+    channel = make_channel(conn, notif, conf)
+
+    case Server.start_notification(conf.server_opts, notif, channel) do
       {:ok, pid} ->
         mref = :erlang.monitor(:process, pid, tag: :SERVER_DOWN)
         init_loop(conn, _msg_id = nil, mref)
@@ -322,7 +324,7 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
         end
       end)
 
-    Channel.from_request(req, assigns)
+    Channel.from_request(conn, req, assigns)
   end
 
   defp send_accepted(conn) do
@@ -397,7 +399,13 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
   # * Clean exit with no output at all, or a crash — convert to a proper
   #   JSON-RPC internal error instead of a generic Bandit 500.
   defp handle_server_down(conn, reason) do
-    clean? = reason == :normal or (is_tuple(reason) and elem(reason, 0) == :shutdown)
+    clean? =
+      case reason do
+        :normal -> true
+        :shutdown -> true
+        {:shutdown, _} -> true
+        _ -> false
+      end
 
     case {clean?, conn.private.gen_mcp_status} do
       {true, :streaming} -> finalize(conn)
@@ -446,7 +454,7 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
   def send_error(conn, reason, msg_id) do
     {status, error_payload} = Error.cast_error(reason)
 
-    payload = %JSONRPCErrorResponse{
+    payload = %GenMCP.MCP.V2607.JSONRPCErrorResponse{
       error: error_payload,
       id: msg_id,
       jsonrpc: "2.0"

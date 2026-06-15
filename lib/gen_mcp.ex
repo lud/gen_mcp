@@ -46,7 +46,7 @@ defmodule GenMCP do
         end
 
         @impl true
-        def handle_notification(_notif, _state) do
+        def handle_notification(_notif, _channel, _state) do
           :ok
         end
 
@@ -58,8 +58,8 @@ defmodule GenMCP do
       end
   """
 
-  alias GenMCP.MCP
-  alias GenMCP.MCP.ModMap
+  alias GenMCP.MCP.V2607, as: MCP
+  alias GenMCP.MCP.V2607.ModMap
   alias GenMCP.Mux.Channel
 
   require ModMap
@@ -67,20 +67,20 @@ defmodule GenMCP do
   ModMap.require_all()
 
   @type state :: term
+
+  # TODO(005) exhaustive list of requests/results/notifications types
+
   @type request ::
-          MCP.InitializeRequest.t()
-          | MCP.ListToolsRequest.t()
+          MCP.ListToolsRequest.t()
           | MCP.CallToolRequest.t()
           | MCP.ListResourcesRequest.t()
           | MCP.ReadResourceRequest.t()
           | MCP.ListResourceTemplatesRequest.t()
           | MCP.ListPromptsRequest.t()
           | MCP.GetPromptRequest.t()
-          | MCP.PingRequest.t()
 
   @type result ::
-          MCP.InitializeResult.t()
-          | MCP.ListToolsResult.t()
+          MCP.ListToolsResult.t()
           | MCP.CallToolResult.t()
           | MCP.ListResourcesResult.t()
           | MCP.ReadResourceResult.t()
@@ -89,9 +89,7 @@ defmodule GenMCP do
           | MCP.GetPromptResult.t()
 
   @type notification ::
-          MCP.InitializedNotification.t()
-          | MCP.CancelledNotification.t()
-          | MCP.RootsListChangedNotification.t()
+          MCP.CancelledNotification.t()
           | MCP.ProgressNotification.t()
 
   @doc """
@@ -134,11 +132,8 @@ defmodule GenMCP do
 
   @doc """
   Handles an incoming MCP notification.
-
-  Notifications are one-way messages: they get a `202 Accepted` with no body and
-  never stream, so there is nothing to return. No channel is provided.
   """
-  @callback handle_notification(notification, state) :: :ok
+  @callback handle_notification(notification, Channel.t(), state) :: :ok
 
   @doc """
   Handles a process message during a streaming request.

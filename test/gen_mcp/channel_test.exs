@@ -3,7 +3,7 @@ defmodule GenMCP.ChannelTest do
 
   import GenMCP.Test.Helpers
 
-  alias GenMCP.MCP
+  alias GenMCP.MCP.V2607.LoggingMessageNotification
   alias GenMCP.Mux.Channel
 
   describe "send_log/4" do
@@ -13,7 +13,7 @@ defmodule GenMCP.ChannelTest do
       assert :ok = Channel.send_log(channel, :error, "an error occurred")
       assert_receive {:"$gen_mcp", :notification, notification}
 
-      assert %MCP.LoggingMessageNotification{
+      assert %LoggingMessageNotification{
                params: %{level: :error, data: "an error occurred", logger: nil}
              } = notification
     end
@@ -38,7 +38,7 @@ defmodule GenMCP.ChannelTest do
       assert :ok = Channel.send_log(channel, :error, "db error", "database")
       assert_receive {:"$gen_mcp", :notification, notification}
 
-      assert %MCP.LoggingMessageNotification{
+      assert %LoggingMessageNotification{
                params: %{level: :error, data: "db error", logger: "database"}
              } = notification
     end
@@ -57,7 +57,7 @@ defmodule GenMCP.ChannelTest do
       assert :ok = Channel.send_log(channel, :error, data)
       assert_receive {:"$gen_mcp", :notification, notification}
 
-      assert %MCP.LoggingMessageNotification{params: %{data: ^data}} = notification
+      assert %LoggingMessageNotification{params: %{data: ^data}} = notification
     end
   end
 end

@@ -4,7 +4,7 @@ defmodule GenMCP.Suite.ResourceRepoTest do
   import GenMCP.Test.Helpers
   import Mox
 
-  alias GenMCP.MCP
+  alias GenMCP.MCP.V2607, as: MCP
   alias GenMCP.Mux.Channel
   alias GenMCP.Suite.ResourceRepo
   alias GenMCP.Support.ResourceRepoMock
@@ -188,11 +188,11 @@ defmodule GenMCP.Suite.ResourceRepoTest do
       assert is_nil(cursor)
     end
 
-    test "passes channel with assigns to list callback" do
+    test "passes channel with request meta to list callback" do
       ResourceRepoMock
       |> stub(:prefix, fn _ -> "file:///" end)
       |> expect(:list, fn nil, channel, :arg ->
-        assert %{user_id: 123, role: :admin} = channel.assigns
+        assert %{user_id: 123, role: :admin} = channel.meta
         {[], nil}
       end)
 
@@ -224,6 +224,9 @@ defmodule GenMCP.Suite.ResourceRepoTest do
   describe "read_resource/3 for direct resources" do
     test "returns resource result from callback module" do
       result = %MCP.ReadResourceResult{
+        resultType: "complete",
+        cacheScope: :private,
+        ttlMs: 0,
         contents: [
           %MCP.TextResourceContents{
             uri: "file:///readme.txt",
@@ -273,13 +276,18 @@ defmodule GenMCP.Suite.ResourceRepoTest do
                ResourceRepo.read_resource(repo, "file:///invalid.txt", channel)
     end
 
-    test "passes channel with assigns to read callback" do
-      result = %MCP.ReadResourceResult{contents: []}
+    test "passes channel with request meta to read callback" do
+      result = %MCP.ReadResourceResult{
+        resultType: "complete",
+        cacheScope: :private,
+        ttlMs: 0,
+        contents: []
+      }
 
       ResourceRepoMock
       |> stub(:prefix, fn _ -> "file:///" end)
       |> expect(:read, fn "file:///test.txt", channel, :arg ->
-        assert %{user_id: 456, permissions: [:read]} = channel.assigns
+        assert %{user_id: 456, permissions: [:read]} = channel.meta
         {:ok, result}
       end)
 
@@ -313,6 +321,9 @@ defmodule GenMCP.Suite.ResourceRepoTest do
       # Given the module does not export parse_uri/2
 
       result = %MCP.ReadResourceResult{
+        resultType: "complete",
+        cacheScope: :private,
+        ttlMs: 0,
         contents: [
           %MCP.TextResourceContents{
             uri: "file:///config/app.json",
@@ -356,6 +367,9 @@ defmodule GenMCP.Suite.ResourceRepoTest do
 
     test "calls parse_uri callback when provided" do
       result = %MCP.ReadResourceResult{
+        resultType: "complete",
+        cacheScope: :private,
+        ttlMs: 0,
         contents: [
           %MCP.TextResourceContents{uri: "file:///test.txt", text: "content"}
         ]
@@ -415,8 +429,13 @@ defmodule GenMCP.Suite.ResourceRepoTest do
                ResourceRepo.read_resource(repo, "file:///missing.txt", channel)
     end
 
-    test "passes channel with assigns to read callback for template resource" do
-      result = %MCP.ReadResourceResult{contents: []}
+    test "passes channel with request meta to read callback for template resource" do
+      result = %MCP.ReadResourceResult{
+        resultType: "complete",
+        cacheScope: :private,
+        ttlMs: 0,
+        contents: []
+      }
 
       ResourceRepoMockTpl
       |> stub(:prefix, fn _ -> "file:///" end)
@@ -424,7 +443,7 @@ defmodule GenMCP.Suite.ResourceRepoTest do
         %{uriTemplate: "file:///{path}", name: "FileTemplate"}
       end)
       |> expect(:read, fn _params, channel, :arg ->
-        assert %{tenant_id: "tenant-123"} = channel.assigns
+        assert %{tenant_id: "tenant-123"} = channel.meta
         {:ok, result}
       end)
 
