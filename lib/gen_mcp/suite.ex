@@ -164,8 +164,19 @@ defmodule GenMCP.Suite do
 
   def handle_message(message, channel, state) do
     case state.on_message do
-      {:tool, tool, tool_state} -> continue_tool(state, tool, message, channel, tool_state)
+      {:tool, tool, tool_state} -> handle_tool_message(state, tool, message, channel, tool_state)
       _ -> {:stop, {:unexpected_message, message}}
+    end
+  end
+
+  @impl GenMCP
+
+  # Mirrors handle_message/3: forwards a client-close to the active streaming
+  # tool's optional `handle_close/3` so it can run cleanup. Return ignored.
+  def handle_close(channel, state) do
+    case state.on_message do
+      {:tool, tool, tool_state} -> Tool.handle_close(tool, channel, tool_state)
+      _ -> :ok
     end
   end
 
@@ -243,15 +254,23 @@ defmodule GenMCP.Suite do
   # -- Tools ------------------------------------------------------------------
 
   defp list_tools(state, channel) do
-    state
-    |> build_extensions()
-    |> Enum.flat_map(fn ext ->
-      ext
-      |> Extension.tools(channel)
-      |> Enum.map(&Tool.describe/1)
-    end)
-    |> Enum.uniq_by(& &1.name)
-    |> MCP.list_tools_result()
+    # tools/list is a single aggregated result, so the cache hint is combined
+    # across every listed tool (public iff all public, minimum ttl).
+    tools =
+      state
+      |> build_extensions()
+      |> Enum.flat_map(&Extension.tools(&1, channel))
+      |> Enum.map(&Tool.expand/1)
+      |> Enum.uniq_by(& &1.name)
+
+    cache_control =
+      Enum.reduce(tools, {nil, nil}, fn tool, acc ->
+        merge_cache(acc, Tool.cache_control(tool))
+      end)
+
+    tools
+    |> Enum.map(&Tool.describe/1)
+    |> MCP.list_tools_result(cache_opts(cache_control))
   end
 
   defp handle_tool_call(%MCP.CallToolRequest{} = req, channel, state) do
@@ -280,8 +299,8 @@ defmodule GenMCP.Suite do
     to_tool_result(state, tool, result)
   end
 
-  defp continue_tool(state, tool, message, channel, tool_state) do
-    result = Tool.continue(tool, message, channel, tool_state)
+  defp handle_tool_message(state, tool, message, channel, tool_state) do
+    result = Tool.handle_message(tool, message, channel, tool_state)
     to_tool_result(state, tool, result)
   end
 
@@ -306,12 +325,13 @@ defmodule GenMCP.Suite do
 
     case decode_pagination(cursor, method, channel) do
       {:ok, pagination} ->
-        {resources, next_pagination} = list_resources(pagination, channel, state)
+        {resources, next_pagination, cache_control} = list_resources(pagination, channel, state)
 
         result =
           MCP.list_resources_result(
             resources,
-            encode_pagination(next_pagination, method, channel)
+            encode_pagination(next_pagination, method, channel),
+            cache_opts(cache_control)
           )
 
         {:result, result}
@@ -325,33 +345,38 @@ defmodule GenMCP.Suite do
     repos = state |> stream_resource_repos(channel, :bare) |> Enum.to_list()
 
     paginate_repos(repos, pagination, fn repo, repo_cursor ->
-      ResourceRepo.list_resources(ResourceRepo.expand(repo), repo_cursor, channel)
+      repo = ResourceRepo.expand(repo)
+      {list, cursor} = ResourceRepo.list_resources(repo, repo_cursor, channel)
+      cache_control = ResourceRepo.cache_control(repo)
+      {list, cursor, cache_control}
     end)
   end
 
   # req is not used because templates are not paginated
   defp handle_list_templates(_req, channel, state) do
-    templates =
+    {templates, cache_control} =
       state
       |> stream_resource_repos(channel)
       |> Enum.uniq_by(& &1.prefix)
-      |> Enum.flat_map(fn
-        %{template: nil} ->
-          []
+      |> Enum.flat_map_reduce({nil, nil}, fn
+        %{template: nil}, acc ->
+          {[], acc}
 
-        %{template: %{uriTemplate: %Texture.UriTemplate{raw: raw}} = template} ->
+        %{template: %{uriTemplate: %Texture.UriTemplate{raw: raw}} = template} = repo, acc ->
+          cache_control = ResourceRepo.cache_control(repo)
+
           # Build the ResourceTemplate struct using the raw template string
-          [
-            struct!(
-              MCP.ResourceTemplate,
-              template
-              |> Map.put(:uriTemplate, raw)
-              |> Map.delete(:__struct__)
-            )
-          ]
+          {[
+             struct!(
+               MCP.ResourceTemplate,
+               template
+               |> Map.put(:uriTemplate, raw)
+               |> Map.delete(:__struct__)
+             )
+           ], merge_cache(acc, cache_control)}
       end)
 
-    result = MCP.list_resource_templates_result(templates)
+    result = MCP.list_resource_templates_result(templates, cache_opts(cache_control))
     {:result, result}
   end
 
@@ -387,12 +412,13 @@ defmodule GenMCP.Suite do
 
     case decode_pagination(cursor, method, channel) do
       {:ok, pagination} ->
-        {prompts, next_pagination} = list_prompts(pagination, channel, state)
+        {prompts, next_pagination, cache_control} = list_prompts(pagination, channel, state)
 
         result =
           MCP.list_prompts_result(
             prompts,
-            encode_pagination(next_pagination, method, channel)
+            encode_pagination(next_pagination, method, channel),
+            cache_opts(cache_control)
           )
 
         {:result, result}
@@ -406,7 +432,10 @@ defmodule GenMCP.Suite do
     repos = state |> stream_prompt_repos(channel, :bare) |> Enum.to_list()
 
     paginate_repos(repos, pagination, fn repo, repo_cursor ->
-      PromptRepo.list_prompts(PromptRepo.expand(repo), repo_cursor, channel)
+      repo = PromptRepo.expand(repo)
+      {list, cursor} = PromptRepo.list_prompts(repo, repo_cursor, channel)
+      cache_control = PromptRepo.cache_control(repo)
+      {list, cursor, cache_control}
     end)
   end
 
@@ -456,26 +485,26 @@ defmodule GenMCP.Suite do
   defp paginate_repos([repo | repos], repo_index, repo_index, repo_cursor, list_fun) do
     case list_fun.(repo, repo_cursor) do
       # no more items, bump repo index and immediately try next repo
-      {[], _} ->
+      {[], _, _} ->
         paginate_repos(repos, repo_index + 1, repo_index + 1, _repo_cursor = nil, list_fun)
 
       # some result but no more pages, bump repo index for next request.
       # some edge case, we do not want to return a pagination cursor if this
       # is the last repository
-      {list, nil} when repos == [] ->
-        {list, nil}
+      {list, nil, cache_control} when repos == [] ->
+        {list, nil, cache_control}
 
-      {list, nil} ->
-        {list, {repo_index + 1, _repo_cursor = nil}}
+      {list, nil, cache_control} ->
+        {list, {repo_index + 1, _repo_cursor = nil}, cache_control}
 
       # some results with a cursor so no bump
-      {list, repo_cursor} ->
-        {list, {repo_index, repo_cursor}}
+      {list, repo_cursor, cache_control} ->
+        {list, {repo_index, repo_cursor}, cache_control}
     end
   end
 
   defp paginate_repos([], _index, _repo_index, _repo_cursor, _list_fun) do
-    {[], nil}
+    {[], nil, {MCP.default_cache_scope(), MCP.default_ttl_ms()}}
   end
 
   defp encode_pagination(nil, _method, _channel) do
@@ -496,5 +525,40 @@ defmodule GenMCP.Suite do
       {:error, :expired} -> {:error, :expired_cursor}
       {:error, :invalid} -> {:error, :invalid_cursor}
     end
+  end
+
+  @spec merge_cache(maybe_cache_control, maybe_cache_control) :: cache_control
+        when cache_control: {:public | :private, non_neg_integer},
+             maybe_cache_control: cache_control | {nil, nil}
+  defp merge_cache({scope_a, ttl_a}, {scope_b, ttl_b}) do
+    {merge_cache_scope(scope_a, scope_b), merge_ttl(ttl_a, ttl_b)}
+  end
+
+  defp merge_cache_scope(a, b) do
+    case {a, b} do
+      {nil, b} when b in [:public, :private] -> b
+      {:private, _} -> :private
+      {_, :private} -> :private
+      {:public, :public} -> :public
+    end
+  end
+
+  defp merge_ttl(a, b) do
+    case {a, b} do
+      {nil, b} -> b
+      _ -> min(a, b)
+    end
+  end
+
+  defp cache_opts({nil, ttl_ms}) do
+    cache_opts({:private, ttl_ms})
+  end
+
+  defp cache_opts({cache_scope, nil}) do
+    cache_opts({cache_scope, 0})
+  end
+
+  defp cache_opts({cache_scope, ttl_ms}) do
+    [cache_scope: cache_scope, ttl_ms: ttl_ms]
   end
 end

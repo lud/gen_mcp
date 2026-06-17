@@ -84,7 +84,7 @@ defmodule GenMCP.Suite.Tool do
         end
 
         @impl true
-        def continue({:search_task, {:ok, document}}, channel, _arg) do
+        def handle_message({:search_task, {:ok, document}}, channel, _state, _arg) do
           {:result, MCP.call_tool_result(text: document), channel}
         end
       end
@@ -227,9 +227,9 @@ defmodule GenMCP.Suite.Tool do
 
   ## Async calls
 
-  When returning `{:async, {tag, ref}, channel}`, the `c:continue/3` callback
-  will be invoked with `{tag, {:ok, value}}` if the server process receives a
-  `{ref, value}` message with the same `ref`.
+  When returning `{:async, {tag, ref}, channel}`, the `c:handle_message/4`
+  callback will be invoked with `{tag, {:ok, value}}` if the server process
+  receives a `{ref, value}` message with the same `ref`.
 
   This works automatically with tasks. It is possible to directly return the
   task struct as in `{:async, {tag, task}, channel}`.
@@ -247,7 +247,7 @@ defmodule GenMCP.Suite.Tool do
   The channel provides access to assigns copied from the `Plug.Conn` struct
   (from the HTTP request that delivered the tool call request) and can be
   modified via `GenMCP.Mux.Channel.assign/3` to keep state before entering the
-  `c:continue/3` callback.
+  `c:handle_message/4` callback.
 
   Assigning modifies the channel, so the last updated channel must always be
   returned from your callback.
@@ -283,43 +283,64 @@ defmodule GenMCP.Suite.Tool do
   @callback call(MCP.CallToolRequest.t(), Channel.t(), arg) :: call_result
 
   @doc """
-  Continues processing after async work completes.
+  Handles a process message during a streaming/async tool call.
 
-  Invoked when `c:call/3` returns `{:async, {tag, ref_or_task}, channel}` and
-  the task finishes.
+  The Suite-level mirror of `c:GenMCP.handle_message/3`. Invoked when `c:call/3`
+  returned `{:async, {tag, ref_or_task}, channel}` (when the task finishes) or
+  `{:stream, state}` (for each subsequent message the worker receives).
 
-  The first tuple element contains the tag and the wrapped task result (either
-  `{:ok, result}` for success or `{:error, reason}` for failures with non-linked
-  tasks). Returns same result types as `c:call/3`. Can chain another async
-  operation by returning `{:async, {new_tag, new_ref}, channel}`.
+  For async work the first argument is `{tag, {:ok, value}}` / `{tag, {:error,
+  reason}}` — the tag from the original `{:async, {tag, ref}, channel}`. Returns
+  the same result types as `c:call/3`, and can chain another async operation by
+  returning `{:async, {new_tag, new_ref}, channel}`.
 
   The tag is generally an atom to be matched on if you implement multiple
-  conitinuation callbacks but it can be any term.
+  continuation clauses, but it can be any term.
 
   ## Examples
 
   Basic continuation:
 
-      def continue({:search_task, {:ok, results}}, channel, _arg) do
+      def handle_message({:search_task, {:ok, results}}, channel, _state, _arg) do
         {:result, MCP.call_tool_result(text: Jason.encode!(results)), channel}
       end
 
   Error handling:
 
-      def continue({:search_task, {:error, reason}}, channel, _arg) do
+      def handle_message({:search_task, {:error, reason}}, channel, _state, _arg) do
         {:error, "Search failed: \#{reason}", channel}
       end
 
   Chaining async operations:
 
-      def continue({:step1, {:ok, intermediate}}, channel, _arg) do
+      def handle_message({:step1, {:ok, intermediate}}, channel, _state, _arg) do
         task = Task.async(fn -> step2(intermediate) end)
         {:async, {:step2, task}, channel}
       end
   """
-  @callback continue(term, Channel.t(), state, arg) :: call_result
+  @callback handle_message(term, Channel.t(), state, arg) :: call_result
 
-  @optional_callbacks validate_request: 2, continue: 4, output_schema: 1
+  @doc """
+  Handles the client closing the connection during a streaming/async call.
+
+  The Suite-level mirror of `c:GenMCP.handle_close/2`: invoked when the client
+  disconnects while this tool is the active streaming handler. The `channel` is
+  already `:closed` (nothing more can be sent); the return value is ignored and
+  the worker stops afterwards. Use it purely for side-effecting cleanup.
+
+  **Optional.** If not implemented, the worker stops immediately with no cleanup.
+
+      def handle_close(_channel, _state, _arg), do: :ok
+  """
+  @callback handle_close(Channel.t(), state, arg) :: term
+
+  @callback cache_control(arg) :: {:public | :private, non_neg_integer()}
+
+  @optional_callbacks validate_request: 2,
+                      handle_message: 4,
+                      handle_close: 3,
+                      output_schema: 1,
+                      cache_control: 1
 
   defmacro __using__(opts) do
     quote do
@@ -497,6 +518,26 @@ defmodule GenMCP.Suite.Tool do
     }
   end
 
+  @doc """
+  Returns the cache hint `{scope, ttl_ms}` for the tool.
+
+  Delegates to the optional `c:cache_control/1` callback, falling back to the
+  no-cache default when the tool does not implement it.
+  """
+  @spec cache_control(tool_descriptor) :: {:public | :private, non_neg_integer()}
+  def cache_control(tool) do
+    %{mod: mod, arg: arg} = tool
+
+    if function_exported?(mod, :cache_control, 1) do
+      callback __MODULE__, mod.cache_control(arg) do
+        {scope, ttl} when scope in [:public, :private] and is_integer(ttl) and ttl >= 0 ->
+          {scope, ttl}
+      end
+    else
+      MCP.default_cache_control()
+    end
+  end
+
   defp output_schema(mod, arg) do
     if function_exported?(mod, :output_schema, 1) do
       mod.output_schema(arg)
@@ -641,24 +682,41 @@ defmodule GenMCP.Suite.Tool do
   end
 
   @doc """
-  Dispatches continuation logic to the tool's `c:continue/3` callback.
+  Dispatches a streaming/async message to the tool's `c:handle_message/4`
+  callback.
 
-  Invoked by `GenMCP.Suite` when an async task completes. The continuation tuple
-  contains the tag from the original `{:async, {tag, ref}, channel}` return and
-  the wrapped task result. Task results are wrapped as `{:ok, result}` for
-  normal completion or `{:error, reason}` for failures.
+  Invoked by `GenMCP.Suite` for each message while this tool is the active
+  streaming handler (and when an async task completes). The async continuation
+  tuple contains the tag from the original `{:async, {tag, ref}, channel}`
+  return and the wrapped task result (`{:ok, result}` / `{:error, reason}`).
 
   ## Examples
 
-      Tool.continue(tool_descriptor, {:search_task, {:ok, results}}, channel)
+      Tool.handle_message(tool_descriptor, {:search_task, {:ok, results}}, channel, state)
       #=> {:result, %GenMCP.MCP.CallToolResult{...}, channel}
 
-      Tool.continue(tool_descriptor, {:search_task, {:error, :timeout}}, channel)
+      Tool.handle_message(tool_descriptor, {:search_task, {:error, :timeout}}, channel, state)
       #=> {:error, "Search timed out", channel}
   """
-  @spec continue(tool_descriptor, term, Channel.t(), state) :: call_result
-  def continue(tool, message, channel, state) do
+  @spec handle_message(tool_descriptor, term, Channel.t(), state) :: call_result
+  def handle_message(tool, message, channel, state) do
     %{mod: mod, arg: arg} = tool
-    __handle_result(mod.continue(message, channel, state, arg))
+    __handle_result(mod.handle_message(message, channel, state, arg))
+  end
+
+  @doc """
+  Dispatches a client-close to the tool's optional `c:handle_close/3` callback.
+
+  A no-op when the tool does not implement it. The return value is ignored.
+  """
+  @spec handle_close(tool_descriptor, Channel.t(), state) :: term
+  def handle_close(tool, channel, state) do
+    %{mod: mod, arg: arg} = tool
+
+    if function_exported?(mod, :handle_close, 3) do
+      mod.handle_close(channel, state, arg)
+    else
+      :ok
+    end
   end
 end

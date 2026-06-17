@@ -155,6 +155,30 @@ defmodule GenMCP do
               | {:error, reason :: term}
 
   @doc """
+  Handles the client closing the connection during a streaming request.
+
+  Invoked only after `c:handle_request/3` returned `{:stream, state}`, when the
+  transport detects the client has gone away and the per-request channel is torn
+  down. The `channel` is passed with its `status` already `:closed`, so nothing
+  more can be sent on it — this hook exists purely for side-effecting cleanup
+  (releasing external handles, manual registry entries, side effects to undo).
+  The return value is ignored and the worker stops afterwards regardless.
+
+  These are the same arguments as `c:handle_message/3` minus the message, so an
+  implementation wanting a single entry point can delegate with a sentinel:
+
+      def handle_close(channel, state), do: handle_message(:client_closed, channel, state)
+
+  **Optional.** If not implemented, the worker stops immediately on disconnect
+  with no cleanup callback (the prior behaviour).
+
+  TODO(spec 005): document `handle_close` in the guides.
+  """
+  @callback handle_close(Channel.t(), state) :: term
+
+  @optional_callbacks handle_close: 2
+
+  @doc """
   Returns the supported protocol versions.
   """
   def supported_protocol_versions do

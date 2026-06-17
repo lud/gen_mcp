@@ -152,7 +152,9 @@ defmodule GenMCP.Suite.ResourceRepo do
   @callback parse_uri(uri :: String.t(), arg) ::
               {:ok, %{String.t() => term}} | {:ok, String.t()} | {:error, String.t()}
 
-  @optional_callbacks template: 1, parse_uri: 2
+  @callback cache_control(arg) :: {:public | :private, non_neg_integer()}
+
+  @optional_callbacks template: 1, parse_uri: 2, cache_control: 1
 
   @doc """
   Returns a descriptor for the given `module` or `{module, arg}` tuple.
@@ -271,6 +273,17 @@ defmodule GenMCP.Suite.ResourceRepo do
 
       {:error, e} ->
         {:error, "expected uri matching template #{template.raw}, #{Exception.message(e)}"}
+    end
+  end
+
+  def cache_control(repo) do
+    if function_exported?(repo.mod, :cache_control, 1) do
+      callback __MODULE__, repo.mod.cache_control(repo.arg) do
+        {scope, ttl} when scope in [:public, :private] and is_integer(ttl) and ttl >= 0 ->
+          {scope, ttl}
+      end
+    else
+      MCP.default_cache_control()
     end
   end
 end

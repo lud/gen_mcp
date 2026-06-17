@@ -190,12 +190,20 @@ defmodule GenMCP.Test.Client do
   end
 
   def read_chunk(resp) do
-    Req.parse_message(
-      resp,
+    # Selectively receive only this response's async messages (all shaped
+    # `{ref, _}`; see Req.Finch.parse_message/2). A non-selective receive would
+    # swallow unrelated messages delivered to the same process (e.g. a test
+    # signal sent from a server callback) and feed them to parse_message, which
+    # returns `:unknown` for anything that isn't `{ref, _}`. Leaving them in the
+    # mailbox lets the caller `assert_receive` them after the stream is read.
+    ref = resp.body.ref
+
+    message =
       receive do
-        msg -> msg
+        {^ref, _} = msg -> msg
       end
-    )
+
+    Req.parse_message(resp, message)
   end
 
   def stream_chunks(resp) do

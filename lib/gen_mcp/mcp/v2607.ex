@@ -56,8 +56,22 @@ defmodule GenMCP.MCP.V2607 do
   # and preserves today's behaviour.
   #
   # TODO(spec 005): derive real per-result cache hints.
-  @no_cache_scope :private
-  @no_cache_ttl_ms 0
+  @default_cache_scope :private
+  @default_ttl_ms 0
+
+  @doc false
+  def default_cache_scope do
+    @default_cache_scope
+  end
+
+  @doc false
+  def default_ttl_ms do
+    @default_ttl_ms
+  end
+
+  def default_cache_control do
+    {default_cache_scope(), default_ttl_ms()}
+  end
 
   defp require_key!(keywords, key, errmsg) do
     case :lists.keyfind(key, 1, keywords) do
@@ -67,7 +81,7 @@ defmodule GenMCP.MCP.V2607 do
   end
 
   defmacrop cur_fun do
-    {function, arity} = __ENV__.function
+    {function, arity} = __CALLER__.function
     _mfa = Exception.format_mfa(__ENV__.module, function, arity)
   end
 
@@ -77,7 +91,7 @@ defmodule GenMCP.MCP.V2607 do
   def discover_result(opts) do
     %DiscoverResult{
       cacheScope: :private,
-      ttlMs: @no_cache_ttl_ms,
+      ttlMs: @default_ttl_ms,
       resultType: @result_type_complete,
       capabilities: capabilities(Keyword.get(opts, :capabilities, %{})),
       serverInfo: server_info(opts),
@@ -131,12 +145,13 @@ defmodule GenMCP.MCP.V2607 do
   entries go through `GenMCP.Suite.Tool.describe/1`. Pagination is not supported
   yet.
   """
-  @spec list_tools_result([Tool.tool() | GenMCP.MCP.V2607.Tool.t()]) :: ListToolsResult.t()
-  def list_tools_result(tools) do
+  @spec list_tools_result([Tool.tool() | GenMCP.MCP.V2607.Tool.t()], keyword) ::
+          ListToolsResult.t()
+  def list_tools_result(tools, opts \\ []) do
     %ListToolsResult{
       resultType: @result_type_complete,
-      cacheScope: @no_cache_scope,
-      ttlMs: @no_cache_ttl_ms,
+      cacheScope: Keyword.get(opts, :cache_scope, @default_cache_scope),
+      ttlMs: Keyword.get(opts, :ttl_ms, @default_ttl_ms),
       tools:
         Enum.map(tools, fn
           %GenMCP.MCP.V2607.Tool{} = tool -> tool
@@ -263,12 +278,12 @@ defmodule GenMCP.MCP.V2607 do
   Wraps `resources` and an optional cursor into
   `%GenMCP.MCP.V2607.ListResourcesResult{}`.
   """
-  @spec list_resources_result([term()], term() | nil) :: ListResourcesResult.t()
-  def list_resources_result(resources, next_cursor) do
+  @spec list_resources_result([term()], term() | nil, keyword) :: ListResourcesResult.t()
+  def list_resources_result(resources, next_cursor, opts \\ []) do
     %ListResourcesResult{
       resultType: @result_type_complete,
-      cacheScope: @no_cache_scope,
-      ttlMs: @no_cache_ttl_ms,
+      cacheScope: Keyword.get(opts, :cache_scope, @default_cache_scope),
+      ttlMs: Keyword.get(opts, :ttl_ms, @default_ttl_ms),
       resources: resources,
       nextCursor: next_cursor
     }
@@ -278,12 +293,12 @@ defmodule GenMCP.MCP.V2607 do
   Wraps template entries into `%GenMCP.MCP.V2607.ListResourceTemplatesResult{}`.
   Pagination is not supported.
   """
-  @spec list_resource_templates_result([term()]) :: ListResourceTemplatesResult.t()
-  def list_resource_templates_result(templates) do
+  @spec list_resource_templates_result([term()], keyword) :: ListResourceTemplatesResult.t()
+  def list_resource_templates_result(templates, opts \\ []) do
     %ListResourceTemplatesResult{
       resultType: @result_type_complete,
-      cacheScope: @no_cache_scope,
-      ttlMs: @no_cache_ttl_ms,
+      cacheScope: Keyword.get(opts, :cache_scope, @default_cache_scope),
+      ttlMs: Keyword.get(opts, :ttl_ms, @default_ttl_ms),
       resourceTemplates: templates
     }
   end
@@ -291,29 +306,35 @@ defmodule GenMCP.MCP.V2607 do
   @doc """
   Wraps resource content helpers into `%GenMCP.MCP.V2607.ReadResourceResult{}`.
 
-  A keyword list (`:uri` with `:text` or `:blob`) builds a single content entry;
-  a list of maps is used as the content list as-is.
+  Options `:uri` with `:text` or `:blob` build a single content entry; Pre-made
+  content structs can be given as a list with the `:contents` option. In that
+  case, previously mentioned options are ignored.
   """
-  @spec read_resource_result(keyword() | [map()]) :: ReadResourceResult.t()
-  def read_resource_result([{k, _} | _] = opts) when is_atom(k) do
-    true = Keyword.keyword?(opts)
-    contents = resource_contents(opts)
+  @spec read_resource_result(keyword) :: ReadResourceResult.t()
+  def read_resource_result(opts) do
+    # Note that we will take _meta for the main ReadResourceResult object
+    {wrapper_opts, opts} = Keyword.split(opts, [:cache_scope, :ttl_ms, :_meta])
+
+    contents =
+      case :proplists.get_value(:contents, opts) do
+        :undefined ->
+          {content_opts, _opts} = Keyword.split(opts, [:uri, :mime_type, :blob, :text])
+          [resource_contents(content_opts)]
+
+        contents when is_list(contents) ->
+          Enum.each(contents, fn
+            m when is_map(m) -> :ok
+            other -> raise ArgumentError, "invalid :contents item: #{inspect(other)}"
+          end)
+
+          contents
+      end
 
     %ReadResourceResult{
       resultType: @result_type_complete,
-      cacheScope: @no_cache_scope,
-      ttlMs: @no_cache_ttl_ms,
-      contents: [contents]
-    }
-  end
-
-  def read_resource_result([%{} | _] = contents) do
-    true = Enum.all?(contents, &is_map/1)
-
-    %ReadResourceResult{
-      resultType: @result_type_complete,
-      cacheScope: @no_cache_scope,
-      ttlMs: @no_cache_ttl_ms,
+      _meta: Keyword.get(wrapper_opts, :_meta),
+      cacheScope: Keyword.get(wrapper_opts, :cache_scope, @default_cache_scope),
+      ttlMs: Keyword.get(wrapper_opts, :ttl_ms, @default_ttl_ms),
       contents: contents
     }
   end
@@ -357,12 +378,12 @@ defmodule GenMCP.MCP.V2607 do
   Wraps prompt entries and an optional cursor into
   `%GenMCP.MCP.V2607.ListPromptsResult{}`.
   """
-  @spec list_prompts_result([term()], term() | nil) :: ListPromptsResult.t()
-  def list_prompts_result(prompts, next_cursor) do
+  @spec list_prompts_result([term()], term() | nil, keyword) :: ListPromptsResult.t()
+  def list_prompts_result(prompts, next_cursor, opts \\ []) do
     %ListPromptsResult{
       resultType: @result_type_complete,
-      cacheScope: @no_cache_scope,
-      ttlMs: @no_cache_ttl_ms,
+      cacheScope: Keyword.get(opts, :cache_scope, @default_cache_scope),
+      ttlMs: Keyword.get(opts, :ttl_ms, @default_ttl_ms),
       prompts: prompts,
       nextCursor: next_cursor
     }

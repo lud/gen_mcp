@@ -122,6 +122,10 @@ defmodule GenMCP.Suite.PromptRepo do
   @callback get(name :: String.t(), arguments :: %{binary => term}, Channel.t(), arg) ::
               {:ok, MCP.GetPromptResult.t()} | {:error, :not_found | String.t()}
 
+  @callback cache_control(arg) :: {:public | :private, non_neg_integer()}
+
+  @optional_callbacks cache_control: 1
+
   @doc """
   Returns a descriptor for the given `module` or `{module, arg}` tuple.
   """
@@ -163,6 +167,17 @@ defmodule GenMCP.Suite.PromptRepo do
   def list_prompts(repo, cursor, channel) do
     callback __MODULE__, repo.mod.list(cursor, channel, repo.arg) do
       {list, cursor} when is_list(list) -> {list, cursor}
+    end
+  end
+
+  def cache_control(repo) do
+    if function_exported?(repo.mod, :cache_control, 1) do
+      callback __MODULE__, repo.mod.cache_control(repo.arg) do
+        {scope, ttl} when scope in [:public, :private] and is_integer(ttl) and ttl >= 0 ->
+          {scope, ttl}
+      end
+    else
+      MCP.default_cache_control()
     end
   end
 end

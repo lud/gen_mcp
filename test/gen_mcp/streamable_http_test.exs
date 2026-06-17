@@ -122,6 +122,53 @@ defmodule GenMCP.StreamableHTTPTest do
       Mox.verify!(ServerMock)
     end
 
+    test "rejects a request whose MCP-Protocol-Version is a known-but-unsupported version" do
+      # The header is well-formed AND agrees with the body `_meta`, but names a
+      # version this server does not implement. This is the case the old code
+      # got wrong: it fell through to the catch-all and reported a *missing*
+      # header. It is neither missing (-32001) nor a header/body mismatch
+      # (-32001) — it is an `UnsupportedProtocolVersionError` (-32004, HTTP 400)
+      # whose `data` lists the versions the server supports, per the draft
+      # Streamable HTTP spec. The server behaviour is never invoked.
+      unsupported = "2025-06-18"
+
+      resp =
+        new(url: @mcp_url, headers: %{"mcp-protocol-version" => unsupported}, retry: false)
+        |> post_invalid_message(%{
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/list",
+          params: %{
+            _meta: request_meta(%{"io.modelcontextprotocol/protocolVersion" => unsupported})
+          }
+        })
+        |> expect_status(400)
+
+      assert %{
+               "error" => %{
+                 "code" => -32_004,
+                 "message" => message,
+                 "data" => %{
+                   "requested" => ^unsupported,
+                   "supported" => supported
+                 }
+               }
+             } = resp.body
+
+      # `data.supported` is the list the client should retry from; it must
+      # include the version this server actually speaks.
+      assert is_list(supported)
+      assert @protocol_version in supported
+
+      # The message must describe an unsupported version — not a missing or
+      # mismatched header, the two failures this case used to be confused with.
+      assert message =~ "Unsupported protocol version"
+      refute message =~ "Missing"
+      refute message =~ "mismatch"
+
+      Mox.verify!(ServerMock)
+    end
+
     test "a stray mcp-session-id request header is ignored" do
       expect_request(fn %MCP.ListToolsRequest{}, _channel, _state ->
         {:result, MCP.list_tools_result([])}
@@ -712,6 +759,121 @@ defmodule GenMCP.StreamableHTTPTest do
              ] = chunks
     end
 
+    test "a real client disconnect mid-stream invokes handle_close server-side" do
+      # End-to-end over real HTTP: the client opens an SSE stream, reads a
+      # progress event (so the request is genuinely mid-flight), then closes the
+      # connection. Bandit observes the dropped socket on the next chunk write,
+      # the worker's relay monitor fires :CHAN_DOWN, and the server's
+      # `handle_close/2` runs with the channel already `:closed`.
+      #
+      # The server keeps ticking ~every 50ms so the dropped socket is noticed
+      # promptly — disconnect is detected on the next write, not by the 25s
+      # keepalive. `ServerMock` implements handle_close, so the normal
+      # /mcp/mock route is enough (no dedicated route/mock).
+      test_pid = self()
+      token = "disconnect-token"
+
+      ServerMock
+      |> expect(:init, fn _opts -> {:ok, :server_state} end)
+      |> expect(:handle_request, fn _req, %Channel{progress_token: ^token}, state ->
+        Process.send_after(self(), :tick, 50)
+        {:stream, state}
+      end)
+      |> stub(:handle_message, fn :tick, channel, state ->
+        :ok = Channel.send_progress(channel, 1, 2, "tick")
+        Process.send_after(self(), :tick, 50)
+        {:stream, state}
+      end)
+      |> expect(:handle_close, fn channel, :server_state ->
+        send(test_pid, {:closed_for_real, channel.status})
+        :ok
+      end)
+
+      resp =
+        post_message(
+          client(url: @mcp_url),
+          %{
+            jsonrpc: "2.0",
+            id: 99,
+            method: "tools/call",
+            params: %{
+              name: "StreamTool",
+              arguments: %{},
+              _meta: request_meta(%{progressToken: token})
+            }
+          },
+          into: :self
+        )
+
+      # The stream is live: pull the first SSE event (a progress notification).
+      assert [%{event: "message", data: %{"method" => "notifications/progress"}}] =
+               resp |> stream_chunks() |> parse_stream() |> Enum.take(1)
+
+      # Now drop the connection for real; the next tick's write fails, the relay
+      # finalizes, and the worker observes :CHAN_DOWN.
+      Req.cancel_async_response(resp)
+
+      # The server runs cleanup with a closed channel.
+      assert_receive {:closed_for_real, :closed}, 2000
+    end
+
+    test "a server-initiated Channel.close gracefully ends the stream and runs handle_close" do
+      # The handler emits one progress event, then ends the stream itself via
+      # `Channel.close/1` (server-initiated, no client disconnect). The transport
+      # acknowledges the close and finalizes the response *gracefully*, so the
+      # client reads the progress event and then a clean end-of-stream, while the
+      # worker runs `handle_close` with the channel already `:closed`.
+      test_pid = self()
+      token = "server-close-token"
+
+      ServerMock
+      |> expect(:init, fn _opts -> {:ok, :server_state} end)
+      |> expect(:handle_request, fn _req, %Channel{progress_token: ^token}, state ->
+        send(self(), :tick)
+        {:stream, state}
+      end)
+      |> expect(:handle_message, fn :tick, channel, state ->
+        :ok = Channel.send_progress(channel, 1, 2, "tick")
+        # The server decides to end the stream itself.
+        {:ok, %Channel{status: :closed}} = Channel.close(channel)
+        {:stream, state}
+      end)
+      |> expect(:handle_close, fn channel, :server_state ->
+        send(test_pid, {:server_closed, channel.status})
+        :ok
+      end)
+
+      resp =
+        post_message(
+          client(url: @mcp_url),
+          %{
+            jsonrpc: "2.0",
+            id: 100,
+            method: "tools/call",
+            params: %{
+              name: "StreamTool",
+              arguments: %{},
+              _meta: request_meta(%{progressToken: token})
+            }
+          },
+          into: :self
+        )
+
+      # The client reads the whole stream to its end: the progress event, then a
+      # graceful close (the consumer reaches `:done`). `read_chunk/1` only
+      # consumes this response's `{ref, _}` messages, so the `{:server_closed,
+      # _}` signal below is left untouched in the mailbox.
+      assert [%{event: "message", data: %{"method" => "notifications/progress"}}] =
+               resp
+               |> stream_chunks()
+               |> parse_stream()
+               |> Enum.to_list()
+
+      # The transport closed the connection on the server's behalf, so the worker
+      # ran cleanup with a closed channel.
+      assert_receive {:server_closed, :closed}, 5000
+    end
+
     test "async tool that errors from a continuation terminates the stream" do
       ServerMock
       |> expect(:init, fn _opts -> {:ok, :server_state} end)
@@ -1034,11 +1196,11 @@ defmodule GenMCP.StreamableHTTPTest do
         })
         |> expect_status(200)
 
-      # TODO(spec 005): missing-resource moves from -32002 to the standard
-      # -32602. Update this expectation when the 2026 error-code semantics land.
+      # Missing-resource uses the standard -32602 (invalid params) under the
+      # 2026 semantics; the old MCP-specific -32002 is retired (spec 005).
       assert %{
                "error" => %{
-                 "code" => -32_002,
+                 "code" => -32_602,
                  "message" => message,
                  "data" => %{"uri" => "file:///missing.txt"}
                },

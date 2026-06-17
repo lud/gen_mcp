@@ -631,19 +631,21 @@ defmodule GenMCP.MCP.V2607Test do
     # content elements
     test "multiple contents from structs" do
       result =
-        MCP.read_resource_result([
-          MCP.resource_contents(
-            blob: "some-base-64",
-            uri: "file:///doc.pdf",
-            mime_type: "application/pdf"
-          ),
-          MCP.resource_contents(
-            text: "some html",
-            uri: "file:///doc.html",
-            mime_type: "text/html"
-          ),
-          %{custom: :foo}
-        ])
+        MCP.read_resource_result(
+          contents: [
+            MCP.resource_contents(
+              blob: "some-base-64",
+              uri: "file:///doc.pdf",
+              mime_type: "application/pdf"
+            ),
+            MCP.resource_contents(
+              text: "some html",
+              uri: "file:///doc.html",
+              mime_type: "text/html"
+            ),
+            %{custom: :foo}
+          ]
+        )
 
       assert %MCP.ReadResourceResult{
                contents: [
@@ -671,6 +673,73 @@ defmodule GenMCP.MCP.V2607Test do
     test "raises when neither text nor blob is provided" do
       assert_raise ArgumentError, ~r/requires either :text or :blob option/, fn ->
         MCP.read_resource_result(uri: "file:///test.txt")
+      end
+    end
+
+    # --- edge cases for the flat `:contents` API (spec 005) -----------------
+
+    test ":contents takes precedence over :uri/:text/:blob, which are ignored" do
+      result =
+        MCP.read_resource_result(
+          uri: "file:///ignored.txt",
+          text: "ignored",
+          contents: [MCP.resource_contents(uri: "file:///real.txt", text: "real")]
+        )
+
+      assert %MCP.ReadResourceResult{
+               contents: [%MCP.TextResourceContents{uri: "file:///real.txt", text: "real"}]
+             } = result
+    end
+
+    test "an empty :contents list passes through as empty contents" do
+      # `contents` has no `minItems` in the schema, so the builder permits an
+      # empty list. Whether a server *should* return zero contents is a usage
+      # question, not a builder concern.
+      assert %MCP.ReadResourceResult{contents: []} = MCP.read_resource_result(contents: [])
+    end
+
+    test ":_meta is preserved per content when built via the :contents form" do
+      # Per-content `_meta` is attached via `resource_contents/1`; it is distinct
+      # from the top-level `:_meta`, which feeds the result object (below).
+      result =
+        MCP.read_resource_result(
+          contents: [MCP.resource_contents(uri: "file:///a.txt", text: "x", _meta: %{trace: 1})]
+        )
+
+      assert %MCP.ReadResourceResult{
+               contents: [%MCP.TextResourceContents{_meta: %{trace: 1}}]
+             } = result
+    end
+
+    test "top-level :_meta feeds the ReadResourceResult, not the content" do
+      # On the single-content flat path, `:_meta` is split off as a wrapper opt
+      # and set on the result object; the built content keeps `_meta: nil`.
+      result = MCP.read_resource_result(uri: "file:///a.txt", text: "x", _meta: %{trace: 1})
+
+      assert %MCP.ReadResourceResult{
+               _meta: %{trace: 1},
+               contents: [%MCP.TextResourceContents{_meta: nil}]
+             } = result
+    end
+
+    test "top-level :_meta is set on the result even when :contents is given" do
+      result =
+        MCP.read_resource_result(
+          _meta: %{trace: 2},
+          contents: [MCP.resource_contents(uri: "file:///a.txt", text: "x")]
+        )
+
+      assert %MCP.ReadResourceResult{
+               _meta: %{trace: 2},
+               contents: [%MCP.TextResourceContents{_meta: nil}]
+             } = result
+    end
+
+    test "a keyword list given to :contents is rejected, not passed through verbatim" do
+      # `contents: [uri: ..., text: ...]` is a keyword list, not a list of
+      # content structs; today it silently becomes `contents: [{:uri, _}, ...]`.
+      assert_raise ArgumentError, ~r/:contents/, fn ->
+        MCP.read_resource_result(contents: [uri: "file:///a", text: "x"])
       end
     end
   end
@@ -910,6 +979,85 @@ defmodule GenMCP.MCP.V2607Test do
       assert_raise ArgumentError, fn ->
         MCP.get_prompt_result([%{foo: "bar"}])
       end
+    end
+  end
+
+  describe "cache hints (spec 005)" do
+    # The list/read builders accept optional flat `cache_scope:` and `ttl_ms:`
+    # opts (no nesting). Omitted, they default to the no-cache hint (private / 0)
+    # that preserves pre-005 behaviour. Passing only one of the two fills the
+    # other with that same no-cache default. `server/discover` is a capability
+    # snapshot, not user content, so it keeps the no-cache default and takes no
+    # cache opts.
+
+    test "list_tools_result defaults to no-cache" do
+      assert %MCP.ListToolsResult{cacheScope: :private, ttlMs: 0} =
+               MCP.list_tools_result([])
+    end
+
+    test "list_tools_result honors an explicit cache hint" do
+      assert %MCP.ListToolsResult{cacheScope: :public, ttlMs: 60_000} =
+               MCP.list_tools_result([], cache_scope: :public, ttl_ms: 60_000)
+    end
+
+    test "list_resources_result defaults to no-cache" do
+      assert %MCP.ListResourcesResult{cacheScope: :private, ttlMs: 0} =
+               MCP.list_resources_result([], nil)
+    end
+
+    test "list_resources_result honors an explicit cache hint" do
+      assert %MCP.ListResourcesResult{cacheScope: :public, ttlMs: 60_000} =
+               MCP.list_resources_result([], nil, cache_scope: :public, ttl_ms: 60_000)
+    end
+
+    test "list_resource_templates_result defaults to no-cache" do
+      assert %MCP.ListResourceTemplatesResult{cacheScope: :private, ttlMs: 0} =
+               MCP.list_resource_templates_result([])
+    end
+
+    test "list_resource_templates_result honors an explicit cache hint" do
+      assert %MCP.ListResourceTemplatesResult{cacheScope: :public, ttlMs: 60_000} =
+               MCP.list_resource_templates_result([], cache_scope: :public, ttl_ms: 60_000)
+    end
+
+    test "read_resource_result (keyword form) defaults to no-cache" do
+      assert %MCP.ReadResourceResult{cacheScope: :private, ttlMs: 0} =
+               MCP.read_resource_result(uri: "file:///a.txt", text: "x")
+    end
+
+    test "read_resource_result (keyword form) honors an explicit cache hint" do
+      assert %MCP.ReadResourceResult{cacheScope: :public, ttlMs: 60_000} =
+               MCP.read_resource_result(
+                 uri: "file:///a.txt",
+                 text: "x",
+                 cache_scope: :public,
+                 ttl_ms: 60_000
+               )
+    end
+
+    test "read_resource_result (contents form) honors an explicit cache hint" do
+      contents = [MCP.resource_contents(uri: "file:///a.txt", text: "x")]
+
+      assert %MCP.ReadResourceResult{cacheScope: :public, ttlMs: 60_000} =
+               MCP.read_resource_result(contents: contents, cache_scope: :public, ttl_ms: 60_000)
+    end
+
+    test "list_prompts_result defaults to no-cache" do
+      assert %MCP.ListPromptsResult{cacheScope: :private, ttlMs: 0} =
+               MCP.list_prompts_result([], nil)
+    end
+
+    test "list_prompts_result honors an explicit cache hint" do
+      assert %MCP.ListPromptsResult{cacheScope: :public, ttlMs: 60_000} =
+               MCP.list_prompts_result([], nil, cache_scope: :public, ttl_ms: 60_000)
+    end
+
+    test "passing only one of the two opts fills the other with the no-cache default" do
+      assert %MCP.ListToolsResult{cacheScope: :public, ttlMs: 0} =
+               MCP.list_tools_result([], cache_scope: :public)
+
+      assert %MCP.ListToolsResult{cacheScope: :private, ttlMs: 30_000} =
+               MCP.list_tools_result([], ttl_ms: 30_000)
     end
   end
 

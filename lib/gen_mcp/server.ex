@@ -4,6 +4,7 @@ defmodule GenMCP.Server do
 
   import GenMCP.Utils.CallbackExt
 
+  alias GenMCP.Mux.Channel
   alias GenMCP.Utils.OptsValidator
 
   @enforce_keys [:server_mod, :server_state, :owner, :mref, :channel]
@@ -149,7 +150,12 @@ defmodule GenMCP.Server do
   end
 
   def handle_info({:CHAN_DOWN, mref, :process, _pid, _reason}, %__MODULE__{mref: mref} = state) do
-    {:stop, {:shutdown, :client_disconnected}, state}
+    {:stop, {:shutdown, :client_disconnected}, terminate_server(state)}
+  end
+
+  # received as an acknowledgement of server-initiated close
+  def handle_info({:"$gen_mcp", :closed}, state) do
+    {:stop, {:shutdown, :closed}, terminate_server(state)}
   end
 
   def handle_info(msg, state) do
@@ -178,5 +184,15 @@ defmodule GenMCP.Server do
       {:stop, reason} ->
         {:stop, reason, state}
     end
+  end
+
+  defp terminate_server(state) do
+    channel = Channel.set_closed(state.channel)
+
+    if function_exported?(state.server_mod, :handle_close, 2) do
+      _ = state.server_mod.handle_close(channel, state.server_state)
+    end
+
+    %{state | channel: channel}
   end
 end

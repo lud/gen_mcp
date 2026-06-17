@@ -192,7 +192,11 @@ defmodule GenMCP.Mux.Channel do
   # be converted to a stream later, and it will receive the message
   def close(%{status: status} = channel) when status in [:stream, :request] do
     send(channel.client, {:"$gen_mcp", :close})
-    {:ok, %{channel | status: :closed}}
+    {:ok, set_closed(channel)}
+  end
+
+  def set_closed(channel) do
+    %{channel | status: :closed}
   end
 
   def set_streaming(%__MODULE__{status: :request} = t) do

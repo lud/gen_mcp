@@ -227,6 +227,9 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
             :ok
         end
 
+      [unsupported | _] ->
+        {:error, {:unsupported_protocol_version, unsupported}}
+
       _ ->
         {:error, {:header_missing, "MCP-Protocol-Version"}}
     end
@@ -283,12 +286,8 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
     channel = make_channel(conn, req, conf)
 
     case Server.start_request(conf.server_opts, req, channel) do
-      {:ok, pid} ->
-        mref = :erlang.monitor(:process, pid, tag: :SERVER_DOWN)
-        init_loop(conn, msg_id, mref)
-
-      {:error, reason} ->
-        send_error(conn, reason, msg_id)
+      {:ok, pid} -> init_loop(conn, msg_id, pid)
+      {:error, reason} -> send_error(conn, reason, msg_id)
     end
   end
 
@@ -303,12 +302,8 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
     channel = make_channel(conn, notif, conf)
 
     case Server.start_notification(conf.server_opts, notif, channel) do
-      {:ok, pid} ->
-        mref = :erlang.monitor(:process, pid, tag: :SERVER_DOWN)
-        init_loop(conn, _msg_id = nil, mref)
-
-      {:error, reason} ->
-        send_error(conn, reason, _msg_id = nil)
+      {:ok, pid} -> init_loop(conn, _msg_id = nil, pid)
+      {:error, reason} -> send_error(conn, reason, _msg_id = nil)
     end
   end
 
@@ -341,8 +336,16 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
     |> send_resp(status, body)
   end
 
-  defp init_loop(conn, msg_id, mref) do
-    state = %{gen_mcp_msg_id: msg_id, gen_mcp_mref: mref, gen_mcp_status: :init}
+  defp init_loop(conn, msg_id, server_pid) do
+    mref = :erlang.monitor(:process, server_pid, tag: :SERVER_DOWN)
+
+    state = %{
+      gen_mcp_msg_id: msg_id,
+      gen_mcp_server: server_pid,
+      gen_mcp_mref: mref,
+      gen_mcp_status: :init
+    }
+
     conn = Plug.Conn.merge_private(conn, state)
     stream_loop(conn)
   end
@@ -365,6 +368,10 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
 
       {:"$gen_mcp", :error, reason} ->
         send_error(conn, reason)
+
+      {:"$gen_mcp", :close} ->
+        send(conn.private.gen_mcp_server, {:"$gen_mcp", :closed})
+        finalize(conn)
 
       {:SERVER_DOWN, _mref, :process, _pid, reason} ->
         handle_server_down(conn, reason)

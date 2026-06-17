@@ -25,9 +25,12 @@ defmodule GenMCP.SuiteTest do
   alias GenMCP.Mux.Channel
   alias GenMCP.Suite
   alias GenMCP.Support.ExtensionMock
+  alias GenMCP.Support.PromptRepoCacheMock
   alias GenMCP.Support.PromptRepoMock
+  alias GenMCP.Support.ResourceRepoCacheMock
   alias GenMCP.Support.ResourceRepoMock
   alias GenMCP.Support.ResourceRepoMockTpl
+  alias GenMCP.Support.ResourceRepoTplCacheMock
   alias GenMCP.Support.ToolFullMock
   alias GenMCP.Support.ToolMock
 
@@ -407,16 +410,16 @@ defmodule GenMCP.SuiteTest do
     # its process, so a slow tool simply blocks in `call/3`; a tool that needs
     # to receive messages (spawned tasks, subscriptions, ...) returns
     # `{:stream, tool_state}` and the Suite forwards every subsequent worker
-    # message to the matched tool's `continue(message, channel, tool_state,
-    # arg)`, which shares the `call/3` return vocabulary.
+    # message to the matched tool's `handle_message(message, channel,
+    # tool_state, arg)`, which shares the `call/3` return vocabulary.
 
-    test "a tool opting into streaming produces its result from continue/4" do
+    test "a tool opting into streaming produces its result from handle_message/4" do
       ToolMock
       |> stub(:info, fn :name, :stream_tool -> "StreamTool" end)
       |> expect(:call, fn _req, _channel, :stream_tool ->
         {:stream, :tool_state_0}
       end)
-      |> expect(:continue, fn {:work_done, 42}, _channel, :tool_state_0, :stream_tool ->
+      |> expect(:handle_message, fn {:work_done, 42}, _channel, :tool_state_0, :stream_tool ->
         {:result, MCP.call_tool_result(text: "Result: 42")}
       end)
 
@@ -438,13 +441,13 @@ defmodule GenMCP.SuiteTest do
       |> expect(:call, fn _req, _channel, :stream_tool ->
         {:stream, {:acc, []}}
       end)
-      |> expect(:continue, fn {:chunk, "a"}, _channel, {:acc, []}, :stream_tool ->
+      |> expect(:handle_message, fn {:chunk, "a"}, _channel, {:acc, []}, :stream_tool ->
         {:stream, {:acc, ["a"]}}
       end)
-      |> expect(:continue, fn {:chunk, "b"}, _channel, {:acc, ["a"]}, :stream_tool ->
+      |> expect(:handle_message, fn {:chunk, "b"}, _channel, {:acc, ["a"]}, :stream_tool ->
         {:stream, {:acc, ["b", "a"]}}
       end)
-      |> expect(:continue, fn :eof, _channel, {:acc, ["b", "a"]}, :stream_tool ->
+      |> expect(:handle_message, fn :eof, _channel, {:acc, ["b", "a"]}, :stream_tool ->
         {:result, MCP.call_tool_result(text: "ab")}
       end)
 
@@ -461,17 +464,17 @@ defmodule GenMCP.SuiteTest do
                Suite.handle_message(:eof, channel, state)
     end
 
-    test "a streaming tool can emit progress from continue/4" do
+    test "a streaming tool can emit progress from handle_message/4" do
       ToolMock
       |> stub(:info, fn :name, :stream_tool -> "StreamTool" end)
       |> expect(:call, fn _req, _channel, :stream_tool ->
         {:stream, nil}
       end)
-      |> expect(:continue, fn :tick, channel, nil, :stream_tool ->
+      |> expect(:handle_message, fn :tick, channel, nil, :stream_tool ->
         :ok = Channel.send_progress(channel, 1, 2, "halfway")
         {:stream, nil}
       end)
-      |> expect(:continue, fn :done, _channel, nil, :stream_tool ->
+      |> expect(:handle_message, fn :done, _channel, nil, :stream_tool ->
         {:result, MCP.call_tool_result(text: "done")}
       end)
 
@@ -499,13 +502,13 @@ defmodule GenMCP.SuiteTest do
       assert {:result, _} = Suite.handle_message(:done, channel, state)
     end
 
-    test "an error from continue/4 terminates the request" do
+    test "an error from handle_message/4 terminates the request" do
       ToolMock
       |> stub(:info, fn :name, :stream_tool -> "StreamTool" end)
       |> expect(:call, fn _req, _channel, :stream_tool ->
         {:stream, nil}
       end)
-      |> expect(:continue, fn :boom, _channel, nil, :stream_tool ->
+      |> expect(:handle_message, fn :boom, _channel, nil, :stream_tool ->
         {:error, "stream failed"}
       end)
 
@@ -514,6 +517,37 @@ defmodule GenMCP.SuiteTest do
 
       assert {:stream, state} = Suite.handle_request(call_tool_req("StreamTool"), channel, state)
       assert {:error, "stream failed"} = Suite.handle_message(:boom, channel, state)
+    end
+
+    test "handle_close forwards to the active streaming tool's handle_close/3" do
+      test_pid = self()
+
+      ToolFullMock
+      |> stub(:info, fn :name, :stream_tool -> "StreamTool" end)
+      |> stub(:validate_request, fn req, :stream_tool -> {:ok, req} end)
+      |> expect(:call, fn _req, _channel, :stream_tool -> {:stream, :tool_state_0} end)
+      |> expect(:handle_close, fn channel, :tool_state_0, :stream_tool ->
+        send(test_pid, {:tool_closed, channel.status})
+        :ok
+      end)
+
+      state = init_suite(tools: [{ToolFullMock, :stream_tool}])
+      channel = build_channel()
+
+      assert {:stream, state} =
+               Suite.handle_request(call_tool_req("StreamTool"), channel, state)
+
+      # The worker passes the channel already marked closed; the Suite routes it
+      # to the streaming tool's handle_close (return ignored).
+      closed = %{channel | status: :closed}
+      assert :ok = Suite.handle_close(closed, state)
+
+      assert_receive {:tool_closed, :closed}
+    end
+
+    test "handle_close is a no-op when no streaming tool is active" do
+      state = init_suite()
+      assert :ok = Suite.handle_close(build_channel(), state)
     end
   end
 
@@ -991,9 +1025,9 @@ defmodule GenMCP.SuiteTest do
                  state
                )
 
-      # TODO(spec 005): missing-resource moves from -32002 to the standard
-      # -32602. Update this expectation when the 2026 error-code semantics land.
-      assert {200, %{code: -32_002}} = check_error(err)
+      # Missing-resource uses the standard -32602 (invalid params) under the
+      # 2026 semantics; the old MCP-specific -32002 is retired (spec 005).
+      assert {200, %{code: -32_602}} = check_error(err)
     end
 
     test "returns not found error when no repository matches the URI prefix" do
@@ -1098,6 +1132,215 @@ defmodule GenMCP.SuiteTest do
                )
 
       assert {500, %{code: -32_603}} = check_error(err)
+    end
+  end
+
+  describe "cache hints wiring (spec 005)" do
+    # The four list builders take their cacheScope/ttlMs from an optional
+    # `cache_control/1` callback on the contributing providers (Tool / ResourceRepo
+    # / PromptRepo). Two shapes:
+    #
+    #   * `resources/list` and `prompts/list` are paginated one repo per page
+    #     (`paginate_repos` returns on the first non-empty repo), so a page just
+    #     carries THAT repo's hint. Different pages may carry different hints —
+    #     each page is its own cacheable result. No combination.
+    #
+    #   * `tools/list` and `resources/templates/list` aggregate every provider
+    #     into one result, so the Suite combines: scope is :public only if EVERY
+    #     contributor is :public, ttl is the minimum clamped to >= 0, and a
+    #     provider that does not implement `cache_control` contributes {:private, 0}
+    #     (forcing the merged result to no-cache).
+    #
+    # A page/result with no contributing provider defaults to {:private, 0}.
+    # `resources/read` is unaffected: the repo builds its own ReadResourceResult
+    # and sets cache opts directly. RED until the callback + Suite wiring land.
+
+    test "resources/list: a repo's cache_control flows to the result" do
+      ResourceRepoCacheMock
+      |> stub(:prefix, fn :repo1 -> "file:///" end)
+      |> stub(:cache_control, fn :repo1 -> {:public, 60_000} end)
+      |> expect(:list, fn nil, _channel, :repo1 ->
+        {[%{uri: "file:///a.txt", name: "A"}], nil}
+      end)
+
+      state = init_suite(resources: [{ResourceRepoCacheMock, :repo1}])
+
+      assert {:result, %MCP.ListResourcesResult{cacheScope: :public, ttlMs: 60_000}} =
+               Suite.handle_request(list_resources_req(), build_channel(), state)
+    end
+
+    test "resources/list: each page carries its own repository's cache_control" do
+      # repo1 yields page 1 (exhausted, not last) -> next page points at repo2;
+      # repo2 yields page 2. Each page is single-repo, so each carries that
+      # repo's own hint — and the two differ.
+      ResourceRepoCacheMock
+      |> stub(:prefix, fn
+        :repo1 -> "file:///"
+        :repo2 -> "s3://bucket/"
+      end)
+      |> stub(:cache_control, fn
+        :repo1 -> {:public, 60_000}
+        :repo2 -> {:private, 0}
+      end)
+      |> stub(:list, fn
+        nil, _channel, :repo1 -> {[%{uri: "file:///a.txt", name: "A"}], nil}
+        nil, _channel, :repo2 -> {[%{uri: "s3://bucket/b", name: "B"}], nil}
+      end)
+
+      opts = [resources: [{ResourceRepoCacheMock, :repo1}, {ResourceRepoCacheMock, :repo2}]]
+
+      # Page 1 — from repo1 only.
+      assert {:result,
+              %MCP.ListResourcesResult{cacheScope: :public, ttlMs: 60_000, nextCursor: cursor}} =
+               Suite.handle_request(list_resources_req(), build_channel(), init_suite(opts))
+
+      assert is_binary(cursor)
+
+      # Page 2 — from repo2 only, with its own (different) hint.
+      assert {:result, result} =
+               Suite.handle_request(list_resources_req(cursor), build_channel(), init_suite(opts))
+
+      assert %MCP.ListResourcesResult{cacheScope: :private, ttlMs: 0, nextCursor: nil} = result
+    end
+
+    test "resources/list: defaults to no-cache when no repo implements cache_control" do
+      ResourceRepoMock
+      |> stub(:prefix, fn :repo1 -> "file:///" end)
+      |> expect(:list, fn nil, _channel, :repo1 -> {[], nil} end)
+
+      state = init_suite(resources: [{ResourceRepoMock, :repo1}])
+
+      assert {:result, %MCP.ListResourcesResult{cacheScope: :private, ttlMs: 0}} =
+               Suite.handle_request(list_resources_req(), build_channel(), state)
+    end
+
+    test "resources/templates/list: combines the contributing repos (public iff all, min ttl)" do
+      # templates/list aggregates every template repo into ONE result, so its
+      # hint is combined across the contributors.
+      ResourceRepoTplCacheMock
+      |> stub(:prefix, fn
+        :repo1 -> "http://a/"
+        :repo2 -> "http://b/"
+      end)
+      |> stub(:template, fn
+        :repo1 -> %{uriTemplate: "http://a/{path}", name: "A"}
+        :repo2 -> %{uriTemplate: "http://b/{path}", name: "B"}
+      end)
+      |> stub(:cache_control, fn
+        :repo1 -> {:public, 45_000}
+        :repo2 -> {:public, 30_000}
+      end)
+
+      state =
+        init_suite(
+          resources: [{ResourceRepoTplCacheMock, :repo1}, {ResourceRepoTplCacheMock, :repo2}]
+        )
+
+      assert {:result, %MCP.ListResourceTemplatesResult{cacheScope: :public, ttlMs: 30_000}} =
+               Suite.handle_request(list_resource_templates_req(), build_channel(), state)
+    end
+
+    test "resources/templates/list: any private contributor makes the result private" do
+      ResourceRepoTplCacheMock
+      |> stub(:prefix, fn
+        :repo1 -> "http://a/"
+        :repo2 -> "http://b/"
+      end)
+      |> stub(:template, fn
+        :repo1 -> %{uriTemplate: "http://a/{path}", name: "A"}
+        :repo2 -> %{uriTemplate: "http://b/{path}", name: "B"}
+      end)
+      |> stub(:cache_control, fn
+        :repo1 -> {:public, 45_000}
+        :repo2 -> {:private, 90_000}
+      end)
+
+      state =
+        init_suite(
+          resources: [{ResourceRepoTplCacheMock, :repo1}, {ResourceRepoTplCacheMock, :repo2}]
+        )
+
+      assert {:result, %MCP.ListResourceTemplatesResult{cacheScope: :private, ttlMs: 45_000}} =
+               Suite.handle_request(list_resource_templates_req(), build_channel(), state)
+    end
+
+    test "prompts/list: the producing repo's cache_control sets the page hint" do
+      # The repo must actually produce items: an empty page would be discarded by
+      # paginate_repos, leaving no producing repo and the default {:private, 0}.
+      PromptRepoCacheMock
+      |> stub(:prefix, fn :repo1 -> "greet" end)
+      |> stub(:cache_control, fn :repo1 -> {:public, 60_000} end)
+      |> expect(:list, fn nil, _channel, :repo1 ->
+        {[%{name: "greeting", description: "Say hello"}], nil}
+      end)
+
+      state = init_suite(prompts: [{PromptRepoCacheMock, :repo1}])
+
+      assert {:result, %MCP.ListPromptsResult{cacheScope: :public, ttlMs: 60_000}} =
+               Suite.handle_request(list_prompts_req(), build_channel(), state)
+    end
+
+    test "resources/list: an empty listing is no-cache even if the repo advertises a hint" do
+      # paginate_repos discards empty `{[], _}` pages and advances; with no
+      # producing repo the result falls back to {:private, 0}, regardless of the
+      # repo's cache_control.
+      ResourceRepoCacheMock
+      |> stub(:prefix, fn :repo1 -> "file:///" end)
+      |> stub(:cache_control, fn :repo1 -> {:public, 60_000} end)
+      |> expect(:list, fn nil, _channel, :repo1 -> {[], nil} end)
+
+      state = init_suite(resources: [{ResourceRepoCacheMock, :repo1}])
+
+      assert {:result, %MCP.ListResourcesResult{cacheScope: :private, ttlMs: 0}} =
+               Suite.handle_request(list_resources_req(), build_channel(), state)
+    end
+
+    test "tools/list: combines the tools' cache_controls (public iff all, min ttl)" do
+      # tools/list aggregates every tool into ONE result, so the hint is
+      # combined across the listed tools.
+      ToolFullMock
+      |> stub(:info, fn
+        :name, :t1 -> "T1"
+        :name, :t2 -> "T2"
+        _kind, _arg -> nil
+      end)
+      |> stub(:input_schema, fn _arg -> %{type: :object} end)
+      |> stub(:output_schema, fn _arg -> nil end)
+      |> stub(:cache_control, fn
+        :t1 -> {:public, 60_000}
+        :t2 -> {:public, 30_000}
+      end)
+
+      state = init_suite(tools: [{ToolFullMock, :t1}, {ToolFullMock, :t2}])
+
+      assert {:result, %MCP.ListToolsResult{cacheScope: :public, ttlMs: 30_000}} =
+               Suite.handle_request(list_tools_req(), build_channel(), state)
+    end
+
+    test "tools/list: a tool without cache_control forces no-cache" do
+      # ToolFullMock implements cache_control; ToolMock (skips it) does not, so it
+      # contributes {:private, 0} and poisons the aggregated result.
+      ToolFullMock
+      |> stub(:info, fn
+        :name, :cached -> "Cached"
+        _kind, :cached -> nil
+      end)
+      |> stub(:input_schema, fn :cached -> %{type: :object} end)
+      |> stub(:output_schema, fn :cached -> nil end)
+      |> stub(:cache_control, fn :cached -> {:public, 60_000} end)
+
+      ToolMock
+      |> stub(:info, fn
+        :name, :plain -> "Plain"
+        _kind, :plain -> nil
+      end)
+      |> stub(:input_schema, fn :plain -> %{type: :object} end)
+      |> stub(:output_schema, fn :plain -> nil end)
+
+      state = init_suite(tools: [{ToolFullMock, :cached}, {ToolMock, :plain}])
+
+      assert {:result, %MCP.ListToolsResult{cacheScope: :private, ttlMs: 0}} =
+               Suite.handle_request(list_tools_req(), build_channel(), state)
     end
   end
 

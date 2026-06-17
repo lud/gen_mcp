@@ -36,12 +36,12 @@ defmodule GenMCP.Error do
   @rpc_invalid_params -32_602
   @rpc_method_not_found -32_601
   @rpc_internal_error -32_603
-  @mcp_resource_not_found -32_002
+  @mcp_resource_not_found -32_602
   @mcp_header_mismatch -32_001
   @mcp_prompt_not_found @rpc_invalid_params
 
   # https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1442
-  @mcp_unsupported_protocol_version -32_000
+  @mcp_unsupported_protocol_version -32_004
 
   # The body of the 403 MAY be an id-less JSON-RPC error (draft transport spec,
   # Security & Endpoint); no specific code is mandated.
@@ -114,9 +114,11 @@ defmodule GenMCP.Error do
 
   # JSON-RPC level: client sent an unsupported protocolVersion in the initialize request.
   # This is an application-level error, returned as HTTP 200 with a JSON-RPC error body.
-  defcasterror {:unsupported_protocol_init, version}, @mcp_unsupported_protocol_version, 200 do
+  defcasterror {:unsupported_protocol_version, unsupported},
+               @mcp_unsupported_protocol_version,
+               400 do
     %{
-      data: %{version: version, supported: GenMCP.supported_protocol_versions()},
+      data: %{requested: unsupported, supported: GenMCP.supported_protocol_versions()},
       message: "Unsupported protocol version"
     }
   end
