@@ -5,7 +5,9 @@ defmodule GenMCP.Tools.ListModuleFunctions do
     {:__struct__, 1},
     {:behaviour_info, 1},
     {:module_info, 0},
-    {:module_info, 1}
+    {:module_info, 1},
+    {:schema, 0},
+    {:json_schema, 0}
   ]
 
   def run do
@@ -45,39 +47,84 @@ defmodule GenMCP.Tools.ListModuleFunctions do
   end
 
   defp print_module(module) do
-    IO.puts("## #{inspect(module)}\n")
+    callbacks = callbacks(module)
+    callables = exported_callables(module)
 
-    module
-    |> exported_functions()
-    |> Enum.each(fn {name, arity} ->
-      IO.puts("- #{name}/#{arity}")
-    end)
+    if callbacks != [] or callables != [] do
+      IO.puts("## #{inspect(module)}\n")
 
-    IO.puts("")
-  end
+      Enum.each(callbacks, fn {name, arity} ->
+        IO.puts("- @callback #{name}/#{arity}")
+      end)
 
-  defp exported_functions(module) do
-    case Code.fetch_docs(module) do
-      {:docs_v1, _, _, _, _, _, docs} ->
-        docs
-        |> Enum.filter(&function_doc?/1)
-        |> Enum.map(fn {{:function, name, arity}, _, _, _, _} -> {name, arity} end)
-        |> Enum.sort_by(fn {name, arity} -> {Atom.to_string(name), arity} end)
+      Enum.each(callables, fn
+        {:function, name, arity} ->
+          IO.puts("- def #{name}/#{arity}")
 
-      {:error, _reason} ->
-        module.__info__(:functions)
-        |> Enum.reject(&generated_function?/1)
-        |> Enum.reject(fn {name, _arity} -> internal_function_name?(name) end)
-        |> Enum.sort_by(fn {name, arity} -> {Atom.to_string(name), arity} end)
+        {:macro, name, arity} ->
+          IO.puts("- defmacro #{name}/#{arity}")
+      end)
+
+      IO.puts("")
     end
   end
 
-  defp function_doc?({{:function, name, arity}, _, _, _, _}) do
+  defp callbacks(module) do
+    module
+    |> apply(:behaviour_info, [:callbacks])
+    |> Enum.reject(fn {name, _arity} -> internal_function_name?(name) end)
+    |> Enum.sort_by(fn {name, arity} -> {Atom.to_string(name), arity} end)
+  rescue
+    UndefinedFunctionError ->
+      []
+  end
+
+  defp exported_callables(module) do
+    case Code.fetch_docs(module) do
+      {:docs_v1, _, _, _, _, _, docs} ->
+        docs
+        |> Enum.filter(&callable_doc?/1)
+        |> Enum.map(fn {{kind, name, arity}, _, _, _, _} -> {kind, name, arity} end)
+        |> Enum.sort_by(&callable_sort_key/1)
+
+      {:error, _reason} ->
+        exported_callables_fallback(module)
+    end
+  end
+
+  defp exported_callables_fallback(module) do
+    functions =
+      module.__info__(:functions)
+      |> Enum.reject(&generated_function?/1)
+      |> Enum.reject(fn {name, _arity} -> internal_function_name?(name) end)
+      |> Enum.map(fn {name, arity} -> {:function, name, arity} end)
+
+    macros =
+      module.__info__(:macros)
+      |> Enum.reject(fn {name, _arity} -> internal_function_name?(name) end)
+      |> Enum.map(fn {name, arity} -> {:macro, name, arity} end)
+
+    Enum.sort_by(functions ++ macros, &callable_sort_key/1)
+  end
+
+  defp callable_doc?({{kind, name, arity}, _, _, _, _}) when kind in [:function, :macro] do
     not generated_function?({name, arity}) and not internal_function_name?(name)
   end
 
-  defp function_doc?(_other) do
+  defp callable_doc?(_other) do
     false
+  end
+
+  defp callable_sort_key({kind, name, arity}) do
+    {Atom.to_string(name), arity, callable_kind_order(kind)}
+  end
+
+  defp callable_kind_order(:function) do
+    0
+  end
+
+  defp callable_kind_order(:macro) do
+    1
   end
 
   defp generated_function?(function) do
