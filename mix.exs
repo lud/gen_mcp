@@ -76,6 +76,7 @@ defmodule GenMCP.MixProject do
   # land, so we pin a commit SHA rather than a branch/tag ref. Re-run codegen +
   # `check-entities` whenever this SHA is bumped.
   @schemas_ref "98c49d9310697a105af8ba57fe3fdc23b833d7d2"
+  # next @schemas_ref "f04ab539afc1810747b8b2ead6a1849e15702f2e"
 
   defp mcp_schemas do
     {
