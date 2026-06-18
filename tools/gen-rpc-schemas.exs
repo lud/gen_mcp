@@ -78,7 +78,23 @@ defmodule Context do
   defstruct [:mod_prefix, :mod_config]
 
   def mod_config(%{mod_config: mod_config}, name) do
-    Keyword.fetch!(mod_config, name)
+    case Keyword.fetch(mod_config, name) do
+      {:ok, cfg} ->
+        cfg
+
+      :error ->
+        raise """
+        Missing configuration for schema #{inspect(name)} in :mod_config option
+
+            # Add the following into config
+
+            #{name}: [],
+
+            # Or add a skip
+
+            #{name}: :nogen
+        """
+    end
   end
 
   def mod_config(ctx, name, key, default) do
@@ -340,7 +356,6 @@ defmodule Generator do
 
   defp process_schema(entity, ctx) do
     entity
-    |> replace_meta_to_custom_struct(ctx)
     |> skip_request_fields()
     |> skip_content_type(ctx)
     |> classify_schema()
@@ -354,16 +369,6 @@ defmodule Generator do
 
       require GenMCP.JsonDerive, as: JsonDerive
       """,
-      Codegen.render_schema_module(
-        Codegen.module_name("Meta", ctx),
-        %{
-          additionalProperties: %{},
-          description:
-            "See [General Fields](https://modelcontextprotocol.io/specification/2025-11-25/basic#general-fields) for notes on _meta usage.",
-          properties: %{progressToken: Codegen.module_name("ProgressToken", ctx)},
-          type: "object"
-        }
-      ),
       ~s'''
       defmodule #{inspect(Codegen.module_name("ListenerRequest", ctx))} do
         @moduledoc """
@@ -424,32 +429,6 @@ defmodule Generator do
     schema = Map.put_new(schema, :title, "MCP:" <> Atom.to_string(name))
 
     entity(entity, kind: kind, schema: schema)
-  end
-
-  defp replace_meta_to_custom_struct(entity, ctx) do
-    entity(schema: schema, name: name) = entity
-
-    schema =
-      if Context.flagged?(ctx, name, :rpc_request_params) and not meta_is_typed_ref?(schema) do
-        put_in(schema, [:properties, :_meta], %{
-          "$ref": "#/$defs/Meta"
-        })
-      else
-        schema
-      end
-
-    entity(entity, schema: schema)
-  end
-
-  # When the source schema already points `_meta` at a dedicated carrier
-  # (MetaObject / RequestMetaObject, introduced in the 2026 draft), keep that
-  # reference instead of clobbering it with the legacy custom `Meta` struct.
-  defp meta_is_typed_ref?(schema) do
-    case get_in(schema, [:properties, :_meta]) do
-      %{"$ref": "#/$defs/MetaObject"} -> true
-      %{"$ref": "#/$defs/RequestMetaObject"} -> true
-      _ -> false
-    end
   end
 
   defp skip_request_fields(entity) do
@@ -547,11 +526,11 @@ Generator.run("deps/modelcontextprotocol/schema/draft/schema.json",
     BooleanSchema: :lax,
     CacheableResult: [],
     CallToolRequest: [],
-    CallToolRequestParams: [rpc_request_params: true],
+    CallToolRequestParams: [],
     CallToolResult: [],
     CallToolResultResponse: :nogen,
     CancelledNotification: [],
-    CancelledNotificationParams: [rpc_request_params: true],
+    CancelledNotificationParams: [],
     ClientCapabilities: [],
     ClientNotification: :nogen,
     ClientRequest: :nogen,
@@ -569,20 +548,19 @@ Generator.run("deps/modelcontextprotocol/schema/draft/schema.json",
     DiscoverResult: [],
     DiscoverResultResponse: :nogen,
     ElicitRequest: [],
-    ElicitationCompleteNotificationParams: [],
     ElicitRequestFormParams: [],
     ElicitRequestParams: [],
     ElicitRequestURLParams: [],
     ElicitResult: [],
-    ElicitationCompleteNotification: :nogen,
     EmbeddedResource: [content_block: true],
     EmptyResult: :nogen,
     EnumSchema: :lax,
     Error: [],
     GetPromptRequest: [],
-    GetPromptRequestParams: [rpc_request_params: true],
+    GetPromptRequestParams: [],
     GetPromptResult: [],
     GetPromptResultResponse: :nogen,
+    HeaderMismatchError: :nogen,
     Icon: [],
     Icons: [],
     ImageContent: [content_block: true],
@@ -591,7 +569,7 @@ Generator.run("deps/modelcontextprotocol/schema/draft/schema.json",
     InputRequests: [],
     InputRequiredResult: [],
     InputResponse: [],
-    InputResponseRequestParams: [rpc_request_params: true],
+    InputResponseRequestParams: [],
     InputResponses: [],
     InternalError: :nogen,
     InvalidParamsError: :nogen,
@@ -630,10 +608,11 @@ Generator.run("deps/modelcontextprotocol/schema/draft/schema.json",
     ModelPreferences: [],
     MultiSelectEnumSchema: :lax,
     Notification: :nogen,
+    NotificationMetaObject: [],
     NotificationParams: [],
     NumberSchema: :lax,
     PaginatedRequest: :nogen,
-    PaginatedRequestParams: [rpc_request_params: true],
+    PaginatedRequestParams: [],
     PaginatedResult: :nogen,
     ParseError: :nogen,
     PrimitiveSchemaDefinition: :lax,
@@ -646,7 +625,7 @@ Generator.run("deps/modelcontextprotocol/schema/draft/schema.json",
     PromptMessage: [],
     PromptReference: :nogen,
     ReadResourceRequest: [],
-    ReadResourceRequestParams: [rpc_request_params: true],
+    ReadResourceRequestParams: [],
     ReadResourceResult: [],
     ReadResourceResultResponse: :nogen,
     Request: :nogen,
@@ -677,7 +656,7 @@ Generator.run("deps/modelcontextprotocol/schema/draft/schema.json",
     SubscriptionsAcknowledgedNotification: [],
     SubscriptionsAcknowledgedNotificationParams: [],
     SubscriptionsListenRequest: [],
-    SubscriptionsListenRequestParams: [rpc_request_params: true],
+    SubscriptionsListenRequestParams: [],
     TextContent: [content_block: true],
     TextResourceContents: [],
     TitledMultiSelectEnumSchema: :lax,

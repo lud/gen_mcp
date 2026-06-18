@@ -2,20 +2,6 @@
 
 require GenMCP.JsonDerive, as: JsonDerive
 
-defmodule GenMCP.MCP.V2607.Meta do
-  use JSV.Schema
-
-  def json_schema do
-    %{
-      additionalProperties: %{},
-      description:
-        "See [General Fields](https://modelcontextprotocol.io/specification/2025-11-25/basic#general-fields) for notes on _meta usage.",
-      properties: %{progressToken: GenMCP.MCP.V2607.ProgressToken},
-      type: "object"
-    }
-  end
-end
-
 defmodule GenMCP.MCP.V2607.ListenerRequest do
   @moduledoc """
   Represents a GET request from the StreamableHTTP client.
@@ -59,8 +45,6 @@ defmodule GenMCP.MCP.V2607.ModMap do
         "ElicitRequestParams" => GenMCP.MCP.V2607.ElicitRequestParams,
         "ElicitRequestURLParams" => GenMCP.MCP.V2607.ElicitRequestURLParams,
         "ElicitResult" => GenMCP.MCP.V2607.ElicitResult,
-        "ElicitationCompleteNotificationParams" =>
-          GenMCP.MCP.V2607.ElicitationCompleteNotificationParams,
         "EmbeddedResource" => GenMCP.MCP.V2607.EmbeddedResource,
         "Error" => GenMCP.MCP.V2607.Error,
         "GetPromptRequest" => GenMCP.MCP.V2607.GetPromptRequest,
@@ -99,6 +83,7 @@ defmodule GenMCP.MCP.V2607.ModMap do
         "MetaObject" => GenMCP.MCP.V2607.MetaObject,
         "ModelHint" => GenMCP.MCP.V2607.ModelHint,
         "ModelPreferences" => GenMCP.MCP.V2607.ModelPreferences,
+        "NotificationMetaObject" => GenMCP.MCP.V2607.NotificationMetaObject,
         "NotificationParams" => GenMCP.MCP.V2607.NotificationParams,
         "PaginatedRequestParams" => GenMCP.MCP.V2607.PaginatedRequestParams,
         "ProgressNotification" => GenMCP.MCP.V2607.ProgressNotification,
@@ -429,8 +414,14 @@ defmodule GenMCP.MCP.V2607.CancelledNotification do
 
   defschema %{
     description: ~SD"""
-    This notification can be sent by either side to indicate that it is
-    cancelling a previously-issued request.
+    This notification is sent by the client to indicate that it is
+    cancelling a request it previously issued.
+
+    On stdio, the server also sends this notification, solely to terminate
+    a {@link SubscriptionsListenRequestsubscriptions/listen} stream: it
+    references the ID of the `subscriptions/listen` request that opened
+    the stream. Servers MUST NOT use this notification to cancel any other
+    request.
 
     The request SHOULD still be in-flight, but due to communication
     latency, it is always possible that this notification MAY arrive after
@@ -455,14 +446,14 @@ end
 defmodule GenMCP.MCP.V2607.CancelledNotificationParams do
   use JSV.Schema
 
-  JsonDerive.auto(_merge = %{}, _keep_nils = [])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:requestId])
 
   defschema %{
     description: ~SD"""
     Parameters for a `notifications/cancelled` notification.
     """,
     properties: %{
-      _meta: GenMCP.MCP.V2607.MetaObject,
+      _meta: GenMCP.MCP.V2607.NotificationMetaObject,
       reason:
         string(
           description: ~SD"""
@@ -472,6 +463,7 @@ defmodule GenMCP.MCP.V2607.CancelledNotificationParams do
         ),
       requestId: GenMCP.MCP.V2607.RequestId
     },
+    required: [:requestId],
     title: "MCP:CancelledNotificationParams",
     type: "object"
   }
@@ -880,7 +872,7 @@ end
 defmodule GenMCP.MCP.V2607.ElicitRequestURLParams do
   use JSV.Schema
 
-  JsonDerive.auto(_merge = %{}, _keep_nils = [:elicitationId, :message, :mode, :url])
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:message, :mode, :url])
 
   defschema %{
     description: ~SD"""
@@ -888,13 +880,6 @@ defmodule GenMCP.MCP.V2607.ElicitRequestURLParams do
     URL in the client.
     """,
     properties: %{
-      elicitationId:
-        string(
-          description: ~SD"""
-          The ID of the elicitation, which must be unique within the context of
-          the server. The client MUST treat this ID as an opaque value.
-          """
-        ),
       message:
         string(
           description: ~SD"""
@@ -905,7 +890,7 @@ defmodule GenMCP.MCP.V2607.ElicitRequestURLParams do
       mode: const("url", description: "The elicitation mode."),
       url: uri(description: "The URL that the user should navigate to.")
     },
-    required: [:elicitationId, :message, :mode, :url],
+    required: [:message, :mode, :url],
     title: "MCP:ElicitRequestURLParams",
     type: "object"
   }
@@ -939,29 +924,6 @@ defmodule GenMCP.MCP.V2607.ElicitResult do
     },
     required: [:action],
     title: "MCP:ElicitResult",
-    type: "object"
-  }
-
-  @type t :: %__MODULE__{}
-end
-
-defmodule GenMCP.MCP.V2607.ElicitationCompleteNotificationParams do
-  use JSV.Schema
-
-  JsonDerive.auto(_merge = %{}, _keep_nils = [:elicitationId])
-
-  defschema %{
-    description: ~SD"""
-    Parameters for a {@link
-    ElicitationCompleteNotificationnotifications/elicitation/complete}
-    notification.
-    """,
-    properties: %{
-      _meta: GenMCP.MCP.V2607.MetaObject,
-      elicitationId: string(description: "The ID of the elicitation that completed.")
-    },
-    required: [:elicitationId],
-    title: "MCP:ElicitationCompleteNotificationParams",
     type: "object"
   }
 
@@ -1812,7 +1774,7 @@ defmodule GenMCP.MCP.V2607.ListRootsRequest do
     """,
     properties: %{
       method: const("roots/list"),
-      params: GenMCP.MCP.V2607.RequestParams
+      params: %{properties: %{_meta: GenMCP.MCP.V2607.MetaObject}, type: "object"}
     },
     required: [:method],
     title: "MCP:ListRootsRequest",
@@ -1972,7 +1934,7 @@ defmodule GenMCP.MCP.V2607.LoggingMessageNotificationParams do
     Parameters for a `notifications/message` notification.
     """,
     properties: %{
-      _meta: GenMCP.MCP.V2607.MetaObject,
+      _meta: GenMCP.MCP.V2607.NotificationMetaObject,
       data: %{
         description: ~SD"""
         The data to be logged, such as a string message or an object. Any JSON
@@ -2144,6 +2106,26 @@ defmodule GenMCP.MCP.V2607.ModelPreferences do
   @type t :: %__MODULE__{}
 end
 
+defmodule GenMCP.MCP.V2607.NotificationMetaObject do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [])
+
+  defschema %{
+    description: ~SD"""
+    Extends {@link MetaObject} with additional notification-specific
+    fields. All key naming rules from `MetaObject` apply.
+    """,
+    properties: %{
+      "io.modelcontextprotocol/subscriptionId": GenMCP.MCP.V2607.RequestId
+    },
+    title: "MCP:NotificationMetaObject",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
 defmodule GenMCP.MCP.V2607.NotificationParams do
   use JSV.Schema
 
@@ -2151,7 +2133,7 @@ defmodule GenMCP.MCP.V2607.NotificationParams do
 
   defschema %{
     description: "Common params for any notification.",
-    properties: %{_meta: GenMCP.MCP.V2607.MetaObject},
+    properties: %{_meta: GenMCP.MCP.V2607.NotificationMetaObject},
     title: "MCP:NotificationParams",
     type: "object"
   }
@@ -2223,7 +2205,7 @@ defmodule GenMCP.MCP.V2607.ProgressNotificationParams do
     notification.
     """,
     properties: %{
-      _meta: GenMCP.MCP.V2607.MetaObject,
+      _meta: GenMCP.MCP.V2607.NotificationMetaObject,
       message:
         string(
           description: ~SD"""
@@ -3136,7 +3118,7 @@ defmodule GenMCP.MCP.V2607.SubscriptionsAcknowledgedNotificationParams do
     notification.
     """,
     properties: %{
-      _meta: GenMCP.MCP.V2607.MetaObject,
+      _meta: GenMCP.MCP.V2607.NotificationMetaObject,
       notifications: GenMCP.MCP.V2607.SubscriptionFilter
     },
     required: [:notifications],
@@ -3296,6 +3278,11 @@ defmodule GenMCP.MCP.V2607.Tool do
         `anyOf`, `allOf`, `not`), conditional keywords (`if`/`then`/`else`),
         reference keywords (`$ref`, `$defs`, `$anchor`), and any other
         standard validation or annotation keywords.
+
+        Property schemas may carry an `x-mcp-header` annotation to mirror the
+        argument value into an HTTP header on the Streamable HTTP transport.
+        See the Streamable HTTP transport specification for the validity and
+        extraction rules.
 
         Defaults to JSON Schema 2020-12 when no explicit `$schema` is
         provided.
