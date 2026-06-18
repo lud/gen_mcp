@@ -24,6 +24,7 @@ defmodule GenMCP.SuiteTest do
   alias GenMCP.MCP.V2607, as: MCP
   alias GenMCP.Mux.Channel
   alias GenMCP.Suite
+  alias GenMCP.Suite.Tool
   alias GenMCP.Support.ExtensionMock
   alias GenMCP.Support.PromptRepoCacheMock
   alias GenMCP.Support.PromptRepoMock
@@ -61,6 +62,22 @@ defmodule GenMCP.SuiteTest do
     %MCP.CallToolRequest{
       id: id,
       params: %MCP.CallToolRequestParams{_meta: nil, name: name, arguments: arguments}
+    }
+  end
+
+  # An MRTR retry (spec 007): the client re-sends the ORIGINAL call — a brand
+  # new JSON-RPC id, the SAME name + arguments — echoing the opaque
+  # `requestState` it received and the `inputResponses` it gathered.
+  defp retry_tool_req(name, arguments, request_state, id \\ 2, input_responses \\ %{}) do
+    %MCP.CallToolRequest{
+      id: id,
+      params: %MCP.CallToolRequestParams{
+        _meta: nil,
+        name: name,
+        arguments: arguments,
+        requestState: request_state,
+        inputResponses: input_responses
+      }
     }
   end
 
@@ -402,6 +419,193 @@ defmodule GenMCP.SuiteTest do
                Suite.handle_request(call_tool_req("ErrorTool"), build_channel(), state)
 
       assert {200, %{code: -32_602, message: "Invalid Parameters"}} = check_error(err)
+    end
+  end
+
+  describe "multi round-trip (MRTR) tool calls" do
+    # Spec 007. The stateless core cannot hold a stream open to ask the client
+    # for sampling/elicitation/roots, so a tool returns
+    # `{:input_required, requests, client_state}` (3-tuple — no channel, tools
+    # no longer return one). MRTR is "just a result": the Suite (in `Tool`)
+    # transforms that convenience tuple into a plain
+    # `{:result, %InputRequiredResult{}}`, encrypting `client_state` into an
+    # opaque, AEAD-protected `requestState` bound to `{tool, arguments}` via
+    # `GenMCP.Token` (`{:reqstate, %{tool, args}}`). The runner (`GenMCP.Server`)
+    # stays generic — it forwards the result like any other, with no MRTR
+    # knowledge. On the retry the client echoes `requestState`; the Suite
+    # decrypts it (bound to the retry's own name + arguments) and resumes. The
+    # binding is on `arguments`, NOT the whole params: the retry params differ
+    # from the initial by the added `requestState` / `inputResponses` fields,
+    # while `arguments` is the stably-echoed business input.
+
+    @mrtr_requests %{"elicit-1" => %{"method" => "elicitation/create"}}
+
+    test "a tool's {:input_required, requests, client_state} becomes an InputRequiredResult" do
+      client_state = %{step: :await_confirmation, pending: 100}
+
+      ToolMock
+      |> stub(:info, fn :name, :mrtr -> "TransferTool" end)
+      |> expect(:call, fn _req, _channel, :mrtr ->
+        {:input_required, @mrtr_requests, client_state}
+      end)
+
+      state = init_suite(tools: [{ToolMock, :mrtr}])
+      req = call_tool_req("TransferTool", %{"to" => "alice"}, 1)
+
+      # The tool's convenience tuple becomes a plain result: `inputRequests`
+      # passed through untouched, `client_state` encrypted into the opaque
+      # `requestState`, and `resultType` the only place "input-required" is set.
+      assert {:result,
+              %MCP.InputRequiredResult{
+                resultType: "input-required",
+                inputRequests: @mrtr_requests,
+                requestState: request_state
+              }} = Suite.handle_request(req, build_channel(), state)
+
+      assert is_binary(request_state)
+      # Opaque: the kept term is encrypted, never visible in the blob.
+      refute request_state =~ "await_confirmation"
+
+      # Node-portable + bound to {tool, args}: a DIFFERENT channel (another node
+      # sharing only secret_key_base) decrypts it back to the kept term under
+      # the exact tool + arguments that minted it.
+      assert {:ok, ^client_state} =
+               GenMCP.Token.decrypt(
+                 build_channel(),
+                 {:reqstate,
+                  Suite.tool_request_state_unicity_data(Tool.expand({ToolMock, :mrtr}), req)},
+                 request_state
+               )
+    end
+
+    test "a valid retry decrypts the requestState and resumes the tool to a final result" do
+      # The success path. The Suite decrypts `requestState` (bound to {tool,
+      # arguments}) and re-invokes `call/3` with the SAME request — no new
+      # callback, no extra argument — except `req.params.requestState` now
+      # carries the decrypted `client_state` TERM in place of the opaque wire
+      # blob. The crypto stays in the Suite: the encrypted blob never reaches
+      # the tool. The tool digs into the request: `requestState` is its kept
+      # state (nil on the initial call), `inputResponses` the client's answers.
+      client_state = %{step: :await_confirmation, pending: 100}
+
+      ToolMock
+      |> stub(:info, fn :name, :mrtr -> "TransferTool" end)
+      |> expect(:call, fn req, _channel, :mrtr ->
+        # Decrypted state and the client's answers are both on the request.
+        assert %MCP.CallToolRequest{
+                 params: %MCP.CallToolRequestParams{
+                   requestState: ^client_state,
+                   inputResponses: %{"elicit-1" => %{"action" => "accept"}}
+                 }
+               } = req
+
+        {:result, MCP.call_tool_result(text: "transferred 100 to alice")}
+      end)
+
+      tool = Tool.expand({ToolMock, :mrtr})
+
+      req_1 =
+        retry_tool_req("TransferTool", %{"to" => "alice"}, nil, 1, %{
+          "elicit-1" => %{"action" => "accept"}
+        })
+
+      # Mint the blob exactly as the Suite would have on the initial call —
+      # on another node, bound to {tool, arguments}.
+      request_state =
+        GenMCP.Token.encrypt(
+          build_channel(),
+          {:reqstate, Suite.tool_request_state_unicity_data(tool, req_1)},
+          client_state
+        )
+
+      state = init_suite(tools: [tool])
+
+      req_2 =
+        retry_tool_req("TransferTool", %{"to" => "alice"}, request_state, 2, %{
+          "elicit-1" => %{"action" => "accept"}
+        })
+
+      assert {:result, result} = Suite.handle_request(req_2, build_channel(), state)
+
+      assert %MCP.CallToolResult{content: [%MCP.TextContent{text: "transferred 100 to alice"}]} =
+               result
+    end
+
+    test "a retry carrying a requestState minted for another tool is rejected" do
+      # Cross-tool reuse fails closed: the blob is bound to the tool (+ args),
+      # so one minted for a different tool is cryptographically invalid here.
+      # The tool has NO `:call` expectation — decode must reject before any
+      # dispatch. The binding payload comes from the Suite helper, so this test
+      # never hardcodes how the unicity data is built.
+      stub(ToolMock, :info, fn
+        :name, :mrtr -> "TransferTool"
+        :name, :other -> "OtherTool"
+      end)
+
+      other_tool = Tool.expand({ToolMock, :other})
+      mint_req = call_tool_req("TransferTool", %{})
+
+      foreign =
+        GenMCP.Token.encrypt(
+          build_channel(),
+          {:reqstate, Suite.tool_request_state_unicity_data(other_tool, mint_req)},
+          %{step: 1}
+        )
+
+      state = init_suite(tools: [{ToolMock, :mrtr}])
+      req = retry_tool_req("TransferTool", %{}, foreign)
+
+      assert {:error, :invalid_request_state} =
+               Suite.handle_request(req, build_channel(), state)
+
+      assert {200, %{code: -32_602, message: "Invalid request state"}} =
+               check_error(:invalid_request_state)
+    end
+
+    test "a retry carrying a requestState minted for different arguments is rejected" do
+      stub(ToolMock, :info, fn :name, :mrtr -> "TransferTool" end)
+
+      tool = Tool.expand({ToolMock, :mrtr})
+      mint_req = call_tool_req("TransferTool", %{"to" => "bob"})
+
+      foreign =
+        GenMCP.Token.encrypt(
+          build_channel(),
+          {:reqstate, Suite.tool_request_state_unicity_data(tool, mint_req)},
+          %{step: 1}
+        )
+
+      state = init_suite(tools: [{ToolMock, :mrtr}])
+      req = retry_tool_req("TransferTool", %{"to" => "alice"}, foreign)
+
+      assert {:error, :invalid_request_state} =
+               Suite.handle_request(req, build_channel(), state)
+    end
+
+    test "a retry carrying an expired requestState is rejected" do
+      stub(ToolMock, :info, fn :name, :mrtr -> "TransferTool" end)
+
+      # Same tool + args as the retry, so the binding matches and only the TTL
+      # triggers rejection.
+      tool = Tool.expand({ToolMock, :mrtr})
+      mint_req = call_tool_req("TransferTool", %{"to" => "alice"})
+
+      expired =
+        GenMCP.Token.encrypt(
+          build_channel(),
+          {:reqstate, Suite.tool_request_state_unicity_data(tool, mint_req)},
+          %{step: 1},
+          signed_at: System.system_time(:second) - 21 * 60
+        )
+
+      state = init_suite(tools: [{ToolMock, :mrtr}])
+      req = retry_tool_req("TransferTool", %{"to" => "alice"}, expired)
+
+      assert {:error, :expired_request_state} =
+               Suite.handle_request(req, build_channel(), state)
+
+      assert {200, %{code: -32_602, message: "Expired request state"}} =
+               check_error(:expired_request_state)
     end
   end
 

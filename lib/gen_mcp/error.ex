@@ -187,6 +187,18 @@ defmodule GenMCP.Error do
     }
   end
 
+  defcasterror :invalid_request_state, @rpc_invalid_params, 200 do
+    %{
+      message: "Invalid request state"
+    }
+  end
+
+  defcasterror :expired_request_state, @rpc_invalid_params, 200 do
+    %{
+      message: "Expired request state"
+    }
+  end
+
   defcasterror {:mcp_error, rpc_code, status_code, message}, rpc_code, status_code do
     %{
       message: message

@@ -1486,4 +1486,44 @@ defmodule GenMCP.StreamableHTTPTest do
       refute Enum.any?(chunks, &match?(%{"method" => "notifications/message"}, &1))
     end
   end
+
+  describe "request body size ceiling (spec 007)" do
+    # THIS TEST DELIBERATELY EXERCISES PLUG, NOT GEN_MCP CODE.
+    #
+    # The MRTR `requestState` blob rides inside the request body, so its size is
+    # bounded for free by Plug's default `Plug.Parsers` `:length` (8 MB) —
+    # gen_mcp adds no bespoke limit, and `TestWeb.Endpoint` sets no `:length`
+    # override (see test/support/test_web/endpoint.ex), so it inherits exactly
+    # this default. What this guards is the external assumption we lean on: that
+    # Plug's DEFAULT ceiling is finite and rejects oversized bodies.
+    #
+    # It is a tripwire: if a future Plug release raises or disables that default,
+    # the body below would parse cleanly (no raise) and this test fails — rather
+    # than `requestState` becoming silently unbounded.
+    #
+    # We exercise `Plug.Parsers` directly (no live socket): an oversized body
+    # that crashes the body reader mid-read poisons the HTTP connection pool and
+    # flakes neighbouring tests, and the point here is Plug's default, not our
+    # transport.
+    test "Plug.Parsers' default :length rejects an over-8MB body" do
+      # > 8 MB, and valid JSON — so with the ceiling gone it would parse cleanly
+      # (no raise) and this assertion would fail, surfacing the regression.
+      oversized = "\"" <> :binary.copy("x", 9_000_000) <> "\""
+
+      conn =
+        Plug.Conn.put_req_header(
+          Plug.Test.conn(:post, "/mcp/mock", oversized),
+          "content-type",
+          "application/json"
+        )
+
+      # Default options, exactly as our endpoint configures Plug.Parsers — no
+      # `:length` override, so Plug's 8 MB default applies.
+      opts = Plug.Parsers.init(parsers: [:json], json_decoder: Phoenix.json_library())
+
+      assert_raise Plug.Parsers.RequestTooLargeError, fn ->
+        Plug.Parsers.call(conn, opts)
+      end
+    end
+  end
 end

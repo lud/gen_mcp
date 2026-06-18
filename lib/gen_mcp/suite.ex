@@ -95,7 +95,7 @@ defmodule GenMCP.Suite do
   end
 
   defp init_state(opts) do
-    struct!(State, [{:on_message, nil} | opts])
+    struct!(State, Keyword.put(opts, :on_message, nil))
   end
 
   @impl GenMCP
@@ -109,27 +109,27 @@ defmodule GenMCP.Suite do
   end
 
   def handle_request(%MCP.CallToolRequest{} = req, channel, state) do
-    handle_tool_call(req, channel, state)
+    handle_tool_call(state, req, channel)
   end
 
   def handle_request(%MCP.ReadResourceRequest{} = req, channel, state) do
-    handle_read_resource(req, channel, state)
+    handle_read_resource(state, req, channel)
   end
 
   def handle_request(%MCP.ListResourcesRequest{} = req, channel, state) do
-    handle_list_resources(req, channel, state)
+    handle_list_resources(state, req, channel)
   end
 
   def handle_request(%MCP.GetPromptRequest{} = req, channel, state) do
-    handle_get_prompt(req, channel, state)
+    handle_get_prompt(state, req, channel)
   end
 
   def handle_request(%MCP.ListPromptsRequest{} = req, channel, state) do
-    handle_list_prompts(req, channel, state)
+    handle_list_prompts(state, req, channel)
   end
 
   def handle_request(%MCP.ListResourceTemplatesRequest{} = req, channel, state) do
-    handle_list_templates(req, channel, state)
+    handle_list_templates(state, req, channel)
   end
 
   # Catch-all: a request that validated as legal MCP but that this server does
@@ -164,8 +164,11 @@ defmodule GenMCP.Suite do
 
   def handle_message(message, channel, state) do
     case state.on_message do
-      {:tool, tool, tool_state} -> handle_tool_message(state, tool, message, channel, tool_state)
-      _ -> {:stop, {:unexpected_message, message}}
+      {:tool, req, tool, tool_state} ->
+        handle_tool_message(state, req, tool, message, tool_state, channel)
+
+      _ ->
+        {:stop, {:unexpected_message, message}}
     end
   end
 
@@ -175,7 +178,7 @@ defmodule GenMCP.Suite do
   # tool's optional `handle_close/3` so it can run cleanup. Return ignored.
   def handle_close(channel, state) do
     case state.on_message do
-      {:tool, tool, tool_state} -> Tool.handle_close(tool, channel, tool_state)
+      {:tool, _req, tool, tool_state} -> Tool.handle_close(tool, channel, tool_state)
       _ -> :ok
     end
   end
@@ -273,9 +276,9 @@ defmodule GenMCP.Suite do
     |> MCP.list_tools_result(cache_opts(cache_control))
   end
 
-  defp handle_tool_call(%MCP.CallToolRequest{} = req, channel, state) do
+  defp handle_tool_call(state, %MCP.CallToolRequest{} = req, channel) do
     case resolve_tool(state, req, channel) do
-      {:ok, tool} -> call_tool(state, req, channel, tool)
+      {:ok, tool} -> call_tool(state, req, tool, channel)
       {:error, _} = err -> err
     end
   end
@@ -294,27 +297,89 @@ defmodule GenMCP.Suite do
     end
   end
 
-  defp call_tool(state, req, channel, tool) do
-    result = Tool.call(tool, req, channel)
-    to_tool_result(state, tool, result)
-  end
+  defp call_tool(state, req, tool, channel) do
+    case decode_tool_call_request_state(req, tool, channel) do
+      {:ok, req} ->
+        result = Tool.call(tool, req, channel)
+        to_tool_result(state, req, tool, result, channel)
 
-  defp handle_tool_message(state, tool, message, channel, tool_state) do
-    result = Tool.handle_message(tool, message, channel, tool_state)
-    to_tool_result(state, tool, result)
-  end
-
-  defp to_tool_result(state, tool, result) do
-    case result do
-      {:result, result} -> {:result, result}
-      {:error, error} -> {:error, error}
-      {:stream, tool_state} -> {:stream, %{state | on_message: {:tool, tool, tool_state}}}
+      {:error, _} = err ->
+        err
     end
+  end
+
+  defp decode_tool_call_request_state(req, tool, channel) do
+    case req do
+      %MCP.CallToolRequest{params: %MCP.CallToolRequestParams{requestState: nil}} ->
+        {:ok, req}
+
+      %MCP.CallToolRequest{params: %MCP.CallToolRequestParams{requestState: request_state} = ps} =
+          ctr
+      when is_binary(request_state) ->
+        case decode_request_state(request_state, tool, req, channel) do
+          {:ok, data} -> {:ok, %{ctr | params: %{ps | requestState: data}}}
+          {:error, :expired} -> {:error, :expired_request_state}
+          {:error, :invalid} -> {:error, :invalid_request_state}
+        end
+    end
+  end
+
+  defp handle_tool_message(state, req, tool, message, tool_state, channel) do
+    result = Tool.handle_message(tool, message, channel, tool_state)
+    to_tool_result(state, req, tool, result, channel)
+  end
+
+  defp to_tool_result(state, req, tool, result, channel) do
+    case result do
+      {:result, result} ->
+        {:result, result}
+
+      {:error, error} ->
+        {:error, error}
+
+      {:stream, tool_state} ->
+        {:stream, %{state | on_message: {:tool, req, tool, tool_state}}}
+
+      {:input_required, input_requests, request_state} ->
+        to_input_required_tool_result(req, tool, input_requests, request_state, channel)
+    end
+  end
+
+  defp to_input_required_tool_result(req, tool, input_requests, request_state, channel) do
+    {:result,
+     %MCP.InputRequiredResult{
+       inputRequests: input_requests,
+       requestState: encode_request_state(request_state, tool, req, channel),
+       resultType: "input-required"
+     }}
+  end
+
+  defp encode_request_state(request_state, tool, req, channel) do
+    hashdata = tool_request_state_unicity_data(tool, req)
+    GenMCP.Token.encrypt(channel, {:reqstate, hashdata}, request_state)
+  end
+
+  defp decode_request_state(request_state, tool, req, channel) do
+    hashdata = tool_request_state_unicity_data(tool, req)
+    GenMCP.Token.decrypt(channel, {:reqstate, hashdata}, request_state)
+  end
+
+  @doc false
+  def tool_request_state_unicity_data(tool, req) do
+    # Unicity of tokens is based on the tool and request params. Request ID
+    # change over multiple repeats. For now we include all the tool, meaning the
+    # `arg` too, which should invalidate the request if the arg changes (for
+    # instance if an extension sees different meta on the channel, based on
+    # authentication)
+    #
+    # Note that all this data is hashed as an unicity token, it is not packed in
+    # the state.
+    %{tool: tool, params: req.params.arguments}
   end
 
   # -- Resources --------------------------------------------------------------
 
-  defp handle_list_resources(req, channel, state) do
+  defp handle_list_resources(state, req, channel) do
     method = "list/resources"
 
     cursor =
@@ -325,7 +390,7 @@ defmodule GenMCP.Suite do
 
     case decode_pagination(cursor, method, channel) do
       {:ok, pagination} ->
-        {resources, next_pagination, cache_control} = list_resources(pagination, channel, state)
+        {resources, next_pagination, cache_control} = list_resources(state, pagination, channel)
 
         result =
           MCP.list_resources_result(
@@ -341,7 +406,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  defp list_resources(pagination, channel, state) do
+  defp list_resources(state, pagination, channel) do
     repos = state |> stream_resource_repos(channel, :bare) |> Enum.to_list()
 
     paginate_repos(repos, pagination, fn repo, repo_cursor ->
@@ -353,7 +418,7 @@ defmodule GenMCP.Suite do
   end
 
   # req is not used because templates are not paginated
-  defp handle_list_templates(_req, channel, state) do
+  defp handle_list_templates(state, _req, channel) do
     {templates, cache_control} =
       state
       |> stream_resource_repos(channel)
@@ -380,7 +445,7 @@ defmodule GenMCP.Suite do
     {:result, result}
   end
 
-  defp handle_read_resource(req, channel, state) do
+  defp handle_read_resource(state, req, channel) do
     uri = req.params.uri
 
     case find_resource_repo_for_uri(state, uri, channel) do
@@ -401,7 +466,7 @@ defmodule GenMCP.Suite do
 
   # -- Prompts ----------------------------------------------------------------
 
-  defp handle_list_prompts(req, channel, state) do
+  defp handle_list_prompts(state, req, channel) do
     method = "list/prompts"
 
     cursor =
@@ -412,7 +477,7 @@ defmodule GenMCP.Suite do
 
     case decode_pagination(cursor, method, channel) do
       {:ok, pagination} ->
-        {prompts, next_pagination, cache_control} = list_prompts(pagination, channel, state)
+        {prompts, next_pagination, cache_control} = list_prompts(state, pagination, channel)
 
         result =
           MCP.list_prompts_result(
@@ -428,7 +493,7 @@ defmodule GenMCP.Suite do
     end
   end
 
-  defp list_prompts(pagination, channel, state) do
+  defp list_prompts(state, pagination, channel) do
     repos = state |> stream_prompt_repos(channel, :bare) |> Enum.to_list()
 
     paginate_repos(repos, pagination, fn repo, repo_cursor ->
@@ -439,7 +504,7 @@ defmodule GenMCP.Suite do
     end)
   end
 
-  defp handle_get_prompt(req, channel, state) do
+  defp handle_get_prompt(state, req, channel) do
     {name, arguments} =
       case req do
         %{params: %{name: name, arguments: arguments}} when is_map(arguments) -> {name, arguments}

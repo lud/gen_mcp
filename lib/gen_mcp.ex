@@ -87,6 +87,12 @@ defmodule GenMCP do
           | MCP.ListResourceTemplatesResult.t()
           | MCP.ListPromptsResult.t()
           | MCP.GetPromptResult.t()
+          # The multi round-trip ask (MRTR, spec 007). Just another result: a
+          # handler that needs more input from the client returns it via the
+          # normal `{:result, result}` path. `GenMCP.Suite` builds it from a
+          # tool's `{:input_required, …}` return (encrypting the continuation
+          # into `requestState`); a custom server may build it directly.
+          | MCP.InputRequiredResult.t()
 
   @type notification ::
           MCP.CancelledNotification.t()
@@ -119,6 +125,13 @@ defmodule GenMCP do
     response to `text/event-stream` immediately, even before the first
     notification.
 
+  A multi round-trip ask (MRTR, spec 007) needs no special return: when a
+  handler needs more input from the client it returns an
+  `MCP.InputRequiredResult` through the normal `{:result, result}` path.
+  `GenMCP.Suite` builds that result from a tool's `{:input_required, …}` return
+  (encrypting the continuation into `requestState`); a custom server may build
+  it directly. The runner forwards it like any other result.
+
   The channel is passed **in** (for `send_progress`/`send_log`) but never
   returned — it is immutable per-request framework context, not handler state.
 
@@ -143,7 +156,8 @@ defmodule GenMCP do
   vocabulary — every callback either terminates or continues the stream:
 
   * `{:stream, state}` — keep streaming, carrying `state`.
-  * `{:result, result}` — emit the final result and end the request.
+  * `{:result, result}` — emit the final result and end the request (an MRTR
+    `MCP.InputRequiredResult` is just a result here too; see `c:handle_request/3`).
   * `{:stop, reason}` — end the stream with no final result (e.g. a long-lived
     listener's normal exit).
   * `{:error, reason}` — emit an error and terminate the stream.

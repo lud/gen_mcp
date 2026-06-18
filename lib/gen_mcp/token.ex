@@ -44,11 +44,18 @@ defmodule GenMCP.Token do
   @typedoc """
   The domain a token is minted for.
 
-  The qualifier is free-form: cursors use the MCP method name they paginate
-  (`"resources/list"`, `"prompts/list"`, `"resources/templates/list"`),
-  request states use the tool name.
+  - For `:cursor`, the qualifier is a string. `GenMCP.Suite` uses the MCP method
+  name that uses pagination in reponses (`"resources/list"`, `"prompts/list"`,
+  `"resources/templates/list"`)
+  - For `:reqstate`, the qualifier is a map that should uniquely identify a
+    request so the token is only valid if echoed by the client on the same
+    request. By unique we mean "same tool and same parameters", the request
+    remains repeatable during the token's time to live. `GenMCP.Suite` uses a
+    map with the tool name and the whole parameters of the tool call. MCP
+    clients MUST use request state tokens with the exact same request parameters
+    when providing additional inputs.
   """
-  @type purpose :: {:cursor | :reqstate, String.t()}
+  @type purpose :: {:cursor, String.t()} | {:reqstate, map}
 
   @typedoc "A `Phoenix.Token` context or a channel carrying the endpoint."
   @type key_source :: Channel.t() | module | binary | Plug.Conn.t()
@@ -101,8 +108,13 @@ defmodule GenMCP.Token do
     "gen_mcp cursor " <> qualifier
   end
 
-  defp salt_for({:reqstate, qualifier}) when is_binary(qualifier) do
-    "gen_mcp reqstate " <> qualifier
+  defp salt_for({:reqstate, qualifier}) when is_map(qualifier) do
+    "gen_mcp reqstate " <> hash_qualifier(qualifier)
+  end
+
+  defp hash_qualifier(term) do
+    bin = :erlang.term_to_binary(term, [:deterministic])
+    :crypto.hash(:sha256, bin)
   end
 
   defp endpoint!(%Channel{endpoint: nil}) do

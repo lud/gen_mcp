@@ -78,14 +78,93 @@ defmodule GenMCP.TokenTest do
     end
 
     test "the reqstate purpose round-trips state blobs" do
-      # Spec 007 will store tool continuation state here. MRTR requirement 4:
+      # Spec 007 stores MRTR continuation state here. MRTR requirement 4:
       # requestState is attacker-controlled, integrity MUST be protected —
-      # authenticated encryption covers it, no extra AAD needed.
-      kept = %{step: 2, args: %{"amount" => 100}}
+      # authenticated encryption covers it, no extra AAD needed. The reqstate
+      # qualifier is the unicity MAP `%{tool: name, args: arguments}` (spec
+      # 007), not a bare tool name: it binds the blob to the exact call.
+      kept = %{step: 2, awaiting: :confirmation}
 
-      token = Token.encrypt(@key_base, {:reqstate, "transfer"}, kept)
+      purpose = {:reqstate, %{tool: "transfer", args: %{"amount" => 100}}}
 
-      assert {:ok, ^kept} = Token.decrypt(@key_base, {:reqstate, "transfer"}, token)
+      token = Token.encrypt(@key_base, purpose, kept)
+
+      assert {:ok, ^kept} = Token.decrypt(@key_base, purpose, token)
+    end
+  end
+
+  describe "reqstate binding to {tool, args}" do
+    # Spec 007 — the MRTR `requestState` blob is bound to the exact tool name
+    # and arguments that minted it. `GenMCP.Token` folds a deterministic hash
+    # of the `%{tool, args}` unicity map into the PBKDF2 salt, so a blob minted
+    # for tool A / args X is cryptographically `:invalid` under tool B or args
+    # Y. The tool author never writes binding logic; accidental cross-call
+    # reuse fails closed. Suite passes `arguments` (the business input), NOT the
+    # whole params object — the retry params differ from the initial by the
+    # added `inputResponses` / `requestState` fields, while `arguments` is the
+    # stably-echoed part.
+
+    test "round-trips under the exact {tool, args} purpose" do
+      purpose = {:reqstate, %{tool: "transfer", args: %{"amount" => 100, "to" => "alice"}}}
+      state = %{step: :await_confirmation, pending: 100}
+
+      token = Token.encrypt(@key_base, purpose, state)
+
+      assert {:ok, ^state} = Token.decrypt(@key_base, purpose, token)
+    end
+
+    test "binding is deterministic regardless of map key order" do
+      # The hash is `:erlang.term_to_binary(unicity, [:deterministic])` →
+      # sha256, which canonicalizes key order. A purpose rebuilt on the retry
+      # node with keys inserted in a different order derives the same salt, so
+      # the blob still verifies — this is what makes a retry on another node
+      # work without coordinating map construction.
+      mint = {:reqstate, %{tool: "transfer", args: %{"amount" => 100, "to" => "alice"}}}
+      verify = {:reqstate, %{args: %{"to" => "alice", "amount" => 100}, tool: "transfer"}}
+
+      token = Token.encrypt(@key_base, mint, %{step: 1})
+
+      assert {:ok, %{step: 1}} = Token.decrypt(@key_base, verify, token)
+    end
+
+    test "rejects a blob minted for tool A when verified for tool B" do
+      token =
+        Token.encrypt(@key_base, {:reqstate, %{tool: "transfer", args: %{"amount" => 100}}}, %{
+          step: 1
+        })
+
+      assert {:error, :invalid} =
+               Token.decrypt(
+                 @key_base,
+                 {:reqstate, %{tool: "refund", args: %{"amount" => 100}}},
+                 token
+               )
+    end
+
+    test "rejects a blob when the arguments differ" do
+      token =
+        Token.encrypt(@key_base, {:reqstate, %{tool: "transfer", args: %{"amount" => 100}}}, %{
+          step: 1
+        })
+
+      assert {:error, :invalid} =
+               Token.decrypt(
+                 @key_base,
+                 {:reqstate, %{tool: "transfer", args: %{"amount" => 999}}},
+                 token
+               )
+    end
+
+    test "a reqstate blob never decrypts as a cursor, and vice versa" do
+      # Distinct kinds with overlapping qualifiers must not be interchangeable.
+      reqstate = {:reqstate, %{tool: "transfer", args: %{"amount" => 100}}}
+      cursor = {:cursor, "transfer"}
+
+      reqstate_token = Token.encrypt(@key_base, reqstate, %{step: 1})
+      cursor_token = Token.encrypt(@key_base, cursor, {0, nil})
+
+      assert {:error, :invalid} = Token.decrypt(@key_base, cursor, reqstate_token)
+      assert {:error, :invalid} = Token.decrypt(@key_base, reqstate, cursor_token)
     end
   end
 
@@ -103,6 +182,27 @@ defmodule GenMCP.TokenTest do
       for part <- String.split(token, "."),
           {:ok, decoded} <- [Base.url_decode64(part, padding: false)] do
         refute decoded =~ secret
+      end
+    end
+
+    test "the secret_key_base never appears in a minted token" do
+      # Spec 007 acceptance criterion: our use of Phoenix.Token / the
+      # application's secret_key_base must not become an oracle for the key
+      # base itself. The key is PBKDF2-stretched (Plug.Crypto.KeyGenerator),
+      # never embedded, so neither the token nor any of its base64 segments may
+      # contain the key base — minting many tokens for the same purpose must
+      # not leak a byte of it.
+      reqstate = {:reqstate, %{tool: "transfer", args: %{"amount" => 100}}}
+
+      for _ <- 1..25 do
+        token = Token.encrypt(@key_base, reqstate, %{step: 1})
+
+        refute token =~ @key_base
+
+        for part <- String.split(token, "."),
+            {:ok, decoded} <- [Base.url_decode64(part, padding: false)] do
+          refute decoded =~ @key_base
+        end
       end
     end
   end
@@ -139,12 +239,15 @@ defmodule GenMCP.TokenTest do
                Token.decrypt(@key_base, {:cursor, "resources/templates/list"}, token)
     end
 
-    test "purpose kinds are not interchangeable, even with the same qualifier" do
-      cursor_token = Token.encrypt(@key_base, {:cursor, "transfer"}, {0, nil})
-      state_token = Token.encrypt(@key_base, {:reqstate, "transfer"}, %{step: 1})
+    test "purpose kinds are not interchangeable" do
+      cursor = {:cursor, "transfer"}
+      reqstate = {:reqstate, %{tool: "transfer", args: %{}}}
 
-      assert {:error, :invalid} = Token.decrypt(@key_base, {:reqstate, "transfer"}, cursor_token)
-      assert {:error, :invalid} = Token.decrypt(@key_base, {:cursor, "transfer"}, state_token)
+      cursor_token = Token.encrypt(@key_base, cursor, {0, nil})
+      state_token = Token.encrypt(@key_base, reqstate, %{step: 1})
+
+      assert {:error, :invalid} = Token.decrypt(@key_base, reqstate, cursor_token)
+      assert {:error, :invalid} = Token.decrypt(@key_base, cursor, state_token)
     end
 
     test "does not accept tokens from the host app's own Phoenix.Token usage" do

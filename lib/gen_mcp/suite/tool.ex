@@ -113,7 +113,30 @@ defmodule GenMCP.Suite.Tool do
   @type arg :: term
   @type schema :: term
   @type state :: term
-  @type call_result :: {:result, MCP.CallToolResult.t()} | {:stream, state} | {:error, String.t()}
+
+  @typedoc """
+  A tool's plain continuation term for a multi round-trip (MRTR — spec 007).
+
+  Returned in `{:input_required, requests, client_state}`; the Suite encrypts it
+  into the opaque `requestState` blob (`GenMCP.Token`, bound to the tool name and
+  arguments) and decrypts it back on the retry, where it reaches the tool via
+  `req.params.requestState`. Must be **node-portable plain data** — no pid /
+  ref / fun / port — so any instance can resume; the Suite fails loudly
+  otherwise.
+  """
+  @type client_state :: term
+
+  @type call_result ::
+          {:result, MCP.CallToolResult.t()}
+          | {:stream, state}
+          | {:input_required,
+             %{
+               optional(binary) =>
+                 GenMCP.MCP.V2607.CreateMessageRequest.t()
+                 | GenMCP.MCP.V2607.ListRootsRequest.t()
+                 | GenMCP.MCP.V2607.ElicitRequest.t()
+             }, client_state}
+          | {:error, String.t()}
 
   @type request :: term
 
@@ -600,12 +623,13 @@ defmodule GenMCP.Suite.Tool do
           "option #{inspect(key)} given to `use #{inspect(__MODULE__)}` #{errmsg}, got: #{inspect(value)}"
   end
 
-  defmacrop __handle_result({_, _, _} = call) do
+  defmacrop __call_tool__({_, _, _} = call) do
     quote do
       callback __MODULE__, unquote(call) do
         {:result, %MCP.CallToolResult{}} = result -> result
         {:stream, state} -> {:stream, state}
-        {:error, reason} = err -> {:error, cast_error(reason)}
+        {:error, reason} -> {:error, cast_error(reason)}
+        {:input_required, %{} = input_requests, %{} = request_state} = resp -> resp
       end
     end
   end
@@ -636,7 +660,7 @@ defmodule GenMCP.Suite.Tool do
     %{mod: mod, arg: arg, name: ^name} = tool
 
     case validate_request(tool, req) do
-      {:ok, req} -> __handle_result(mod.call(req, channel, arg))
+      {:ok, req} -> __call_tool__(mod.call(req, channel, arg))
       {:error, {:invalid_params, reason}} -> {:error, {:invalid_params, reason}}
       {:error, reason} -> {:error, {:invalid_params, reason}}
     end
@@ -701,7 +725,7 @@ defmodule GenMCP.Suite.Tool do
   @spec handle_message(tool_descriptor, term, Channel.t(), state) :: call_result
   def handle_message(tool, message, channel, state) do
     %{mod: mod, arg: arg} = tool
-    __handle_result(mod.handle_message(message, channel, state, arg))
+    __call_tool__(mod.handle_message(message, channel, state, arg))
   end
 
   @doc """
