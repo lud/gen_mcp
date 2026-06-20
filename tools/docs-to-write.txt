@@ -1,0 +1,306 @@
+## GenMCP
+
+- @callback handle_close/2
+- @callback handle_message/3
+- @callback handle_notification/3
+- @callback handle_request/3
+- @callback init/1
+- def attach_default_logger/1
+- def default_channel_log_level/0
+- def protocol_version/0
+- def supported_protocol_versions/0
+
+## GenMCP.Application
+
+- def env/0
+- def start/2
+- def stop/1
+
+## GenMCP.CallbackReturnError
+
+- def exception/1
+- def message/1
+
+## GenMCP.Error
+
+- def cast_error/1
+- def unknown_error/1
+
+## GenMCP.Error.Compiler
+
+- defmacro defcasterror/4
+
+## GenMCP.JsonDerive
+
+- defmacro auto/2
+- def skip_nil_values/2
+
+## GenMCP.MCP.V2607
+
+- def call_tool_result/1
+- def capabilities/1
+- def content_block/1
+- def default_cache_control/0
+- def default_cache_scope/0
+- def default_ttl_ms/0
+- def discover_result/1
+- def get_prompt_result/1
+- def list_prompts_result/3
+- def list_resource_templates_result/2
+- def list_resources_result/3
+- def list_tools_result/2
+- def read_resource_result/1
+- def resource_contents/1
+- def server_info/1
+
+## GenMCP.MCP.V2607.CallToolRequest
+
+- def method/0
+
+## GenMCP.MCP.V2607.CancelledNotification
+
+- def method/0
+
+## GenMCP.MCP.V2607.DiscoverRequest
+
+- def method/0
+
+## GenMCP.MCP.V2607.GetPromptRequest
+
+- def method/0
+
+## GenMCP.MCP.V2607.Info
+
+- def subscription_notification_method?/1
+- def subscription_notification_methods/0
+
+## GenMCP.MCP.V2607.ListPromptsRequest
+
+- def method/0
+
+## GenMCP.MCP.V2607.ListResourceTemplatesRequest
+
+- def method/0
+
+## GenMCP.MCP.V2607.ListResourcesRequest
+
+- def method/0
+
+## GenMCP.MCP.V2607.ListToolsRequest
+
+- def method/0
+
+## GenMCP.MCP.V2607.LoggingMessageNotification
+
+- def method/0
+
+## GenMCP.MCP.V2607.ModMap
+
+- defmacro require_all/0
+
+## GenMCP.MCP.V2607.ProgressNotification
+
+- def method/0
+
+## GenMCP.MCP.V2607.PromptListChangedNotification
+
+- def method/0
+
+## GenMCP.MCP.V2607.ReadResourceRequest
+
+- def method/0
+
+## GenMCP.MCP.V2607.ResourceListChangedNotification
+
+- def method/0
+
+## GenMCP.MCP.V2607.ResourceUpdatedNotification
+
+- def method/0
+
+## GenMCP.MCP.V2607.SubscriptionsAcknowledgedNotification
+
+- def method/0
+
+## GenMCP.MCP.V2607.SubscriptionsListenRequest
+
+- def method/0
+
+## GenMCP.MCP.V2607.ToolListChangedNotification
+
+- def method/0
+
+## GenMCP.Mux.Channel
+
+- def as_closed/1
+- def close/1
+- def copy_subscription_id/2
+- def for_pid/2
+- def from_request/3
+- def requires_subscription_id?/1
+- def send_error/2
+- def send_log/4
+- def send_notification/2
+- def send_progress/4
+- def send_result/2
+- def set_closed/1
+- def set_streaming/1
+
+## GenMCP.Server
+
+- def child_spec/1
+- def code_change/3
+- def handle_call/3
+- def handle_cast/2
+- def handle_continue/2
+- def handle_info/2
+- def init/1
+- def init_opts_schema/0
+- def start_link/1
+- def start_notification/3
+- def start_request/3
+- def terminate/2
+
+## GenMCP.ServerSupervisor
+
+- def child_spec/1
+- def init/1
+- def start_link/1
+
+## GenMCP.Suite
+
+- def handle_close/2
+- def handle_message/3
+- def handle_notification/3
+- def handle_request/3
+- def init/1
+- def init_opts_schema/0
+- def tool_request_state_unicity_data/2
+
+## GenMCP.Suite.Extension
+
+- @callback prompts/2
+- @callback resources/2
+- @callback tools/2
+- def expand/1
+- def prompts/2
+- def resources/2
+- def tools/2
+
+## GenMCP.Suite.PromptRepo
+
+- @callback cache_control/1
+- @callback get/4
+- @callback list/3
+- @callback prefix/1
+- def cache_control/1
+- def expand/1
+- def get_prompt/4
+- def list_prompts/3
+
+## GenMCP.Suite.ResourceRepo
+
+- @callback cache_control/1
+- @callback list/3
+- @callback parse_uri/2
+- @callback prefix/1
+- @callback read/3
+- @callback template/1
+- def cache_control/1
+- def expand/1
+- def list_resources/3
+- def read_resource/3
+
+## GenMCP.Suite.SelfExtension
+
+- def new/3
+- def prompts/2
+- def resources/2
+- def tools/2
+
+## GenMCP.Suite.SubscriptionHandler
+
+- @callback handle_close/3
+- @callback handle_message/4
+- @callback subscribe/3
+- @callback subscription_capabilities/2
+- def expand/1
+- def handle_close/3
+- def handle_message/4
+- def subscribe/3
+- def subscription_capabilities/2
+
+## GenMCP.Suite.Tool
+
+- @callback cache_control/1
+- @callback call/3
+- @callback handle_close/3
+- @callback handle_message/4
+- @callback info/2
+- @callback input_schema/1
+- @callback output_schema/1
+- @callback validate_request/2
+- def cache_control/1
+- def call/3
+- def describe/1
+- def expand/1
+- def handle_close/3
+- def handle_message/4
+
+## GenMCP.TelemetryLogger
+
+- def attach/1
+- def handle_event/4
+
+## GenMCP.TestWeb.Router.McpMock
+
+- def call/2
+- def init/1
+
+## GenMCP.TestWeb.Router.McpMockOrigins
+
+- def call/2
+- def init/1
+
+## GenMCP.TestWeb.Router.McpReal
+
+- def call/2
+- def init/1
+
+## GenMCP.Token
+
+- def decrypt/4
+- def encrypt/4
+
+## GenMCP.Transport.StreamableHTTP
+
+- def call/2
+- defmacro defplug/1
+- def dispatch/2
+- def init/1
+- def match/2
+
+## GenMCP.Transport.StreamableHTTP.Impl
+
+- def http_post/2
+- def send_error/3
+
+## GenMCP.Utils.CallbackExt
+
+- defmacro callback/3
+
+## GenMCP.Utils.OptsValidator
+
+- def validate_take_opts/2
+- def validate_take_opts!/2
+
+## GenMCP.Validator
+
+- def validate_request/1
+
+## GenMCP.Validator.Formats
+
+- def applies_to_type?/2
+- def supported_formats/0
+- def validate_cast/2
+
