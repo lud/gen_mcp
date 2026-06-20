@@ -32,6 +32,8 @@ defmodule GenMCP.SuiteTest do
   alias GenMCP.Support.ResourceRepoMock
   alias GenMCP.Support.ResourceRepoMockTpl
   alias GenMCP.Support.ResourceRepoTplCacheMock
+  alias GenMCP.Support.SubscriptionHandlerFullMock
+  alias GenMCP.Support.SubscriptionHandlerMock
   alias GenMCP.Support.ToolFullMock
   alias GenMCP.Support.ToolMock
 
@@ -202,6 +204,155 @@ defmodule GenMCP.SuiteTest do
 
       assert %MCP.ServerCapabilities{tools: %{}, resources: %{}, prompts: %{}, logging: %{}} =
                caps
+    end
+  end
+
+  describe "server/discover — subscription capability advertisement (spec 008)" do
+    # The 2026-07-28 `ServerCapabilities` has no top-level `subscriptions` key.
+    # A subscription handler instead *declares* the change-notification types it
+    # may emit via the optional `subscription_capabilities/1` callback, and the
+    # Suite folds those flags onto the catalog's capability blocks:
+    #
+    #   :tools_list_changed     -> tools.listChanged
+    #   :prompts_list_changed   -> prompts.listChanged
+    #   :resources_list_changed -> resources.listChanged
+    #   :resources_updated      -> resources.subscribe
+    #
+    # A block is advertised iff the catalog has items of that kind OR a flag is
+    # declared true for it; its sub-flags are the union of the declared-true
+    # flags. Default (no callback / `%{}`) advertises no subscription capability.
+
+    test "a configured handler that declares nothing adds no sub-flags" do
+      # SubscriptionHandlerMock skips `subscription_capabilities/1`, so the Suite
+      # falls back to the `%{}` default: a configured handler alone must not
+      # change the advertised capabilities (still the empty-catalog shape).
+      state = init_suite(subscription_handler: {SubscriptionHandlerMock, :arg})
+
+      assert {:result, %MCP.DiscoverResult{capabilities: caps}} =
+               Suite.handle_request(discover_req(), build_channel(), state)
+
+      assert %MCP.ServerCapabilities{
+               tools: nil,
+               resources: nil,
+               prompts: nil,
+               logging: %{}
+             } = caps
+    end
+
+    test "a no-op handler leaves catalog-derived blocks intact (empty sub_caps must not strip them)" do
+      # A tool is configured AND a handler that declares nothing
+      # (SubscriptionHandlerMock skips the callback -> `%{}`). The catalog block
+      # must survive the merge unchanged: bare `tools: %{}`, no sub-flags added,
+      # nothing dropped.
+      stub(ToolMock, :info, fn :name, :test_tool -> "TestTool" end)
+
+      state =
+        init_suite(
+          tools: [{ToolMock, :test_tool}],
+          subscription_handler: {SubscriptionHandlerMock, :arg}
+        )
+
+      assert {:result, %MCP.DiscoverResult{capabilities: caps}} =
+               Suite.handle_request(discover_req(), build_channel(), state)
+
+      assert %MCP.ServerCapabilities{
+               tools: %{},
+               resources: nil,
+               prompts: nil,
+               logging: %{}
+             } = caps
+    end
+
+    test "declared flags are advertised as catalog sub-flags, force-present with no catalog" do
+      # No tools/resources/prompts configured, yet the handler declares it may
+      # emit tools/list_changed and resources/updated: those blocks are forced
+      # present carrying only the declared sub-flag. Undeclared blocks stay nil.
+      expect(SubscriptionHandlerFullMock, :subscription_capabilities, fn _channel, :arg ->
+        %{tools_list_changed: true, resources_updated: true}
+      end)
+
+      state = init_suite(subscription_handler: {SubscriptionHandlerFullMock, :arg})
+
+      assert {:result, %MCP.DiscoverResult{capabilities: caps}} =
+               Suite.handle_request(discover_req(), build_channel(), state)
+
+      assert %MCP.ServerCapabilities{
+               tools: %{listChanged: true},
+               resources: %{subscribe: true},
+               prompts: nil,
+               logging: %{}
+             } = caps
+
+      # only the declared sub-flag is set — resources.listChanged was not declared
+      refute Map.get(caps.resources, :listChanged) == true
+    end
+
+    test "all four flags map onto the right sub-flags, unioned on the resources block" do
+      expect(SubscriptionHandlerFullMock, :subscription_capabilities, fn _channel, :arg ->
+        %{
+          tools_list_changed: true,
+          prompts_list_changed: true,
+          resources_list_changed: true,
+          resources_updated: true
+        }
+      end)
+
+      state = init_suite(subscription_handler: {SubscriptionHandlerFullMock, :arg})
+
+      assert {:result, %MCP.DiscoverResult{capabilities: caps}} =
+               Suite.handle_request(discover_req(), build_channel(), state)
+
+      assert %MCP.ServerCapabilities{
+               tools: %{listChanged: true},
+               prompts: %{listChanged: true},
+               resources: %{listChanged: true, subscribe: true},
+               logging: %{}
+             } = caps
+    end
+
+    test "a false / omitted flag is not advertised" do
+      expect(SubscriptionHandlerFullMock, :subscription_capabilities, fn _channel, :arg ->
+        %{tools_list_changed: false, prompts_list_changed: true}
+      end)
+
+      state = init_suite(subscription_handler: {SubscriptionHandlerFullMock, :arg})
+
+      assert {:result, %MCP.DiscoverResult{capabilities: caps}} =
+               Suite.handle_request(discover_req(), build_channel(), state)
+
+      # false -> not advertised (block stays nil); true -> force-present
+      assert %MCP.ServerCapabilities{
+               tools: nil,
+               prompts: %{listChanged: true},
+               resources: nil
+             } = caps
+    end
+
+    test "declared flags merge onto a catalog block that is already present" do
+      # A tool is configured (so `tools` is present from the catalog as `%{}`)
+      # AND the handler declares tools_list_changed: the block keeps its presence
+      # and gains the sub-flag.
+      stub(ToolMock, :info, fn :name, :test_tool -> "TestTool" end)
+
+      expect(SubscriptionHandlerFullMock, :subscription_capabilities, fn _channel, :arg ->
+        %{tools_list_changed: true}
+      end)
+
+      state =
+        init_suite(
+          tools: [{ToolMock, :test_tool}],
+          subscription_handler: {SubscriptionHandlerFullMock, :arg}
+        )
+
+      assert {:result, %MCP.DiscoverResult{capabilities: caps}} =
+               Suite.handle_request(discover_req(), build_channel(), state)
+
+      assert %MCP.ServerCapabilities{
+               tools: %{listChanged: true},
+               resources: nil,
+               prompts: nil,
+               logging: %{}
+             } = caps
     end
   end
 

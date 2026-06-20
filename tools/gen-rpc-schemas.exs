@@ -240,6 +240,7 @@ defmodule Codegen do
     skip_keys = Enum.sort(Keyword.get(render_opts, :skip_keys, []))
     keep_nils = Enum.sort(Keyword.get(render_opts, :keep_nils, %{}))
     serialize_merge = Keyword.get(render_opts, :serialize_merge, %{})
+    method = Keyword.get(render_opts, :method)
 
     keep_nils =
       Enum.sort(
@@ -264,6 +265,11 @@ defmodule Codegen do
       defschema #{inspect(schema, inspect_opts())}
 
       @type t :: %__MODULE__{}
+
+      #{if method do
+      "def method, do: #{inspect(method)}"
+    end}
+
     end
     """
   end
@@ -295,6 +301,9 @@ defmodule Generator do
 
   Record.defrecordp(:entity, name: nil, schema: nil, render_opts: [], kind: nil)
 
+  @subscriptions_listen_link "{@link SubscriptionsListenRequestsubscriptions/listen}"
+  @cancelled_notification_method "notifications/cancelled"
+
   def run(source_schema_path, opts) do
     opts =
       NimbleOptions.validate!(opts,
@@ -311,6 +320,7 @@ defmodule Generator do
       |> Jason.decode!(keys: :atoms)
 
     metaschema = schema."$schema"
+    info = build_info(schema)
 
     entitys =
       schema
@@ -326,7 +336,7 @@ defmodule Generator do
     IO.puts("generation done")
 
     generated_block = [
-      prelude(ctx),
+      prelude(ctx, info),
       mod_map(entitys, metaschema, ctx),
       generated_modules
     ]
@@ -362,7 +372,8 @@ defmodule Generator do
     |> use_schema_api(ctx)
   end
 
-  def prelude(ctx) do
+  # TODO(spec008) listener request is not needed anymore
+  def prelude(ctx, info) do
     [
       """
       # quokka:skip-module-directives
@@ -378,8 +389,71 @@ defmodule Generator do
         defstruct []
         @type t :: %__MODULE__{}
       end
-      '''
+      ''',
+      render_info_module(ctx, info)
     ]
+  end
+
+  defp build_info(schema) do
+    subscription_notification_methods =
+      schema
+      |> Map.fetch!(:"$defs")
+      |> Enum.flat_map(fn {_, def_schema} ->
+        case subscription_notification_method(def_schema) do
+          nil -> []
+          method -> [method]
+        end
+      end)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    %{subscription_notification_methods: subscription_notification_methods}
+  end
+
+  defp subscription_notification_method(def_schema) do
+    description = Map.get(def_schema, :description, "")
+
+    with method when is_binary(method) <- get_in(def_schema, [:properties, :method, :const]),
+         true <- String.starts_with?(method, "notifications/"),
+         true <- method != @cancelled_notification_method,
+         true <- subscription_listen_notification?(description) do
+      method
+    else
+      _ -> nil
+    end
+  end
+
+  defp subscription_listen_notification?(description) when is_binary(description) do
+    description = String.replace(description, ~r/\s+/, " ")
+
+    String.contains?(description, @subscriptions_listen_link)
+  end
+
+  defp render_info_module(ctx, info) do
+    module = Codegen.module_name("Info", ctx)
+
+    ~s'''
+    defmodule #{inspect(module)} do
+      @moduledoc false
+
+      @subscription_notification_methods #{inspect(info.subscription_notification_methods)}
+
+      @spec subscription_notification_methods() :: [String.t()]
+      def subscription_notification_methods, do: @subscription_notification_methods
+
+      def subscription_notification_method?(method)
+
+      Enum.each(@subscription_notification_methods, fn method ->
+        def subscription_notification_method?(unquote(method)) do
+          true
+        end
+      end)
+
+      def subscription_notification_method?(method) when is_binary(method) do
+        false
+      end
+    end
+    '''
   end
 
   defp mod_map(defs, metaschema, ctx) do
@@ -439,7 +513,9 @@ defmodule Generator do
     has_jsonrpc = Map.has_key?(schema[:properties] || %{}, :jsonrpc)
 
     if has_method_const and has_jsonrpc do
-      with_skipped_consts(entity, [:method, :jsonrpc])
+      entity
+      |> with_method()
+      |> with_skipped_consts([:method, :jsonrpc])
     else
       entity
     end
@@ -453,6 +529,11 @@ defmodule Generator do
     else
       entity
     end
+  end
+
+  defp with_method(entity) do
+    entity(schema: schema, render_opts: render_opts) = entity
+    entity(entity, render_opts: Keyword.put(render_opts, :method, schema.properties.method.const))
   end
 
   defp with_skipped_consts(entity, keys) do
@@ -496,6 +577,7 @@ defmodule Generator do
 
   defp generate_module(entity, ctx) do
     entity(name: name, schema: schema, render_opts: render_opts, kind: kind) = entity
+
     IO.puts("generating #{name}")
     module = Codegen.module_name(name, ctx)
     keep_nils = Context.mod_config(ctx, name, :keep_nils, [])
@@ -621,7 +703,7 @@ Generator.run("deps/modelcontextprotocol/schema/draft/schema.json",
     ProgressToken: [],
     Prompt: [],
     PromptArgument: [],
-    PromptListChangedNotification: :nogen,
+    PromptListChangedNotification: [],
     PromptMessage: [],
     PromptReference: :nogen,
     ReadResourceRequest: [],
@@ -635,12 +717,12 @@ Generator.run("deps/modelcontextprotocol/schema/draft/schema.json",
     Resource: [],
     ResourceContents: :nogen,
     ResourceLink: [content_block: true],
-    ResourceListChangedNotification: :nogen,
+    ResourceListChangedNotification: [],
     ResourceRequestParams: :nogen,
     ResourceTemplate: [],
     ResourceTemplateReference: :nogen,
-    ResourceUpdatedNotification: :nogen,
-    ResourceUpdatedNotificationParams: :nogen,
+    ResourceUpdatedNotification: [],
+    ResourceUpdatedNotificationParams: [],
     Result: [],
     ResultType: :nogen,
     Role: [],
@@ -664,7 +746,7 @@ Generator.run("deps/modelcontextprotocol/schema/draft/schema.json",
     Tool: [],
     ToolAnnotations: [],
     ToolChoice: [],
-    ToolListChangedNotification: :nogen,
+    ToolListChangedNotification: [],
     ToolResultContent: [],
     ToolUseContent: [],
     UnsupportedProtocolVersionError: :nogen,

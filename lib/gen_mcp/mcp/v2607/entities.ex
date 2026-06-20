@@ -11,6 +11,35 @@ defmodule GenMCP.MCP.V2607.ListenerRequest do
   @type t :: %__MODULE__{}
 end
 
+defmodule GenMCP.MCP.V2607.Info do
+  @moduledoc false
+
+  @subscription_notification_methods [
+    "notifications/prompts/list_changed",
+    "notifications/resources/list_changed",
+    "notifications/resources/updated",
+    "notifications/subscriptions/acknowledged",
+    "notifications/tools/list_changed"
+  ]
+
+  @spec subscription_notification_methods() :: [String.t()]
+  def subscription_notification_methods do
+    @subscription_notification_methods
+  end
+
+  def subscription_notification_method?(method)
+
+  Enum.each(@subscription_notification_methods, fn method ->
+    def subscription_notification_method?(unquote(method)) do
+      true
+    end
+  end)
+
+  def subscription_notification_method?(method) when is_binary(method) do
+    false
+  end
+end
+
 defmodule GenMCP.MCP.V2607.ModMap do
   defmacro require_all do
     Enum.map(json_schema().definitions, fn {_, mod} ->
@@ -91,6 +120,7 @@ defmodule GenMCP.MCP.V2607.ModMap do
         "ProgressToken" => GenMCP.MCP.V2607.ProgressToken,
         "Prompt" => GenMCP.MCP.V2607.Prompt,
         "PromptArgument" => GenMCP.MCP.V2607.PromptArgument,
+        "PromptListChangedNotification" => GenMCP.MCP.V2607.PromptListChangedNotification,
         "PromptMessage" => GenMCP.MCP.V2607.PromptMessage,
         "ReadResourceRequest" => GenMCP.MCP.V2607.ReadResourceRequest,
         "ReadResourceRequestParams" => GenMCP.MCP.V2607.ReadResourceRequestParams,
@@ -100,7 +130,10 @@ defmodule GenMCP.MCP.V2607.ModMap do
         "RequestParams" => GenMCP.MCP.V2607.RequestParams,
         "Resource" => GenMCP.MCP.V2607.Resource,
         "ResourceLink" => GenMCP.MCP.V2607.ResourceLink,
+        "ResourceListChangedNotification" => GenMCP.MCP.V2607.ResourceListChangedNotification,
         "ResourceTemplate" => GenMCP.MCP.V2607.ResourceTemplate,
+        "ResourceUpdatedNotification" => GenMCP.MCP.V2607.ResourceUpdatedNotification,
+        "ResourceUpdatedNotificationParams" => GenMCP.MCP.V2607.ResourceUpdatedNotificationParams,
         "Result" => GenMCP.MCP.V2607.Result,
         "Role" => GenMCP.MCP.V2607.Role,
         "Root" => GenMCP.MCP.V2607.Root,
@@ -119,6 +152,7 @@ defmodule GenMCP.MCP.V2607.ModMap do
         "Tool" => GenMCP.MCP.V2607.Tool,
         "ToolAnnotations" => GenMCP.MCP.V2607.ToolAnnotations,
         "ToolChoice" => GenMCP.MCP.V2607.ToolChoice,
+        "ToolListChangedNotification" => GenMCP.MCP.V2607.ToolListChangedNotification,
         "ToolResultContent" => GenMCP.MCP.V2607.ToolResultContent,
         "ToolUseContent" => GenMCP.MCP.V2607.ToolUseContent
       }
@@ -306,6 +340,10 @@ defmodule GenMCP.MCP.V2607.CallToolRequest do
   }
 
   @type t :: %__MODULE__{}
+
+  def method do
+    "tools/call"
+  end
 end
 
 defmodule GenMCP.MCP.V2607.CallToolRequestParams do
@@ -441,6 +479,10 @@ defmodule GenMCP.MCP.V2607.CancelledNotification do
   }
 
   @type t :: %__MODULE__{}
+
+  def method do
+    "notifications/cancelled"
+  end
 end
 
 defmodule GenMCP.MCP.V2607.CancelledNotificationParams do
@@ -708,6 +750,10 @@ defmodule GenMCP.MCP.V2607.DiscoverRequest do
   }
 
   @type t :: %__MODULE__{}
+
+  def method do
+    "server/discover"
+  end
 end
 
 defmodule GenMCP.MCP.V2607.DiscoverResult do
@@ -1015,6 +1061,10 @@ defmodule GenMCP.MCP.V2607.GetPromptRequest do
   }
 
   @type t :: %__MODULE__{}
+
+  def method do
+    "prompts/get"
+  end
 end
 
 defmodule GenMCP.MCP.V2607.GetPromptRequestParams do
@@ -1523,6 +1573,10 @@ defmodule GenMCP.MCP.V2607.ListPromptsRequest do
   }
 
   @type t :: %__MODULE__{}
+
+  def method do
+    "prompts/list"
+  end
 end
 
 defmodule GenMCP.MCP.V2607.ListPromptsResult do
@@ -1609,6 +1663,10 @@ defmodule GenMCP.MCP.V2607.ListResourceTemplatesRequest do
   }
 
   @type t :: %__MODULE__{}
+
+  def method do
+    "resources/templates/list"
+  end
 end
 
 defmodule GenMCP.MCP.V2607.ListResourceTemplatesResult do
@@ -1697,6 +1755,10 @@ defmodule GenMCP.MCP.V2607.ListResourcesRequest do
   }
 
   @type t :: %__MODULE__{}
+
+  def method do
+    "resources/list"
+  end
 end
 
 defmodule GenMCP.MCP.V2607.ListResourcesResult do
@@ -1828,6 +1890,10 @@ defmodule GenMCP.MCP.V2607.ListToolsRequest do
   }
 
   @type t :: %__MODULE__{}
+
+  def method do
+    "tools/list"
+  end
 end
 
 defmodule GenMCP.MCP.V2607.ListToolsResult do
@@ -1922,6 +1988,10 @@ defmodule GenMCP.MCP.V2607.LoggingMessageNotification do
   }
 
   @type t :: %__MODULE__{}
+
+  def method do
+    "notifications/message"
+  end
 end
 
 defmodule GenMCP.MCP.V2607.LoggingMessageNotificationParams do
@@ -2192,6 +2262,10 @@ defmodule GenMCP.MCP.V2607.ProgressNotification do
   }
 
   @type t :: %__MODULE__{}
+
+  def method do
+    "notifications/progress"
+  end
 end
 
 defmodule GenMCP.MCP.V2607.ProgressNotificationParams do
@@ -2358,6 +2432,41 @@ defmodule GenMCP.MCP.V2607.PromptArgument do
   @type t :: %__MODULE__{}
 end
 
+defmodule GenMCP.MCP.V2607.PromptListChangedNotification do
+  use JSV.Schema
+
+  JsonDerive.auto(
+    _merge = %{method: "notifications/prompts/list_changed", jsonrpc: "2.0"},
+    _keep_nils = []
+  )
+
+  @skip_keys [:jsonrpc, :method]
+
+  defschema %{
+    description: ~SD"""
+    An optional notification from the server to the client, informing it
+    that the list of prompts it offers has changed. This is only delivered
+    on a {@link SubscriptionsListenRequestsubscriptions/listen} stream
+    when the client requested it via the `promptsListChanged` filter
+    field.
+    """,
+    properties: %{
+      jsonrpc: const("2.0"),
+      method: const("notifications/prompts/list_changed"),
+      params: GenMCP.MCP.V2607.NotificationParams
+    },
+    required: [:jsonrpc, :method],
+    title: "MCP:PromptListChangedNotification",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+
+  def method do
+    "notifications/prompts/list_changed"
+  end
+end
+
 defmodule GenMCP.MCP.V2607.PromptMessage do
   use JSV.Schema
 
@@ -2408,6 +2517,10 @@ defmodule GenMCP.MCP.V2607.ReadResourceRequest do
   }
 
   @type t :: %__MODULE__{}
+
+  def method do
+    "resources/read"
+  end
 end
 
 defmodule GenMCP.MCP.V2607.ReadResourceRequestParams do
@@ -2729,6 +2842,41 @@ defmodule GenMCP.MCP.V2607.ResourceLink do
   @type t :: %__MODULE__{}
 end
 
+defmodule GenMCP.MCP.V2607.ResourceListChangedNotification do
+  use JSV.Schema
+
+  JsonDerive.auto(
+    _merge = %{method: "notifications/resources/list_changed", jsonrpc: "2.0"},
+    _keep_nils = []
+  )
+
+  @skip_keys [:jsonrpc, :method]
+
+  defschema %{
+    description: ~SD"""
+    An optional notification from the server to the client, informing it
+    that the list of resources it can read from has changed. This is only
+    delivered on a {@link SubscriptionsListenRequestsubscriptions/listen}
+    stream when the client requested it via the `resourcesListChanged`
+    filter field.
+    """,
+    properties: %{
+      jsonrpc: const("2.0"),
+      method: const("notifications/resources/list_changed"),
+      params: GenMCP.MCP.V2607.NotificationParams
+    },
+    required: [:jsonrpc, :method],
+    title: "MCP:ResourceListChangedNotification",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+
+  def method do
+    "notifications/resources/list_changed"
+  end
+end
+
 defmodule GenMCP.MCP.V2607.ResourceTemplate do
   use JSV.Schema
 
@@ -2804,6 +2952,68 @@ defmodule GenMCP.MCP.V2607.ResourceTemplate do
     },
     required: [:name, :uriTemplate],
     title: "MCP:ResourceTemplate",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.V2607.ResourceUpdatedNotification do
+  use JSV.Schema
+
+  JsonDerive.auto(
+    _merge = %{method: "notifications/resources/updated", jsonrpc: "2.0"},
+    _keep_nils = [:params]
+  )
+
+  @skip_keys [:jsonrpc, :method]
+
+  defschema %{
+    description: ~SD"""
+    A notification from the server to the client, informing it that a
+    resource has changed and may need to be read again. This is only sent
+    for resources the client opted in to via the `resourceSubscriptions`
+    field of a {@link SubscriptionsListenRequestsubscriptions/listen}
+    request.
+    """,
+    properties: %{
+      jsonrpc: const("2.0"),
+      method: const("notifications/resources/updated"),
+      params: GenMCP.MCP.V2607.ResourceUpdatedNotificationParams
+    },
+    required: [:jsonrpc, :method, :params],
+    title: "MCP:ResourceUpdatedNotification",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+
+  def method do
+    "notifications/resources/updated"
+  end
+end
+
+defmodule GenMCP.MCP.V2607.ResourceUpdatedNotificationParams do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:uri])
+
+  defschema %{
+    description: ~SD"""
+    Parameters for a `notifications/resources/updated` notification.
+    """,
+    properties: %{
+      _meta: GenMCP.MCP.V2607.NotificationMetaObject,
+      uri:
+        uri(
+          description: ~SD"""
+          The URI of the resource that has been updated. This might be a
+          sub-resource of the one that the client actually subscribed to.
+          """
+        )
+    },
+    required: [:uri],
+    title: "MCP:ResourceUpdatedNotificationParams",
     type: "object"
   }
 
@@ -3104,6 +3314,10 @@ defmodule GenMCP.MCP.V2607.SubscriptionsAcknowledgedNotification do
   }
 
   @type t :: %__MODULE__{}
+
+  def method do
+    "notifications/subscriptions/acknowledged"
+  end
 end
 
 defmodule GenMCP.MCP.V2607.SubscriptionsAcknowledgedNotificationParams do
@@ -3158,6 +3372,10 @@ defmodule GenMCP.MCP.V2607.SubscriptionsListenRequest do
   }
 
   @type t :: %__MODULE__{}
+
+  def method do
+    "subscriptions/listen"
+  end
 end
 
 defmodule GenMCP.MCP.V2607.SubscriptionsListenRequestParams do
@@ -3414,6 +3632,40 @@ defmodule GenMCP.MCP.V2607.ToolChoice do
   }
 
   @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.V2607.ToolListChangedNotification do
+  use JSV.Schema
+
+  JsonDerive.auto(
+    _merge = %{method: "notifications/tools/list_changed", jsonrpc: "2.0"},
+    _keep_nils = []
+  )
+
+  @skip_keys [:jsonrpc, :method]
+
+  defschema %{
+    description: ~SD"""
+    An optional notification from the server to the client, informing it
+    that the list of tools it offers has changed. This is only delivered
+    on a {@link SubscriptionsListenRequestsubscriptions/listen} stream
+    when the client requested it via the `toolsListChanged` filter field.
+    """,
+    properties: %{
+      jsonrpc: const("2.0"),
+      method: const("notifications/tools/list_changed"),
+      params: GenMCP.MCP.V2607.NotificationParams
+    },
+    required: [:jsonrpc, :method],
+    title: "MCP:ToolListChangedNotification",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+
+  def method do
+    "notifications/tools/list_changed"
+  end
 end
 
 defmodule GenMCP.MCP.V2607.ToolResultContent do

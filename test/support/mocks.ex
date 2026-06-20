@@ -1,6 +1,7 @@
 alias GenMCP.Suite.Extension
 alias GenMCP.Suite.PromptRepo
 alias GenMCP.Suite.ResourceRepo
+alias GenMCP.Suite.SubscriptionHandler
 alias GenMCP.Suite.Tool
 
 #
@@ -72,6 +73,22 @@ Mox.defmock(GenMCP.Support.PromptRepoMock,
 
 # Keeps the optional `cache_control/1` (spec 005) for prompts/list cache tests.
 Mox.defmock(GenMCP.Support.PromptRepoCacheMock, for: PromptRepo)
+
+#
+# -- Subscriptions ------------------------------------------------------------
+
+# Skips the optional `handle_close/3` and `subscription_capabilities/1`, for
+# tests that never disconnect, exercise the "not implemented -> stop
+# immediately" path, or rely on the default (empty) capability advertisement.
+Mox.defmock(GenMCP.Support.SubscriptionHandlerMock,
+  for: SubscriptionHandler,
+  skip_optional_callbacks: [handle_close: 3, subscription_capabilities: 2]
+)
+
+# Implements every optional callback (`handle_close/3`,
+# `subscription_capabilities/1`) for the teardown and capability-advertisement
+# tests.
+Mox.defmock(GenMCP.Support.SubscriptionHandlerFullMock, for: SubscriptionHandler)
 
 #
 # -- Plugs --------------------------------------------------------------------

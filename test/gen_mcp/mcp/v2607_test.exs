@@ -2,12 +2,35 @@ defmodule GenMCP.MCP.V2607Test do
   use ExUnit.Case, async: true
 
   alias GenMCP.MCP.V2607, as: MCP
+  alias GenMCP.MCP.V2607.Info
   alias GenMCP.MCP.V2607.ModMap
   alias GenMCP.MCP.V2607.TextContent
 
   require ModMap
 
   ModMap.require_all()
+
+  describe "Info.subscription_notification_methods/0" do
+    test "returns the listen-stream notification methods that require subscriptionId" do
+      assert [
+               "notifications/prompts/list_changed",
+               "notifications/resources/list_changed",
+               "notifications/resources/updated",
+               "notifications/subscriptions/acknowledged",
+               "notifications/tools/list_changed"
+             ] == Info.subscription_notification_methods()
+    end
+
+    test "recognizes subscription-stream methods and excludes unrelated notifications" do
+      assert true ==
+               Info.subscription_notification_method?("notifications/subscriptions/acknowledged")
+
+      assert true == Info.subscription_notification_method?("notifications/tools/list_changed")
+      assert false == Info.subscription_notification_method?("notifications/cancelled")
+      assert false == Info.subscription_notification_method?("notifications/progress")
+      assert false == Info.subscription_notification_method?("foo")
+    end
+  end
 
   describe "discover_result/1" do
     test "creates discover result with required server_info and default capabilities" do

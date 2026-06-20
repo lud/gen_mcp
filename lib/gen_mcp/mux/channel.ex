@@ -1,7 +1,9 @@
 defmodule GenMCP.Mux.Channel do
   @log_levels Enum.map(GenMCP.MCP.V2607.LoggingLevel.json_schema().enum, &String.to_atom/1)
 
-  @enforce_keys [:client, :progress_token, :status, :log_level, :meta, :endpoint]
+  alias GenMCP.MCP.V2607, as: MCP
+
+  @enforce_keys [:client, :progress_token, :status, :log_level, :meta, :endpoint, :request_id]
   defstruct @enforce_keys
 
   @type status :: :request | :stream | :closed
@@ -21,7 +23,8 @@ defmodule GenMCP.Mux.Channel do
           progress_token: nil | binary | integer,
           log_level: log_level() | nil,
           meta: meta,
-          endpoint: nil | module
+          endpoint: nil | module,
+          request_id: binary | integer | nil
         }
 
   @empty_meta %{client_info: nil, client_capabilities: nil, protocol_version: nil}
@@ -41,17 +44,21 @@ defmodule GenMCP.Mux.Channel do
   `protocol_version`. They are read-only request context, not handler state.
   """
   def from_request(conn, req, meta_assigns \\ %{}) do
-    progress_token = progress_token_from_request(req)
-    log_level = log_level_from_request(req)
-    meta = meta_from_request(req)
-
     endpoint =
       case conn do
         %{private: %{phoenix_endpoint: endpoint}} -> endpoint
         _ -> nil
       end
 
-    create_new(self(), endpoint, progress_token, log_level, meta_assigns, meta)
+    %__MODULE__{
+      client: self(),
+      request_id: request_id_from_request(req),
+      endpoint: endpoint,
+      progress_token: progress_token_from_request(req),
+      status: :request,
+      log_level: log_level_from_request(req),
+      meta: Map.merge(meta_assigns, meta_from_request(req))
+    }
   end
 
   defp progress_token_from_request(req) do
@@ -85,19 +92,23 @@ defmodule GenMCP.Mux.Channel do
     end
   end
 
-  @doc false
-  def for_pid(pid, meta_assigns \\ %{}) do
-    create_new(pid, nil, nil, nil, meta_assigns, @empty_meta)
+  defp request_id_from_request(req) do
+    case req do
+      %{id: id} -> id
+      _ -> nil
+    end
   end
 
-  defp create_new(owner_pid, endpoint, progress_token, log_level, meta_assigns, meta) do
+  @doc false
+  def for_pid(pid, meta_assigns \\ %{}) do
     %__MODULE__{
-      client: owner_pid,
-      endpoint: endpoint,
-      progress_token: progress_token,
+      client: pid,
+      request_id: nil,
+      endpoint: nil,
+      progress_token: nil,
       status: :request,
-      log_level: log_level,
-      meta: Map.merge(meta_assigns, meta)
+      log_level: nil,
+      meta: meta_assigns
     }
   end
 
@@ -178,6 +189,107 @@ defmodule GenMCP.Mux.Channel do
   def send_error(channel, error) do
     send(channel.client, {:"$gen_mcp", :error, error})
     {:ok, channel}
+  end
+
+  def send_notification(%__MODULE__{status: :closed}, notification) when is_map(notification) do
+    {:error, :closed}
+  end
+
+  def send_notification(%__MODULE__{} = channel, notification) when is_map(notification) do
+    notification =
+      if requires_subscription_id?(notification) do
+        copy_subscription_id(channel, notification)
+      else
+        notification
+      end
+
+    send(channel.client, {:"$gen_mcp", :notification, notification})
+    :ok
+  end
+
+  def requires_subscription_id?(%{"method" => method}) do
+    MCP.Info.subscription_notification_method?(method)
+  end
+
+  def requires_subscription_id?(%{method: method}) do
+    MCP.Info.subscription_notification_method?(method)
+  end
+
+  def requires_subscription_id?(%mod{}) do
+    MCP.Info.subscription_notification_method?(mod.method())
+  rescue
+    UndefinedFunctionError ->
+      e = %ArgumentError{
+        message:
+          "could not figure out subscription id requirement for notification" <>
+            "%#{inspect(mod)}{}, " <>
+            ~s(missing "method" or :method key on the notification payload, ) <>
+            "or exported function #{inspect(mod)}.method/0"
+      }
+
+      reraise e, __STACKTRACE__
+  end
+
+  def requires_subscription_id?(_) do
+    false
+  end
+
+  def copy_subscription_id(%__MODULE__{request_id: nil}, notification) do
+    notification
+  end
+
+  @sid_atom_key :"io.modelcontextprotocol/subscriptionId"
+  @sid_bin_key "io.modelcontextprotocol/subscriptionId"
+
+  def copy_subscription_id(%__MODULE__{request_id: id}, notification) do
+    # Default key is derived from the top map keys type only
+    default_key =
+      case notification do
+        %_s{} -> @sid_atom_key
+        %{method: _} -> @sid_atom_key
+        _ -> @sid_bin_key
+      end
+
+    {params_key, params} = map_get_lax(notification, :params, %{})
+    {meta_key, meta} = map_get_lax(params, :_meta, %{}, default_key == @sid_bin_key)
+
+    meta =
+      case meta do
+        %{@sid_atom_key => v} when v != nil -> meta
+        %{@sid_bin_key => v} when v != nil -> meta
+        %{@sid_atom_key => _} -> Map.put(meta, @sid_atom_key, id)
+        %{@sid_bin_key => _} -> Map.put(meta, @sid_bin_key, id)
+        _ -> Map.put(meta, default_key, id)
+      end
+
+    params = Map.put(params, meta_key, meta)
+    Map.put(notification, params_key, params)
+  end
+
+  # returns the key and value from a map. If the map has the string version of
+  # the key we use it. The default value is returned if no key is found but the
+  # map is not updated. The default value is also returned is the key maps to
+  # `nil`.
+  #
+  # If nothing is found, the atom key is returned
+  defp map_get_lax(map, atom_key, default, default_to_bin? \\ false) do
+    case map do
+      %{^atom_key => nil} ->
+        {atom_key, default}
+
+      %{^atom_key => v} ->
+        {atom_key, v}
+
+      _ ->
+        bin_key = Atom.to_string(atom_key)
+
+        case map do
+          %{^bin_key => nil} -> {bin_key, default}
+          %{^bin_key => v} -> {bin_key, v}
+          _ when default_to_bin? -> {bin_key, default}
+          _ -> {atom_key, default}
+        end
+    end
   end
 
   @doc """

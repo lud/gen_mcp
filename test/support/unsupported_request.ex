@@ -9,4 +9,8 @@ defmodule GenMCP.Support.UnsupportedRequest do
   def json_schema do
     %{properties: %{method: %{const: "test/unsupported"}}}
   end
+
+  def method do
+    "test/unsupported"
+  end
 end

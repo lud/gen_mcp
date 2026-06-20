@@ -12,15 +12,23 @@ defmodule GenMCP.Suite do
   # `@impl` annotations are dropped until the rewrite (they only produced
   # stale-callback warnings).
 
+  # TODO(doc): in the doc rewrite, explain the two arguments that recur across
+  # every provider/handler behaviour (Tool, ResourceRepo, PromptRepo,
+  # SubscriptionHandler, …): the ubiquitous trailing `arg` (the options
+  # configured alongside the module as `{module, arg}`, enabling generic
+  # config-driven handlers) and the `channel` (request-scoped, read-only `meta` /
+  # auth context, threaded second-to-last where present — not on every function).
+
   @behaviour GenMCP
 
   alias GenMCP.MCP.V2607, as: MCP
+  alias GenMCP.Mux.Channel
   alias GenMCP.Suite.Extension
   alias GenMCP.Suite.PromptRepo
   alias GenMCP.Suite.ResourceRepo
+  alias GenMCP.Suite.SubscriptionHandler
   alias GenMCP.Suite.Tool
   alias GenMCP.Utils.OptsValidator
-
   require Record
 
   provider_list = fn doc ->
@@ -29,7 +37,17 @@ defmodule GenMCP.Suite do
       type: {:list, {:or, [:atom, :mod_arg, :map]}},
       doc:
         doc <>
-          " List items can be either module names, `{module, arg}` tuples or a descriptor map."
+          " List items can be either module names, `{module, arg}` tuples or descriptor maps."
+    ]
+  end
+
+  provider_single = fn doc ->
+    [
+      default: nil,
+      type: {:or, [:atom, :mod_arg, :map]},
+      doc:
+        doc <>
+          " Either a module name, a `{module, arg}` tuple or a descriptor map."
     ]
   end
 
@@ -57,7 +75,8 @@ defmodule GenMCP.Suite do
         provider_list.(
           "A list `Extension` implementations" <>
             " to add more tools, resource repositories and prompt repositories."
-        )
+        ),
+      subscription_handler: provider_single.("A handler for subscription requests.")
     )
 
   defmodule State do
@@ -67,6 +86,7 @@ defmodule GenMCP.Suite do
       :server_name,
       :server_version,
       :server_title,
+      :subscription_handler,
       :tools,
       :resources,
       :prompts,
@@ -132,6 +152,10 @@ defmodule GenMCP.Suite do
     handle_list_templates(state, req, channel)
   end
 
+  def handle_request(%MCP.SubscriptionsListenRequest{} = req, channel, state) do
+    handle_subscription(state, req, channel)
+  end
+
   # Catch-all: a request that validated as legal MCP but that this server does
   # not implement. Returns a JSON-RPC "method not found" (-32601) rather than
   # crashing with a FunctionClauseError. Every validable request has a clause
@@ -144,7 +168,7 @@ defmodule GenMCP.Suite do
   # The method string of a validated request struct, read from its schema — the
   # same source the transport validator dispatches on.
   defp request_method(req) do
-    req.__struct__.json_schema().properties.method.const
+    req.__struct__.method()
   end
 
   @impl GenMCP
@@ -167,6 +191,9 @@ defmodule GenMCP.Suite do
       {:tool, req, tool, tool_state} ->
         handle_tool_message(state, req, tool, message, tool_state, channel)
 
+      {:sub, req, handler, handler_state} ->
+        handle_sub_message(state, req, handler, message, handler_state, channel)
+
       _ ->
         {:stop, {:unexpected_message, message}}
     end
@@ -178,21 +205,25 @@ defmodule GenMCP.Suite do
   # tool's optional `handle_close/3` so it can run cleanup. Return ignored.
   def handle_close(channel, state) do
     case state.on_message do
-      {:tool, _req, tool, tool_state} -> Tool.handle_close(tool, channel, tool_state)
-      _ -> :ok
+      {:tool, _req, tool, tool_state} ->
+        Tool.handle_close(tool, channel, tool_state)
+
+      {:sub, _req, handler, handler_state} ->
+        SubscriptionHandler.handle_close(handler, channel, handler_state)
+
+      _ ->
+        :ok
     end
   end
 
   # -- Extension discovery ----------------------------------------------------
 
   defp discover_result(state, channel) do
-    extensions = build_extensions(state)
-
     MCP.discover_result(
       name: state.server_name,
       version: state.server_version,
       title: state.server_title,
-      capabilities: capabilities(extensions, channel)
+      capabilities: capabilities(state, channel)
     )
   end
 
@@ -214,20 +245,59 @@ defmodule GenMCP.Suite do
     __MODULE__.SelfExtension.new(tools, resources, prompts)
   end
 
-  defp capabilities(extensions, channel) do
+  defp capabilities(state, channel) do
+    extensions = build_extensions(state)
+
+    subscription_flags =
+      case expand_subscription_handler(state) do
+        nil -> %{}
+        handler -> SubscriptionHandler.subscription_capabilities(handler, channel)
+      end
+
     accin = %{tools: false, prompts: false, resources: false, logging: true}
 
-    Enum.reduce_while(extensions, accin, fn
-      _, %{tools: true, prompts: true, resources: true} = acc ->
-        {:halt, acc}
+    impl_capabilities =
+      Enum.reduce_while(extensions, accin, fn
+        _, %{tools: true, prompts: true, resources: true} = acc ->
+          {:halt, acc}
 
-      ext, acc ->
-        tools = acc.tools || [] != Extension.tools(ext, channel)
-        prompts = acc.prompts || [] != Extension.prompts(ext, channel)
-        resources = acc.resources || [] != Extension.resources(ext, channel)
+        ext, acc ->
+          tools = acc.tools || [] != Extension.tools(ext, channel)
+          prompts = acc.prompts || [] != Extension.prompts(ext, channel)
+          resources = acc.resources || [] != Extension.resources(ext, channel)
 
-        {:cont, %{acc | tools: tools, prompts: prompts, resources: resources, logging: true}}
+          {:cont, %{acc | tools: tools, prompts: prompts, resources: resources, logging: true}}
+      end)
+
+    Enum.reduce(subscription_flags, impl_capabilities, fn
+      {:tools_list_changed, true}, acc ->
+        add_capability_flag(acc, :tools, :listChanged, true)
+
+      {:prompts_list_changed, true}, acc ->
+        add_capability_flag(acc, :prompts, :listChanged, true)
+
+      {:resources_list_changed, true}, acc ->
+        add_capability_flag(acc, :resources, :listChanged, true)
+
+      {:resources_updated, true}, acc ->
+        add_capability_flag(acc, :resources, :subscribe, true)
     end)
+  end
+
+  @spec add_capability_flag(
+          map,
+          :tools | :resources | :prompts,
+          :listChanged | :subscribe,
+          boolean
+        ) :: map
+  defp add_capability_flag(map, scope, capability, bool) do
+    case map do
+      %{^scope => atom} when atom in [nil, true, false] ->
+        Map.put(map, scope, %{capability => bool})
+
+      %{} ->
+        put_in(map[scope][capability], bool)
+    end
   end
 
   defp stream_resource_repos(state, channel, mode \\ :expand) do
@@ -375,6 +445,58 @@ defmodule GenMCP.Suite do
     # Note that all this data is hashed as an unicity token, it is not packed in
     # the state.
     %{tool: tool, params: req.params.arguments}
+  end
+
+  # -- Subscriptions ----------------------------------------------------------
+
+  defp handle_subscription(state, req, channel) do
+    case expand_subscription_handler(state) do
+      nil ->
+        {:error, {:unsupported_method, request_method(req)}}
+
+      handler ->
+        result = SubscriptionHandler.subscribe(handler, req, channel)
+
+        case result do
+          {:stream, honored_filter, handler_state} ->
+            ack = notif_ack_from_req(req, honored_filter)
+            _ = Channel.send_notification(channel, ack)
+            {:stream, %{state | on_message: {:sub, req, handler, handler_state}}}
+
+          {:stop, reason} ->
+            {:error, reason}
+        end
+    end
+  end
+
+  defp expand_subscription_handler(state) do
+    case state.subscription_handler do
+      nil -> nil
+      handler -> SubscriptionHandler.expand(handler)
+    end
+  end
+
+  defp notif_ack_from_req(req, new_filter) do
+    %MCP.SubscriptionsAcknowledgedNotification{
+      params: %MCP.SubscriptionsAcknowledgedNotificationParams{
+        _meta: %MCP.NotificationMetaObject{
+          "io.modelcontextprotocol/subscriptionId": req.id
+        },
+        notifications: new_filter
+      }
+    }
+  end
+
+  defp handle_sub_message(state, req, handler, message, handler_state, channel) do
+    result = SubscriptionHandler.handle_message(handler, message, channel, handler_state)
+
+    case result do
+      {:stream, handler_state} ->
+        {:stream, %{state | on_message: {:sub, req, handler, handler_state}}}
+
+      {:stop, reason} ->
+        {:stop, reason}
+    end
   end
 
   # -- Resources --------------------------------------------------------------

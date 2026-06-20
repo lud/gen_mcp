@@ -106,7 +106,7 @@ defmodule GenMCP.MCP.V2607 do
   leaves the field `nil`. A `%GenMCP.MCP.V2607.ServerCapabilities{}` struct is
   returned as-is.
   """
-  @spec capabilities(keyword() | ServerCapabilities.t()) :: ServerCapabilities.t()
+  @spec capabilities(keyword() | ServerCapabilities.t() | map) :: ServerCapabilities.t()
   def capabilities(%ServerCapabilities{} = caps) do
     caps
   end
