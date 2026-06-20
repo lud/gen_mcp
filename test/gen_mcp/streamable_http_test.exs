@@ -1485,6 +1485,58 @@ defmodule GenMCP.StreamableHTTPTest do
 
       refute Enum.any?(chunks, &match?(%{"method" => "notifications/message"}, &1))
     end
+
+    test "filters logs below the per-request level (error: info dropped, critical passes)" do
+      # The channel is built from a request carrying logLevel "error". A handler
+      # that logs at several levels only gets the at/above-threshold ones on the
+      # wire: :info is below "error" (dropped), :critical is above (emitted).
+      ServerMock
+      |> expect(:init, fn _opts -> {:ok, :server_state} end)
+      |> expect(:handle_request, fn %MCP.CallToolRequest{}, _channel, state ->
+        send(self(), :send_log)
+        {:stream, state}
+      end)
+      |> expect(:handle_message, fn :send_log, channel, _state ->
+        :ok = Channel.send_log(channel, :info, "below threshold", "db")
+        :ok = Channel.send_log(channel, :critical, "above threshold", "db")
+        {:result, MCP.call_tool_result(text: "done")}
+      end)
+
+      chunks =
+        client(url: @mcp_url)
+        |> post_message(
+          %{
+            jsonrpc: "2.0",
+            id: 791,
+            method: "tools/call",
+            params: %{
+              name: "SomeTool",
+              arguments: %{},
+              _meta: request_meta(%{"io.modelcontextprotocol/logLevel" => "error"})
+            }
+          },
+          into: :self
+        )
+        |> stream_chunks()
+        |> parse_stream()
+        |> Enum.map(fn %{event: "message", data: data} -> data end)
+
+      # Exactly one message notification (the :critical one) before the result;
+      # the :info log never reaches the client.
+      assert [
+               %{
+                 "method" => "notifications/message",
+                 "params" => %{"level" => "critical", "data" => "above threshold"}
+               },
+               %{
+                 "id" => 791,
+                 "jsonrpc" => "2.0",
+                 "result" => %{"content" => [%{"text" => "done", "type" => "text"}]}
+               }
+             ] = chunks
+
+      refute Enum.any?(chunks, &match?(%{"params" => %{"level" => "info"}}, &1))
+    end
   end
 
   describe "request body size ceiling (spec 007)" do

@@ -66,6 +66,73 @@ defmodule GenMCP.ChannelTest do
 
       assert %LoggingMessageNotification{params: %{data: ^data}} = notification
     end
+
+    # The primary MUST of spec 011: a request that did not declare
+    # `io.modelcontextprotocol/logLevel` has `log_level: nil` and logging is
+    # disabled — `send_log` must emit nothing (no library default level). It must
+    # still be safe to call unconditionally from a handler, so it returns `:ok`.
+    test "is a no-op when logging is disabled (channel log_level is nil)" do
+      channel = build_channel()
+      assert channel.log_level == nil
+
+      assert :ok = Channel.send_log(channel, :error, "should be dropped")
+      assert :ok = Channel.send_log(channel, :emergency, "even the most severe")
+      refute_receive {:"$gen_mcp", :notification, _}
+    end
+
+    test "returns {:error, :invalid_level} for an unrecognized level" do
+      channel = %{build_channel() | log_level: :warning}
+
+      assert {:error, :invalid_level} = Channel.send_log(channel, :verbose, "nope")
+      refute_receive {:"$gen_mcp", :notification, _}
+    end
+  end
+
+  # The verbosity is declared per-request in the request `_meta`
+  # `io.modelcontextprotocol/logLevel`; there is no stateful `logging/setLevel`
+  # and no library default. `from_request/2` lifts the level into the channel,
+  # defaulting to `nil` (disabled) whenever it is absent or unrecognized. The
+  # transport rejects an unrecognized level upstream with `-32602` (see the
+  # streamable_http logging tests), so in practice the channel only holds a valid
+  # level or `nil`. See spec 011.
+  describe "from_request/2 — per-request log level (spec 011)" do
+    test "reads io.modelcontextprotocol/logLevel from _meta into log_level" do
+      req = %MCP.CallToolRequest{
+        id: 1,
+        params: %{_meta: %{"io.modelcontextprotocol/logLevel": :warning}}
+      }
+
+      channel = Channel.from_request(nil, req, %{})
+
+      assert channel.log_level == :warning
+    end
+
+    test "log_level is nil when the request omits the level (logging disabled)" do
+      req = %MCP.CallToolRequest{id: 1, params: %{_meta: %{}}}
+
+      channel = Channel.from_request(nil, req, %{})
+
+      assert channel.log_level == nil
+    end
+
+    test "log_level is nil when params carry no _meta" do
+      req = %MCP.CallToolRequest{id: 1, params: %{}}
+
+      channel = Channel.from_request(nil, req, %{})
+
+      assert channel.log_level == nil
+    end
+
+    test "an unrecognized level falls back to nil" do
+      req = %MCP.CallToolRequest{
+        id: 1,
+        params: %{_meta: %{"io.modelcontextprotocol/logLevel": :verbose}}
+      }
+
+      channel = Channel.from_request(nil, req, %{})
+
+      assert channel.log_level == nil
+    end
   end
 
   describe "request_id" do
