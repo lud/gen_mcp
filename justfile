@@ -9,6 +9,14 @@ gen-entities:
   elixir tools/gen-rpc-schemas.exs
   mix run tools/check-entities.exs
 
+update-schema: deps
+  mix deps.get
+  mix mcp.update_schema
+  mix deps.get
+  just gen-entities
+  mix test
+  just _git_status
+
 _mix_format:
   mix format
 
