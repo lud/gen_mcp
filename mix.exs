@@ -72,10 +72,7 @@ defmodule GenMCP.MixProject do
     ]
   end
 
-  # The 2026-07-28 RC lives in `schema/draft` and is a moving target as SEP PRs
-  # land, so we pin a commit SHA rather than a branch/tag ref. Re-run codegen +
-  # `check-entities` whenever this SHA is bumped.
-  @schemas_ref "f04ab539afc1810747b8b2ead6a1849e15702f2e"
+  @schemas_ref "15b1974b66d19fe5a91765135f060f0945d29fcb"
 
   defp mcp_schemas do
     {
