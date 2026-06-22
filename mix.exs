@@ -195,9 +195,7 @@ defmodule GenMCP.MixProject do
 
     defined_guides = [
       "CHANGELOG.md",
-      "guides/001.getting-started.md",
-      "guides/002.using-mcp-suite.md",
-      "guides/009.system-configuration.md"
+      "guides/001.getting-started.md"
     ]
 
     case existing_guides -- defined_guides do

@@ -108,7 +108,12 @@ defmodule MyApp.Resources.Memories do
   def read(%{"id" => id}, _channel, _arg) do
     case MyApp.Memory.fetch(id) do
       {:ok, memory} ->
-        {:ok, MCP.read_resource_result(uri: "memory:///#{id}", text: memory.content, mime_type: "text/markdown")}
+        {:ok,
+         MCP.read_resource_result(
+           uri: "memory:///#{id}",
+           text: memory.content,
+           mime_type: "text/markdown"
+         )}
 
       :error ->
         {:error, :not_found}
