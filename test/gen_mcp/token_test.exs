@@ -4,6 +4,8 @@ defmodule GenMCP.TokenTest do
   alias GenMCP.Mux.Channel
   alias GenMCP.Token
 
+  doctest GenMCP.Token
+
   # Spec 004 / task 012 — server-wide encryption for pagination cursors and,
   # later, the MRTR `requestState` blob (spec 007).
   #

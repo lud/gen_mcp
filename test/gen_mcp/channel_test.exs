@@ -7,6 +7,8 @@ defmodule GenMCP.ChannelTest do
   alias GenMCP.MCP.V2607.LoggingMessageNotification
   alias GenMCP.Mux.Channel
 
+  doctest GenMCP.Mux.Channel
+
   # The reverse-DNS `_meta` key that demultiplexes a subscription stream. Its
   # value is the JSON-RPC id of the `subscriptions/listen` request (= the
   # channel's `request_id`). See spec 008.

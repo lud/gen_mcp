@@ -1,21 +1,53 @@
 defmodule GenMCP.TelemetryLogger do
   events = %{
-    # Cluster
-    [:gen_mcp, :cluster, :conflict] => :warning,
-    [:gen_mcp, :cluster, :error] => :error,
-
-    # Session.
+    # Server worker
     [:gen_mcp, :server, :init] => :debug,
+    [:gen_mcp, :server, :start_error] => :error,
 
-    # Suite
-    [:gen_mcp, :suite, :error, :unknown_request] => :error
+    # Transport
+    [:gen_mcp, :transport, :server_crashed] => :error,
+    [:gen_mcp, :transport, :version_rejected] => :debug,
+    [:gen_mcp, :transport, :request_rejected] => :debug
   }
 
   @moduledoc """
-  A `:telemetry` event listener that produces logs for events emitted by the
-  `:gen_mcp` application.
+  A `:telemetry` handler that logs the events emitted by the `:gen_mcp`
+  application.
 
-  ## Events
+  Attaching it gives you ready-made `Logger` output for the lifecycle and
+  transport events the library emits, each at a fixed log level. It is the
+  quickest way to see what the server is doing without writing your own
+  `:telemetry` handler.
+
+  ### Attaching the logger
+
+  Attach the handler once when your application boots, from your
+  `Application.start/2` callback:
+
+      defmodule MyApp.Application do
+        use Application
+
+        @impl true
+        def start(_type, _args) do
+          :ok = GenMCP.TelemetryLogger.attach()
+
+          children = [
+            # your supervision tree
+          ]
+
+          Supervisor.start_link(children, strategy: :one_for_one, name: MyApp.Supervisor)
+        end
+      end
+
+  `GenMCP.attach_default_logger/1` is a thin wrapper over `attach/1`, so calling
+  either one has the same effect. Pass filters to narrow what is logged, for
+  example to keep only the more severe events:
+
+      :ok = GenMCP.TelemetryLogger.attach(min_log_level: :error)
+
+  See `attach/1` for the full list of filters.
+
+  ### Events
 
   Here are the emitted events for the library, and the corresponding log level
   used for each one.
@@ -33,6 +65,38 @@ defmodule GenMCP.TelemetryLogger do
     @events
   end
 
+  @doc """
+  Attaches the telemetry handler that logs `:gen_mcp` events.
+
+  Call this once at startup (see the module doc for placement in
+  `Application.start/2`). It subscribes a single `:telemetry` handler, named
+  after this module, to the events listed in the module doc, and returns `:ok`
+  on success.
+
+  By default every event is logged at its mapped level. Pass `filters` to
+  subscribe to a subset:
+
+    * `:min_log_level` - keep only events whose mapped level is at least this
+      severe. For example `min_log_level: :error` drops the `:debug` events and
+      keeps the `:error` ones.
+    * `:prefixes` - a list of event-name prefixes; keep only events whose name
+      starts with one of them. For example `prefixes: [[:gen_mcp, :transport]]`
+      keeps only the transport events.
+
+  ### Examples
+
+  Attach every event at its default level:
+
+      :ok = GenMCP.TelemetryLogger.attach()
+
+  Attach only transport events logged at `:error` or above:
+
+      :ok =
+        GenMCP.TelemetryLogger.attach(
+          min_log_level: :error,
+          prefixes: [[:gen_mcp, :transport]]
+        )
+  """
   def attach(filters \\ []) do
     :telemetry.attach_many(
       __MODULE__,
@@ -72,38 +136,26 @@ defmodule GenMCP.TelemetryLogger do
 
   @doc false
 
-  def handle_event(
-        [:gen_mcp, :suite, :error, :unknown_request] = p,
-        _,
-        %{request: request, session_id: session_id},
-        _
-      ) do
-    log(p, fn ->
-      {"gen_mcp suite received an unknown request: #{inspect(request)}",
-       %{gen_mcp_session_id: session_id}}
-    end)
-  end
-
   def handle_event([:gen_mcp, :server, :init] = p, _, %{server_mod: server_mod, server_arg: _}, _) do
     log(p, "gen_mcp server initializing with #{inspect(server_mod)}", %{
       gen_mcp_server_mod: server_mod
     })
   end
 
-  def handle_event(
-        [:gen_mcp, :cluster, :conflict] = p,
-        _,
-        %{session_id: session_id, killed_pid: killed_pid, surviving_pid: surviving_pid},
-        _
-      ) do
-    log(
-      p,
-      "gen_mcp session conflict for #{session_id}: killed #{inspect(killed_pid)}, surviving #{inspect(surviving_pid)}"
-    )
+  def handle_event([:gen_mcp, :server, :start_error] = p, _, %{reason: reason}, _) do
+    log(p, "gen_mcp server failed to start: #{inspect(reason)}")
   end
 
-  def handle_event([:gen_mcp, :cluster, :error] = p, _, %{message: message}, _) do
-    log(p, message)
+  def handle_event([:gen_mcp, :transport, :server_crashed] = p, _, %{reason: reason}, _) do
+    log(p, "gen_mcp request worker crashed before replying: #{inspect(reason)}")
+  end
+
+  def handle_event([:gen_mcp, :transport, :version_rejected] = p, _, %{reason: reason}, _) do
+    log(p, "gen_mcp rejected request protocol version: #{inspect(reason)}")
+  end
+
+  def handle_event([:gen_mcp, :transport, :request_rejected] = p, _, %{reason: reason}, _) do
+    log(p, "gen_mcp rejected request: #{inspect(reason)}")
   end
 
   # -- event catchall ---------------------------------------------------------

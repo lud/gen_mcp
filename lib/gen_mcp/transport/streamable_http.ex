@@ -28,42 +28,127 @@ plug_opts_schema =
 
 defmodule GenMCP.Transport.StreamableHTTP do
   @moduledoc """
-  Handles incoming MCP requests over HTTP with SSE support.
+  HTTP plug implementing the MCP Streamable HTTP transport for the `2026-07-28`
+  protocol.
 
-  This module is a Plug that can be mounted in your router. It handles the MCP
-  protocol handshake, session management, and request routing.
+  This is the entry point of an MCP server over HTTP. It is a `Plug.Router`, so
+  you mount it in a Plug or Phoenix router and it answers Model Context Protocol
+  requests at that path. A client POSTs a JSON-RPC message, and the transport
+  replies with either a single JSON response or a Server-Sent Events stream,
+  depending on what the server returns.
 
-  It supports Server-Sent Events (SSE) for streaming responses, such as
-  notifications and asynchronous tool results.
+  The transport is stateless: each request is validated, run by a fresh server
+  process, and answered on its own. The server that handles the decoded request
+  is `GenMCP.Suite` by default,
+  so the smallest useful mount needs no `:server` option and just lists what to
+  serve:
 
-  ## Configuration
+      forward "/mcp", GenMCP.Transport.StreamableHTTP,
+        tools: [MyApp.AddTool]
 
-  ### Options for the HTTP connection
+  To run a custom `GenMCP` implementation instead of the Suite, pass it as
+  `:server`:
+
+      forward "/mcp", GenMCP.Transport.StreamableHTTP, server: MyApp.Server
+
+  ### Options
+
+  Options are read at three layers. The transport keeps the HTTP connection
+  options for itself and passes everything else to the server, which takes its own
+  wrapper options and forwards the rest to the server implementation.
+
+  #### HTTP connection options
 
   #{NimbleOptions.docs(plug_opts_schema)}
 
-  ### Options for the MCP Server wrapper
+  #### MCP server options
 
-  #{NimbleOptions.docs(GenMCP.Server.init_opts_schema().schema)}
+  `:server` selects the `GenMCP` implementation that handles the decoded request.
+  See `GenMCP` for the `{module, arg}` form.
 
-  ### Options for the GenMCP behaviour implementation
+  #{NimbleOptions.docs(GenMCP.Server.init_opts_schema())}
 
-  All other options given to `#{inspect(__MODULE__)}` will be forwarded to the
-  server implementation.
+  #### Server implementation options
 
-  The default server, `GenMCP.Suite`, will accept the following options:
+  Every option not listed above is forwarded to the server implementation. The
+  default server, `GenMCP.Suite`, accepts:
 
-  #{GenMCP.Suite.init_opts_schema().schema |> Keyword.delete(:session_controller) |> NimbleOptions.docs()}
+  #{NimbleOptions.docs(GenMCP.Suite.init_opts_schema())}
 
-  ## Example
+  ### Passing request data to handlers
 
-      # In your router
+  Handlers read per-request context from the `GenMCP.Mux.Channel` they are given.
+  Use `:assigns` and `:copy_assigns` to put your own data there. `:assigns` holds
+  static values set on every channel. `:copy_assigns` lists `conn` assign keys to
+  copy from the connection onto the channel, which is how an upstream
+  authentication plug hands the authenticated identity to your tools: the plug
+  puts `:current_user` on the conn, and you copy it across.
+
+      pipeline :mcp_auth do
+        plug MyAppWeb.AuthPlug
+      end
+
+      scope "/mcp" do
+        pipe_through :mcp_auth
+
+        forward "/", GenMCP.Transport.StreamableHTTP,
+          tools: [MyApp.AddTool],
+          copy_assigns: [:current_user]
+      end
+
+  A copied conn assign overwrites a static `:assigns` entry of the same key.
+
+  ### DNS-rebinding protection
+
+  A browser-based client sends an `Origin` header. The transport rejects a
+  request whose `Origin` is not in `:allowed_origins` with `403 Forbidden`, which
+  stops a malicious page from rebinding DNS to reach a local MCP server. A request
+  with no `Origin` header (a non-browser client) is always accepted. Set
+  `allowed_origins: :any` to disable the check, for example behind a gateway that
+  already validates the origin.
+
       forward "/mcp", GenMCP.Transport.StreamableHTTP,
-        server_name: "My App",
-        server_version: "1.0.0",
-        tools: [MyTool]
-  """
+        tools: [MyApp.AddTool],
+        allowed_origins: ["https://app.example.com"]
 
+  ### Multiple endpoints in one router
+
+  On Phoenix 1.8 and later you can mount the transport directly as many times as
+  you need. Each `forward` keeps its own options, so different endpoints can serve
+  different tools, resources, or origins:
+
+      scope "/mcp" do
+        forward "/files", GenMCP.Transport.StreamableHTTP, tools: [MyApp.FileTool]
+        forward "/admin", GenMCP.Transport.StreamableHTTP, tools: [MyApp.AdminTool]
+      end
+
+  Phoenix resolves a forwarded plug to a path by module, so reverse route lookup
+  (path helpers and `~p` verified routes) for a module mounted at several paths
+  returns only the first one. This affects URL generation, not request dispatch.
+  If you generate URLs to these endpoints, give each its own module with
+  `defplug/1` so each resolves to its own path.
+
+  #### Phoenix before 1.8
+
+  Older Phoenix routers refuse to forward the same module more than once and raise
+  at compile time:
+
+      ** (ArgumentError) GenMCP.Transport.StreamableHTTP has already been
+      forwarded to. A module can only be forwarded a single time.
+
+  Give each endpoint its own module with `defplug/1`, then forward to those
+  modules instead of to the transport:
+
+      require GenMCP.Transport.StreamableHTTP, as: StreamableHTTP
+
+      StreamableHTTP.defplug(MyAppWeb.FilesMcp)
+      StreamableHTTP.defplug(MyAppWeb.AdminMcp)
+
+      scope "/mcp" do
+        forward "/files", MyAppWeb.FilesMcp, tools: [MyApp.FileTools]
+        forward "/admin", MyAppWeb.AdminMcp, tools: [MyApp.AdminTools]
+      end
+  """
   use Plug.Router, copy_opts_to_assign: :gen_mcp_streamable_http_opts
 
   import Plug.Conn
@@ -74,6 +159,15 @@ defmodule GenMCP.Transport.StreamableHTTP do
   @plug_opts_schema plug_opts_schema
 
   # -- Plug API ---------------------------------------------------------------
+  @doc """
+  Initializes the plug, returning the prepared transport configuration.
+
+  This is the `c:Plug.init/1` callback. It validates the transport's own options
+  (`:allowed_origins`, `:assigns`, `:copy_assigns`) and keeps every other option
+  aside as the server options handed to the server on each request. The returned
+  value is the opaque configuration later passed to `call/2`; you do not build or
+  read it yourself.
+  """
   def init(opts) do
     {self_opts, server_opts} = OptsValidator.validate_take_opts!(opts, @plug_opts_schema)
     _conf = Map.put(Map.new(self_opts), :server_opts, server_opts)
@@ -130,16 +224,27 @@ defmodule GenMCP.Transport.StreamableHTTP do
   # -- Plug Duplication -------------------------------------------------------
 
   @doc """
-  Defines a module that delegates to `GenMCP.Transport.StreamableHTTP`.
+  Defines a named plug module that delegates to `GenMCP.Transport.StreamableHTTP`.
 
-  This is useful if you want to define a named Plug for your MCP server.
+  Use this to mount more than one MCP endpoint on a router that allows a module to
+  be forwarded only once. Phoenix before 1.8 is the common case: forwarding
+  `GenMCP.Transport.StreamableHTTP` at two paths raises `ArgumentError` with the
+  message "has already been forwarded to. A module can only be forwarded a single
+  time". The generated module is a distinct plug that delegates both `init/1` and
+  `call/2` to the transport, so you forward to it exactly like the transport
+  itself and each endpoint is its own module. On Phoenix 1.8 and later you can
+  forward to `GenMCP.Transport.StreamableHTTP` directly instead, even for several
+  endpoints.
 
-  ## Example
+  This is a macro, so `require` (or alias and require) the transport before
+  calling it, and give a literal module name:
 
-      defmodule MyMCPPlug do
-        require GenMCP.Transport.StreamableHTTP
-        GenMCP.Transport.StreamableHTTP.defplug(MyMCPPlug)
-      end
+      require GenMCP.Transport.StreamableHTTP, as: StreamableHTTP
+
+      StreamableHTTP.defplug(MyAppWeb.McpPlug)
+
+      # then, in the router, mount the generated module
+      forward "/mcp", MyAppWeb.McpPlug, tools: [MyApp.AddTool]
   """
   defmacro defplug(module) do
     module = Macro.expand_literals(module, __CALLER__)
@@ -171,9 +276,6 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
   alias JSV.Codec
 
   @stream_keepalive_timeout to_timeout(second: 25)
-
-  # TODO(doc) the :assigns option has less precedence than :copy_assigns.
-  # Assigns copied from the conn will overwrite static assigns.
 
   # Legacy support. Initialized notification does not exist in schemas
   def http_post(
@@ -459,6 +561,7 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
 
   # Public: also used by the router module (origin validation).
   def send_error(conn, reason, msg_id) do
+    emit_rejection(reason)
     {status, error_payload} = Error.cast_error(reason)
 
     payload = %GenMCP.MCP.V2607.JSONRPCErrorResponse{
@@ -472,6 +575,22 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
       nil -> conn |> send_json(status, payload) |> finalize()
       :streaming -> send_stream_message(conn, json_encode(payload), &finalize/1)
     end
+  end
+
+  # Every rejection funnels through send_error/3, so this is the single place to
+  # trace them. server_crashed is a fault (:error); the rest are client-induced
+  # rejections (:debug). Protocol-version negotiation gets its own event so its
+  # level can be tuned independently.
+  defp emit_rejection(:server_crashed = reason) do
+    :telemetry.execute([:gen_mcp, :transport, :server_crashed], %{}, %{reason: reason})
+  end
+
+  defp emit_rejection({:unsupported_protocol_version, _} = reason) do
+    :telemetry.execute([:gen_mcp, :transport, :version_rejected], %{}, %{reason: reason})
+  end
+
+  defp emit_rejection(reason) do
+    :telemetry.execute([:gen_mcp, :transport, :request_rejected], %{}, %{reason: reason})
   end
 
   defp send_notification(conn, notif, continuation) do

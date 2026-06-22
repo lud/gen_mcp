@@ -14,7 +14,8 @@ defmodule GenMCP.Server do
                       owner: [
                         type: :pid,
                         required: true,
-                        doc: "The transport process identifier"
+                        # The transport process identifier
+                        doc: false
                       ],
                       server: [
                         type: {:or, [:atom, :mod_arg]},

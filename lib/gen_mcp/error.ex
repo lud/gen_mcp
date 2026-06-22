@@ -26,8 +26,31 @@ end
 
 defmodule GenMCP.Error do
   @moduledoc """
-  Helper module used to transform application errors into MCP/RPC error
-  payloads and HTTP status codes.
+  Maps internal error reasons to JSON-RPC error responses.
+
+  While a request is being handled, `GenMCP` represents failures as plain atoms
+  and tagged tuples, for example `:bad_rpc`, `{:unknown_tool, name}`, or
+  `{:invalid_params, error}`. `cast_error/1` turns one of those reasons into the
+  `{http_status, payload}` pair the transport needs to answer the client, where
+  `payload` is the body of a JSON-RPC error object (its `:code`, `:message`, and
+  an optional `:data`).
+
+  The HTTP status reflects where the failure happened. A malformed or rejected
+  request is answered with a 4xx or 5xx status. An error raised after the request
+  was accepted and dispatched (an unknown tool, parameters that fail their
+  schema, a missing resource) is reported as a JSON-RPC error inside a `200`
+  response, as the MCP transport requires.
+
+  The transport pairs the payload with a `GenMCP.MCP.V2607.JSONRPCErrorResponse`
+  and sends it with the returned status:
+
+      {status, error_payload} = GenMCP.Error.cast_error(reason)
+
+      response = %GenMCP.MCP.V2607.JSONRPCErrorResponse{
+        error: error_payload,
+        id: msg_id,
+        jsonrpc: "2.0"
+      }
   """
 
   import GenMCP.Error.Compiler
@@ -43,6 +66,33 @@ defmodule GenMCP.Error do
   # https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1442
   @mcp_unsupported_protocol_version -32_004
 
+  @doc """
+  Returns the `{http_status, payload}` for an internal error reason.
+
+  `reason` is one of the failure values raised while handling a request, such as
+  `:bad_rpc`, `{:unknown_tool, name}`, `{:invalid_params, error}`, or a
+  `JSV.ValidationError`. The returned `payload` is a map ready to use as the
+  `error` field of a JSON-RPC error response: a numeric `:code`, a human-readable
+  `:message`, and a `:data` map for the reasons that carry extra detail.
+
+  A binary `reason` is treated as an internal error message and answered with a
+  `500` status. Any reason that matches none of the known clauses falls through
+  to a catchall that returns a generic `500` and routes the unrecognized reason
+  to `unknown_error/1`.
+
+  ### Examples
+
+  A rejected request maps to a 4xx status with a bare message:
+
+      iex> GenMCP.Error.cast_error(:bad_rpc)
+      {400, %{code: -32600, message: "Invalid RPC request"}}
+
+  An error raised after dispatch is reported inside a `200` response, and carries
+  the offending value under `:data`:
+
+      iex> GenMCP.Error.cast_error({:unknown_tool, "weather"})
+      {200, %{code: -32602, data: %{tool: "weather"}, message: "Unknown tool weather"}}
+  """
   # The body of the 403 MAY be an id-less JSON-RPC error (draft transport spec,
   # Security & Endpoint); no specific code is mandated.
   defcasterror {:origin_forbidden, origin}, @rpc_invalid_request, 403 do
@@ -215,6 +265,7 @@ defmodule GenMCP.Error do
     }
   end
 
+  @doc false
   if Mix.env() == :test do
     @spec unknown_error(term) :: no_return
     def unknown_error({%ExUnit.AssertionError{} = e, stack}) do

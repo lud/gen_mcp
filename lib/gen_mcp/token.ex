@@ -1,63 +1,86 @@
 defmodule GenMCP.Token do
   @moduledoc """
-  Encrypts and decrypts the opaque tokens the server hands out to MCP
-  clients: pagination cursors, and the MRTR `requestState` blobs.
+  Authenticated encryption for the opaque tokens the library hands back to
+  clients and later verifies.
 
-  This is a thin layer over `Phoenix.Token.encrypt/4` and
-  `Phoenix.Token.decrypt/4`, which provide *authenticated encryption*
-  (XChaCha20-Poly1305 via `Plug.Crypto.MessageEncryptor`): clients cannot
-  read the payload, and any tampered or forged token is rejected as
-  `:invalid` before the payload is ever decoded.
+  Some values the server produces have to make a round trip through an
+  untrusted client and come back intact: a pagination cursor returned by
+  `resources/list` and replayed on the next page, or the `requestState` blob a
+  tool returns when it needs another round trip (see the MRTR pattern). The
+  server is stateless, so it cannot remember what it issued. Instead it seals
+  the value into a token that any per-request state, on any node, can verify
+  using the application's `secret_key_base`.
 
-  ## Key source
+  This module is a thin wrapper over `Phoenix.Token`, which provides the
+  authenticated encryption (XChaCha20-Poly1305 via `Plug.Crypto`). It is not a
+  general key/value store: it encrypts a term, hands the caller an opaque
+  string, and decrypts that string back to the original term while rejecting
+  anything forged, tampered, expired, or minted for a different purpose.
 
-  The first argument is anything `Phoenix.Token` accepts as context — a
-  Phoenix endpoint module, a `secret_key_base` string (20+ bytes), a
-  `Plug.Conn` — or a `GenMCP.Mux.Channel` carrying the endpoint copied from
-  the conn by the transport. The encryption key is derived from the
-  application's `secret_key_base`, so a token minted while serving one
-  request is valid for any later request on any node sharing that
-  configuration. No per-session or per-node key is involved.
+  The simplest round trip uses a `secret_key_base` string as the key source:
 
-  ## Purposes
+      iex> key = "Iy0gLZpcS5ENbZS0jJ0mIVOZD7aOu4Pn7D8BiNUyrJVzlAevQUCFGDQDmprQyevy"
+      iex> token = GenMCP.Token.encrypt(key, {:cursor, "resources/list"}, "page-2")
+      iex> GenMCP.Token.decrypt(key, {:cursor, "resources/list"}, token)
+      {:ok, "page-2"}
 
-  Every token is minted for a `t:purpose/0`, a `{kind, qualifier}` pair such
-  as `{:cursor, "resources/list"}` or `{:reqstate, tool_name}`. The purpose
-  participates in key derivation, so a token only decrypts under the exact
-  purpose it was minted for: a `resources/list` cursor replayed on
-  `prompts/list` is `:invalid`, and no cursor can ever pass as a request
-  state. Cursors are qualified by the MCP method they paginate.
+  ### Key source
 
-  ## Terminology warning
+  The first argument is a key source, of type `t:key_source/0`. It may be a
+  `GenMCP.Mux.Channel`, which carries the Phoenix endpoint the transport copied
+  from the connection, or anything `Phoenix.Token` itself accepts: an endpoint
+  module, a `secret_key_base` string, or a `Plug.Conn`. Inside request handling
+  you usually pass the `channel` you already hold:
 
-  `Phoenix.Token.encrypt(context, secret, data)` names its second argument
-  `secret`, but it is **not** the encryption key. It is a *salt*:
-  `Plug.Crypto` stretches it together with the context's `secret_key_base`
-  (PBKDF2, see `Plug.Crypto.KeyGenerator`) to derive the actual key. The
-  purpose lands there, prefixed with `gen_mcp` so it cannot collide with
-  salts the host application uses for its own `Phoenix.Token` tokens on the
-  same endpoint.
+      token = GenMCP.Token.encrypt(channel, {:cursor, "resources/list"}, next_cursor)
+
+      case GenMCP.Token.decrypt(channel, {:cursor, "resources/list"}, token) do
+        {:ok, cursor} -> # resume listing from this cursor
+        {:error, :invalid} -> # not a cursor we issued for this method
+        {:error, :expired} -> # cursor too old
+      end
+
+  A channel whose `endpoint` is `nil` raises `ArgumentError`: there is no key to
+  work with. In practice the transport always sets it.
+
+  Because the key is the application's own `secret_key_base`, a token minted on
+  one node verifies on any other node sharing that configuration. The key is
+  never embedded in the token: `Plug.Crypto` stretches it with PBKDF2.
+
+  ### Purposes
+
+  The second argument is a purpose of type `t:purpose/0`, a `{kind, qualifier}`
+  pair that frames what the token is for:
+
+    * `{:cursor, method}` - a pagination cursor, qualified by the MCP method it
+      paginates (for example `"resources/list"` or `"prompts/list"`).
+    * `{:reqstate, unicity}` - an MRTR `requestState` blob, qualified by a map
+      that binds it to the exact call that produced it (the tool name and its
+      arguments).
+
+  The purpose participates in key derivation, so a token only ever decrypts
+  under the exact purpose it was minted for. A `resources/list` cursor replayed
+  on `prompts/list` is rejected, and a cursor can never pass as a request state.
+  For a `{:reqstate, unicity}` purpose the map is hashed deterministically, so
+  the qualifier verifies regardless of key order, which is what lets a retry on
+  another node rebuild the same purpose without coordinating map construction.
+
+  All `gen_mcp` tokens carry a salt namespace that keeps them distinct from any
+  `Phoenix.Token` the host application mints from the same endpoint, even if the
+  application happens to use a bare method name as its own salt.
+
+  ### Expiry
+
+  Tokens carry a default `:max_age` of 20 minutes, set at encrypt time.
+  `Plug.Crypto` embeds the mint-time `:max_age` inside the encrypted payload, so
+  `decrypt/4` enforces it without the call site having to remember. Pass an
+  explicit `:max_age` (in seconds) to either function to override it.
   """
 
   alias GenMCP.Mux.Channel
 
-  @typedoc """
-  The domain a token is minted for.
-
-  - For `:cursor`, the qualifier is a string. `GenMCP.Suite` uses the MCP method
-  name that uses pagination in reponses (`"resources/list"`, `"prompts/list"`,
-  `"resources/templates/list"`)
-  - For `:reqstate`, the qualifier is a map that should uniquely identify a
-    request so the token is only valid if echoed by the client on the same
-    request. By unique we mean "same tool and same parameters", the request
-    remains repeatable during the token's time to live. `GenMCP.Suite` uses a
-    map with the tool name and the whole parameters of the tool call. MCP
-    clients MUST use request state tokens with the exact same request parameters
-    when providing additional inputs.
-  """
   @type purpose :: {:cursor, String.t()} | {:reqstate, map}
 
-  @typedoc "A `Phoenix.Token` context or a channel carrying the endpoint."
   @type key_source :: Channel.t() | module | binary | Plug.Conn.t()
 
   # Embedded in the encrypted payload at mint time and enforced by decrypt,
@@ -65,12 +88,31 @@ defmodule GenMCP.Token do
   @default_max_age_seconds 60 * 20
 
   @doc """
-  Encrypts `term` into an opaque, URL-safe token for the given purpose.
+  Seals `term` into an opaque token bound to `purpose`.
 
-  Accepts the `Phoenix.Token.encrypt/4` options (notably `:signed_at`, in
-  **seconds**). Unless overridden, tokens expire after
-  #{@default_max_age_seconds} seconds (20 minutes): the `:max_age` is stored
-  inside the encrypted payload and applied by `decrypt/4`.
+  Returns an encrypted, authenticated string. The token can be carried by an
+  untrusted client and read back later with `decrypt/4`, as long as the same key
+  source and purpose are used. The `term` can be any Erlang term.
+
+  ### Arguments
+
+    * `context` - the key source (`t:key_source/0`). A `GenMCP.Mux.Channel`
+      supplies the Phoenix endpoint it carries, whose `secret_key_base` becomes
+      the encryption key; you may also pass an endpoint module, a
+      `secret_key_base` string, or a `Plug.Conn`.
+    * `purpose` - the `t:purpose/0` the token is for. It is folded into key
+      derivation, so the token only decrypts under this same purpose.
+    * `term` - the value to seal.
+    * `opts` - forwarded to `Phoenix.Token.encrypt/4`. A `:max_age` of 20
+      minutes is added when you do not pass one, and is embedded in the payload
+      so `decrypt/4` enforces it.
+
+  ### Examples
+
+      iex> key = "Iy0gLZpcS5ENbZS0jJ0mIVOZD7aOu4Pn7D8BiNUyrJVzlAevQUCFGDQDmprQyevy"
+      iex> token = GenMCP.Token.encrypt(key, {:cursor, "resources/list"}, "page-2")
+      iex> is_binary(token)
+      true
   """
   @spec encrypt(key_source, purpose, term, keyword) :: binary
   def encrypt(context, purpose, term, opts \\ [])
@@ -85,12 +127,41 @@ defmodule GenMCP.Token do
   end
 
   @doc """
-  Decrypts a token minted by `encrypt/4` with the same purpose.
+  Reads a token minted by `encrypt/4` back to its original term.
 
-  Returns `{:error, :invalid}` on forgery, tampering, a wrong key or a wrong
-  purpose, `{:error, :expired}` past the max age (in **seconds**, the one
-  embedded at encryption unless `:max_age` is given here) and
-  `{:error, :missing}` when the token is `nil`.
+  Returns `{:ok, term}` when the token is genuine, unexpired, and was minted for
+  the same `context` and `purpose`. Otherwise it returns one of:
+
+    * `{:error, :invalid}` - the token is forged, tampered, minted under a
+      different key, or minted for a different purpose (a wrong method, a wrong
+      `{tool, args}` binding, or the other kind).
+    * `{:error, :expired}` - the token is past its `:max_age`.
+    * `{:error, :missing}` - the token is `nil`.
+
+  ### Arguments
+
+    * `context` - the key source (`t:key_source/0`), the same as the one passed
+      to `encrypt/4`. A `GenMCP.Mux.Channel` supplies the Phoenix endpoint and
+      thus the application's `secret_key_base`.
+    * `purpose` - the `t:purpose/0` the token must have been minted for.
+    * `token` - the token string, or `nil`.
+    * `opts` - forwarded to `Phoenix.Token.decrypt/4`. Without a `:max_age` the
+      mint-time value embedded in the token is enforced; pass `:max_age` (in
+      seconds) to override it.
+
+  ### Examples
+
+  A token decrypts only under the purpose it was minted for, and a `nil` token
+  reports `:missing`:
+
+      iex> key = "Iy0gLZpcS5ENbZS0jJ0mIVOZD7aOu4Pn7D8BiNUyrJVzlAevQUCFGDQDmprQyevy"
+      iex> token = GenMCP.Token.encrypt(key, {:cursor, "resources/list"}, "page-2")
+      iex> GenMCP.Token.decrypt(key, {:cursor, "resources/list"}, token)
+      {:ok, "page-2"}
+      iex> GenMCP.Token.decrypt(key, {:cursor, "prompts/list"}, token)
+      {:error, :invalid}
+      iex> GenMCP.Token.decrypt(key, {:cursor, "resources/list"}, nil)
+      {:error, :missing}
   """
   @spec decrypt(key_source, purpose, binary | nil, keyword) ::
           {:ok, term} | {:error, :invalid | :expired | :missing}

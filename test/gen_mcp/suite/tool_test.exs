@@ -25,6 +25,40 @@ defmodule GenMCP.Suite.ToolTest do
     |> Module.concat()
   end
 
+  # Defined at module scope (not inside a test) on purpose: a module defined
+  # inside a test body compiles at runtime, where the compiler does not surface
+  # a redundant-clause warning. At module scope it compiles with the file, so if
+  # `use GenMCP.Suite.Tool` ever generates a competing validate_request/2
+  # alongside this hand-written one, the warning shows up here.
+  defmodule ManualValidateRequestTool do
+    use GenMCP.Suite.Tool,
+      name: "some_name",
+      input_schema: %{
+        type: :object,
+        properties: %{
+          foo: %{type: :integer}
+        },
+        required: [:foo]
+      }
+
+    alias GenMCP.MCP.V2607, as: MCP
+
+    # Hand-written alongside :input_schema. This clause must be the one used,
+    # not the schema-based validator that `use` would otherwise generate. It
+    # accepts anything and signals that it ran, so the test can prove it was
+    # called rather than infer it from the result.
+    @impl true
+    def validate_request(req, _) do
+      send(self(), :validate_request_called)
+      {:ok, req}
+    end
+
+    @impl true
+    def call(req, _channel, _) do
+      {:result, MCP.call_tool_result(_data: req.params.arguments)}
+    end
+  end
+
   describe "with using macro" do
     test "defines nothing" do
       defmodule UseNothing do
@@ -313,6 +347,30 @@ defmodule GenMCP.Suite.ToolTest do
                Tool.call(tool, bad_req, build_channel())
     end
 
+    test "a manually defined validate_request is the one that is called" do
+      tool = Tool.expand(ManualValidateRequestTool)
+
+      # Arguments the schema would reject: foo must be an integer. The
+      # schema-based validator would turn this into {:error, {:invalid_params,
+      # _}} before call/3, so a successful result can only mean the manual
+      # validator (which accepts anything) ran instead.
+      bad_req = %MCP.CallToolRequest{
+        id: 1,
+        params: %MCP.CallToolRequestParams{
+          _meta: nil,
+          name: "some_name",
+          arguments: %{"foo" => "not_an_int"}
+        }
+      }
+
+      assert {:result, %MCP.CallToolResult{structuredContent: %{"foo" => "not_an_int"}}} =
+               Tool.call(tool, bad_req, build_channel())
+
+      # And it was actually invoked. validate_request runs synchronously in this
+      # process, so the message it sends to self/0 reaches the test process.
+      assert_receive :validate_request_called
+    end
+
     test "format validation is enabled by default" do
       defmodule UseDefaultFormats do
         use GenMCP.Suite.Tool,
@@ -487,6 +545,51 @@ defmodule GenMCP.Suite.ToolTest do
                },
                title: nil
              } == Tool.describe(UseOutputSchema)
+    end
+
+    test "cache_control option generates the callback" do
+      defmodule UseCacheControl do
+        use GenMCP.Suite.Tool,
+          behaviour: false,
+          name: "some_name",
+          input_schema: %{},
+          cache_control: {:public, 60_000}
+      end
+
+      # The callback is generated from the option.
+      assert {:public, 60_000} == UseCacheControl.cache_control(nil)
+
+      # And the dispatcher returns it.
+      tool = Tool.expand(UseCacheControl)
+      assert {:public, 60_000} == Tool.cache_control(tool)
+    end
+
+    test "no cache_control option leaves the callback undefined" do
+      defmodule UseNoCacheControl do
+        use GenMCP.Suite.Tool,
+          behaviour: false,
+          name: "some_name",
+          input_schema: %{}
+      end
+
+      # Nothing is generated when the option is absent: the optional callback is
+      # left unimplemented rather than returning a default.
+      tool = Tool.expand(UseNoCacheControl)
+      refute function_exported?(UseNoCacheControl, :cache_control, 1)
+
+      # The dispatcher falls back to the no-cache default.
+      assert MCP.default_cache_control() == Tool.cache_control(tool)
+    end
+
+    test "raise on invalid cache_control" do
+      assert_raise ArgumentError, ~r{cache_control .* must be a \{:public \| :private}, fn ->
+        defmodule InvalidCacheControl do
+          use GenMCP.Suite.Tool,
+            behaviour: false,
+            name: "foo",
+            cache_control: {:public, -1}
+        end
+      end
     end
   end
 

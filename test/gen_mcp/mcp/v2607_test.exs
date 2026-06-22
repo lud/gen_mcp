@@ -10,6 +10,8 @@ defmodule GenMCP.MCP.V2607Test do
 
   ModMap.require_all()
 
+  doctest GenMCP.MCP.V2607
+
   describe "Info.subscription_notification_methods/0" do
     test "returns the listen-stream notification methods that require subscriptionId" do
       assert [

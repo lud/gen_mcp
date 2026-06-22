@@ -1,23 +1,121 @@
 defmodule GenMCP.Suite do
-  @moduledoc """
-  A `GenMCP` implementation providing tools, resources, and prompts through a
-  composable extension system.
+  @moduledoc ~S"""
+  Ready-made `GenMCP` server that serves tools, resources, and prompts from a set
+  of configured providers.
 
-  This module does not directly export functions or callbacks. Please refer to
-  the [GenMCP Suite guide](guides/002.using-mcp-suite.md) to use the suite.
+  `GenMCP.Suite` is the default `:server` for `GenMCP.Transport.StreamableHTTP`.
+  Instead of implementing the `GenMCP` behaviour yourself, you configure a Suite
+  with lists of provider modules and it answers every Model Context Protocol
+  request by dispatching to them: `server/discover`, `tools/list`, `tools/call`,
+  the `resources/*` and `prompts/*` requests, and subscription requests. The
+  `server/discover` capability snapshot is self-describing, computed from the
+  providers you configured, so you never hand-declare capabilities. A request for
+  a method the Suite does not implement is answered with a JSON-RPC "method not
+  found" error.
+
+  Like any `GenMCP` implementation, a Suite runs **per request** on the stateless
+  `2026-07-28` transport: `init/1` builds the state from your configuration on
+  every request, and per-request client context arrives through the
+  `t:GenMCP.Mux.Channel.t/0`, not through long-lived session state. Pagination
+  cursors and the multi round-trip `requestState` are encrypted and carried by the
+  client between requests, so the Suite holds no state of its own between them.
+
+  ## Minimal usage
+
+  Configure a Suite with a single `add` tool. The tool implements
+  `GenMCP.Suite.Tool` and delegates the arithmetic to a plain `Calculator` module,
+  so the tool stays a thin adapter with no logic of its own:
+
+      defmodule MyApp.Calculator do
+        def add(a, b) do
+          a + b
+        end
+      end
+
+      defmodule MyApp.AddTool do
+        use GenMCP.Suite.Tool,
+          name: "add",
+          description: "Adds two numbers and returns the sum.",
+          input_schema: %{
+            "type" => "object",
+            "properties" => %{
+              "a" => %{"type" => "number"},
+              "b" => %{"type" => "number"}
+            },
+            "required" => ["a", "b"]
+          }
+
+        alias GenMCP.MCP.V2607, as: MCP
+
+        @impl true
+        def call(request, _channel, _arg) do
+          %{"a" => a, "b" => b} = request.params.arguments
+          {:result, MCP.call_tool_result(text: "#{MyApp.Calculator.add(a, b)}")}
+        end
+      end
+
+  Because the Suite is the default server, its options are passed straight to the
+  transport plug in your router. The tool list, server name, and server version
+  are all the Suite needs:
+
+      # In your router
+      forward "/mcp", GenMCP.Transport.StreamableHTTP,
+        server_name: "My App",
+        server_version: "1.0.0",
+        tools: [MyApp.AddTool]
+
+  ## Configuration
+
+  The Suite accepts these options:
+
+  * `:server_name` - required string, the server's name reported in
+    `server/discover`.
+  * `:server_version` - required string, the server's version.
+  * `:server_title` - optional human-readable title, defaults to `nil`.
+  * `:tools` - the list of `GenMCP.Suite.Tool` implementations exposed by the
+    server. Defaults to `[]`.
+  * `:resources` - the list of `GenMCP.Suite.ResourceRepo` implementations to
+    serve resources from. Defaults to `[]`.
+  * `:prompts` - the list of `GenMCP.Suite.PromptRepo` implementations to generate
+    prompts with. Defaults to `[]`.
+  * `:extensions` - the list of `GenMCP.Suite.Extension` implementations that
+    contribute further tools, resource repositories, and prompt repositories,
+    typically computed from the request's `t:GenMCP.Mux.Channel.t/0`. Defaults to
+    `[]`.
+  * `:subscription_handler` - a single `GenMCP.Suite.SubscriptionHandler`
+    implementation that answers subscription requests. Defaults to `nil` (no
+    subscriptions).
+
+  ## Providers and their arguments
+
+  Every provider entry (in `:tools`, `:resources`, `:prompts`, `:extensions`, and
+  `:subscription_handler`) is given in one of three forms: a bare `module`, a
+  `{module, arg}` tuple, or a ready-built descriptor map. The provider behaviours
+  (`GenMCP.Suite.Tool`, `GenMCP.Suite.ResourceRepo`, `GenMCP.Suite.PromptRepo`,
+  `GenMCP.Suite.SubscriptionHandler`, and `GenMCP.Suite.Extension`) share two
+  arguments that recur across their callbacks:
+
+  * `arg` is the trailing argument of every provider callback. It is the value you
+    attach next to the module as `{module, arg}` (a bare `module` is treated as
+    `{module, []}`). It lets one generic, config-driven provider module be
+    configured differently in different Suites, for example
+    `{MyApp.FileResource, root: "/srv/docs"}`.
+  * `channel` is the request-scoped `t:GenMCP.Mux.Channel.t/0`, threaded as the
+    second-to-last argument of the callbacks that need request context. It carries
+    read-only client `meta` and authorization assigns, so a provider can vary what
+    it exposes per request (for instance hiding a tool from an unauthorized
+    caller). It is passed only to the callbacks that act on a request, not to
+    every callback.
+
+  See each provider behaviour's own documentation for the callbacks it defines and
+  how it carries state across a streaming request.
+
+  ## Custom server
+
+  A Suite covers the common case. When you need full control over request
+  handling, implement the `GenMCP` behaviour directly and hand your module to the
+  transport as the `:server` option instead. See `GenMCP` for that contract.
   """
-
-  # TODO(spec 004): re-implement the stateless `GenMCP` behaviour. The module
-  # still has the pre-fork callback shape, so the `@behaviour` declaration and
-  # `@impl` annotations are dropped until the rewrite (they only produced
-  # stale-callback warnings).
-
-  # TODO(doc): in the doc rewrite, explain the two arguments that recur across
-  # every provider/handler behaviour (Tool, ResourceRepo, PromptRepo,
-  # SubscriptionHandler, …): the ubiquitous trailing `arg` (the options
-  # configured alongside the module as `{module, arg}`, enabling generic
-  # config-driven handlers) and the `channel` (request-scoped, read-only `meta` /
-  # auth context, threaded second-to-last where present — not on every function).
 
   @behaviour GenMCP
 
@@ -502,7 +600,7 @@ defmodule GenMCP.Suite do
   # -- Resources --------------------------------------------------------------
 
   defp handle_list_resources(state, req, channel) do
-    method = "list/resources"
+    method = "resources/list"
 
     cursor =
       case req do
@@ -589,7 +687,7 @@ defmodule GenMCP.Suite do
   # -- Prompts ----------------------------------------------------------------
 
   defp handle_list_prompts(state, req, channel) do
-    method = "list/prompts"
+    method = "prompts/list"
 
     cursor =
       case req do

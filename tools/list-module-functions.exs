@@ -17,6 +17,7 @@ defmodule GenMCP.Tools.ListModuleFunctions do
     |> app_modules()
     |> Enum.filter(&source_in_lib?/1)
     |> Enum.reject(&protocol_impl?/1)
+    |> Enum.reject(&v2607_submodule?/1)
     |> Enum.sort_by(&Atom.to_string/1)
     |> Enum.each(&print_module/1)
   end
@@ -135,6 +136,12 @@ defmodule GenMCP.Tools.ListModuleFunctions do
     name
     |> Atom.to_string()
     |> String.starts_with?("__")
+  end
+
+  # Reject the V2607 protocol vocabulary sub-modules (request/notification
+  # structs, etc.) while keeping the public `GenMCP.MCP.V2607` module itself.
+  defp v2607_submodule?(module) do
+    String.starts_with?(inspect(module), "GenMCP.MCP.V2607.")
   end
 
   defp protocol_impl?(mod) do

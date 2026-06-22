@@ -155,16 +155,14 @@ defmodule GenMCP.MixProject do
         ],
         Suite: [
           GenMCP.Suite,
-          GenMCP.Suite.Tool,
-          GenMCP.Suite.PromptRepo,
-          GenMCP.Suite.ResourceRepo,
-          GenMCP.Suite.Extension
+          ~r/GenMCP\.Suite\..*/
         ],
         Sessions: [
           ~r/GenMCP\.Mux\..*/
         ],
         Utilities: [
           GenMCP.Token,
+          GenMCP.Validator,
           GenMCP.Validator.Formats,
           GenMCP.Error,
           GenMCP.TelemetryLogger
