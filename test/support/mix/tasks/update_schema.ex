@@ -5,6 +5,7 @@ defmodule Mix.Tasks.Mcp.UpdateSchema do
 
   @dep_dir "deps/modelcontextprotocol"
 
+  @impl true
   def run(_argv) do
     IO.puts("pulling main on #{@dep_dir}")
 
