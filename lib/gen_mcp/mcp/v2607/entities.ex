@@ -147,6 +147,8 @@ defmodule GenMCP.MCP.V2607.ModMap do
           GenMCP.MCP.V2607.SubscriptionsAcknowledgedNotificationParams,
         "SubscriptionsListenRequest" => GenMCP.MCP.V2607.SubscriptionsListenRequest,
         "SubscriptionsListenRequestParams" => GenMCP.MCP.V2607.SubscriptionsListenRequestParams,
+        "SubscriptionsListenResult" => GenMCP.MCP.V2607.SubscriptionsListenResult,
+        "SubscriptionsListenResultMeta" => GenMCP.MCP.V2607.SubscriptionsListenResultMeta,
         "TextContent" => GenMCP.MCP.V2607.TextContent,
         "TextResourceContents" => GenMCP.MCP.V2607.TextResourceContents,
         "Tool" => GenMCP.MCP.V2607.Tool,
@@ -3394,6 +3396,67 @@ defmodule GenMCP.MCP.V2607.SubscriptionsListenRequestParams do
     },
     required: [:_meta, :notifications],
     title: "MCP:SubscriptionsListenRequestParams",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.V2607.SubscriptionsListenResult do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:_meta, :resultType])
+
+  defschema %{
+    description: ~SD"""
+    The response to a {@link
+    SubscriptionsListenRequestsubscriptions/listen} request, signalling
+    that the subscription has ended gracefully (for example, during server
+    shutdown). Because the listen stream is long-lived, this result is
+    sent only when the server tears the subscription down; an abrupt
+    transport close carries no response. The result body is otherwise
+    empty.
+    """,
+    properties: %{
+      _meta: GenMCP.MCP.V2607.SubscriptionsListenResultMeta,
+      resultType:
+        string(
+          description: ~SD"""
+          Indicates the type of the result, which allows the client to determine
+          how to parse the result object.
+
+          Servers implementing this protocol version MUST include this field.
+          For backward compatibility, when a client receives a result from a
+          server implementing an earlier protocol version (which does not
+          include `resultType`), the client MUST treat the absent field as
+          `"complete"`.
+          """
+        )
+    },
+    required: [:_meta, :resultType],
+    title: "MCP:SubscriptionsListenResult",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.V2607.SubscriptionsListenResultMeta do
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:"io.modelcontextprotocol/subscriptionId"])
+
+  defschema %{
+    description: ~SD"""
+    Extends {@link MetaObject} with the subscription-stream identifier
+    carried by a {@link SubscriptionsListenResult}. All key naming rules
+    from `MetaObject` apply.
+    """,
+    properties: %{
+      "io.modelcontextprotocol/subscriptionId": GenMCP.MCP.V2607.RequestId
+    },
+    required: [:"io.modelcontextprotocol/subscriptionId"],
+    title: "MCP:SubscriptionsListenResultMeta",
     type: "object"
   }
 

@@ -182,6 +182,12 @@ defmodule GenMCP do
           # tool's `{:input_required, …}` return (encrypting the continuation
           # into `requestState`); a custom server may build it directly.
           | MCP.InputRequiredResult.t()
+          # Graceful teardown of a `subscriptions/listen` stream: `GenMCP.Suite`
+          # returns this when the subscription handler stops an established
+          # stream, carried back to the client over the normal `{:result, _}`
+          # path (`resultType: "complete"`). See
+          # `c:GenMCP.Suite.SubscriptionHandler.handle_message/4`.
+          | MCP.SubscriptionsListenResult.t()
 
   @type notification ::
           MCP.CancelledNotification.t()
@@ -217,6 +223,11 @@ defmodule GenMCP do
   - `{:result, result}` answers the request and ends it. Build `result` with the
     helpers in `GenMCP.MCP.V2607`, for example `GenMCP.MCP.V2607.list_tools_result/2`
     or `GenMCP.MCP.V2607.call_tool_result/1`.
+  - `{:result, result, stop_reason}` answers the request with `result`, then stops
+    the worker process with `stop_reason` instead of the default `{:shutdown,
+    :reply}`. The client sees the same response; `stop_reason` only sets the
+    worker's exit reason, observable to whatever monitors or supervises it (and in
+    telemetry). Use `:normal`, `:shutdown`, or `{:shutdown, term}` for a clean exit.
   - `{:error, reason}` ends the request with a JSON-RPC error.
   - `{:stream, state}` holds the response open as an SSE stream and routes every
     later message to `c:handle_message/3` with the returned `state`.
@@ -236,6 +247,7 @@ defmodule GenMCP do
   """
   @callback handle_request(request, Channel.t(), state) ::
               {:result, result}
+              | {:result, result, stop_reason :: term}
               | {:error, reason :: term}
               | {:stream, state}
 
@@ -280,6 +292,10 @@ defmodule GenMCP do
   - `{:stream, state}` keeps the stream open and waits for the next message,
     carrying the updated `state`.
   - `{:result, result}` ends the stream with the request's final result.
+  - `{:result, result, stop_reason}` ends the stream with `result`, then stops the
+    worker process with `stop_reason` instead of the default `{:shutdown, :reply}`.
+    The client sees the same final result; `stop_reason` only sets the worker's
+    exit reason. Use `:normal`, `:shutdown`, or `{:shutdown, term}` for a clean exit.
   - `{:error, reason}` ends the stream with a JSON-RPC error.
   - `{:stop, reason}` ends the stream with no further result, for example when a
     process the handler was listening to exits normally. Use `:normal`,
@@ -308,18 +324,27 @@ defmodule GenMCP do
   @callback handle_message(message :: term, Channel.t(), state) ::
               {:stream, state}
               | {:result, result}
+              | {:result, result, stop_reason :: term}
               | {:stop, reason :: term}
               | {:error, reason :: term}
 
   @doc """
-  Cleans up when a streaming request ends. Optional.
+  Cleans up when a streaming request is closed from the connection side. Optional.
 
-  This callback is invoked when the worker for a streaming request shuts down,
-  most notably when the client disconnects (the transport-level cancellation
-  signal on this binding). It receives the request's `t:GenMCP.Mux.Channel.t/0`,
-  now marked closed, and the last `state`. It is the place to release resources
-  the handler acquired while streaming, such as unsubscribing from a
-  `Phoenix.PubSub` topic. The return value is ignored.
+  This callback fires only when a streaming request is torn down by something
+  other than the handler's own return value — practically, when the client
+  disconnects or the network fails (the transport-level cancellation signal on
+  this binding). It is **not** called when the handler ends the request itself by
+  returning `{:result, …}`, `{:stop, …}`, or `{:error, …}` from
+  `c:handle_request/3` or `c:handle_message/3`; those finish the request directly,
+  with no cleanup hook. (A handler that closes its own stream with
+  `GenMCP.Mux.Channel.close/1` is the one server-side exception that still runs
+  this callback.)
+
+  It receives the request's `t:GenMCP.Mux.Channel.t/0`, now marked closed, and the
+  last `state`. It is the place to release resources the handler acquired while
+  streaming, such as unsubscribing from a `Phoenix.PubSub` topic. The return value
+  is ignored.
 
   The callback is optional. Define it only when a streaming handler holds
   resources that must be released on disconnect:

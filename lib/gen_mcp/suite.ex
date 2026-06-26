@@ -593,7 +593,15 @@ defmodule GenMCP.Suite do
         {:stream, %{state | on_message: {:sub, req, handler, handler_state}}}
 
       {:stop, reason} ->
-        {:stop, reason}
+        result =
+          %MCP.SubscriptionsListenResult{
+            resultType: "complete",
+            _meta: %MCP.SubscriptionsListenResultMeta{
+              "io.modelcontextprotocol/subscriptionId": req.id
+            }
+          }
+
+        {:result, result, reason}
     end
   end
 

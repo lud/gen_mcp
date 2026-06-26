@@ -118,4 +118,54 @@ defmodule GenMCP.ServerTest do
     assert_receive {:handle_close, :closed}, 1000
     assert_receive {:DOWN, ^wref, :process, ^worker, {:shutdown, :closed}}, 1000
   end
+
+  test "handle_request {:result, result, stop_reason} replies, then stops the worker with the custom reason" do
+    # The three-tuple result lets a handler answer the request normally AND
+    # choose the worker's exit reason instead of the default `{:shutdown,
+    # :reply}`. The client sees the same result; the custom reason is only
+    # observable to whatever monitors/supervises the worker (and in telemetry).
+    ServerMockNoClose
+    |> expect(:init, fn _opts -> {:ok, :server_state} end)
+    |> expect(:handle_request, fn :fake_request, _channel, _state ->
+      {:result, :the_result, {:shutdown, :custom_reason}}
+    end)
+
+    # The owner (result recipient) is the channel's client — make it the test pid.
+    channel = Channel.for_pid(self())
+
+    assert {:ok, worker} =
+             Server.start_request([server: ServerMockNoClose], :fake_request, channel)
+
+    wref = Process.monitor(worker)
+
+    # The result still reaches the owner...
+    assert_receive {:"$gen_mcp", :result, :the_result}, 1000
+    # ...and the worker stops with the handler's reason, not {:shutdown, :reply}.
+    assert_receive {:DOWN, ^wref, :process, ^worker, {:shutdown, :custom_reason}}, 1000
+  end
+
+  test "handle_message {:result, result, stop_reason} ends the stream, then stops the worker with the custom reason" do
+    # Same three-tuple on the streaming path: the final result ends the stream
+    # and the custom reason becomes the worker's exit reason.
+    ServerMockNoClose
+    |> expect(:init, fn _opts -> {:ok, :server_state} end)
+    |> expect(:handle_request, fn :fake_request, _channel, state -> {:stream, state} end)
+    |> expect(:handle_message, fn :finish, _channel, _state ->
+      {:result, :final, {:shutdown, :stream_done}}
+    end)
+
+    channel = Channel.for_pid(self())
+
+    assert {:ok, worker} =
+             Server.start_request([server: ServerMockNoClose], :fake_request, channel)
+
+    wref = Process.monitor(worker)
+
+    # The stream opens, then a process message drives the final result.
+    assert_receive {:"$gen_mcp", :stream}, 1000
+    send(worker, :finish)
+
+    assert_receive {:"$gen_mcp", :result, :final}, 1000
+    assert_receive {:DOWN, ^wref, :process, ^worker, {:shutdown, :stream_done}}, 1000
+  end
 end

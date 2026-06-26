@@ -21,6 +21,15 @@ One or two lines: what was decided and why.
 
 -->
 
+## 2026-06-26 — generate SubscriptionsListenResult (schemas_ref: ead35b5)
+
+Draft added a Result type to the `subscriptions/listen` channel: `SubscriptionsListenResult`
+(carries `resultType`, default `"complete"`, sent on graceful stream teardown) plus its
+`_meta` shape `SubscriptionsListenResultMeta` (holds `io.modelcontextprotocol/subscriptionId`).
+Both configured `[]` in `mod_config`, matching the other `ServerResult` union members and the
+`*MetaObject` types. Codegen only — the `subscriptions/listen` request is still not in
+`validator.ex`, so the channel remains unsupported surface. Tests green.
+
 ## 2026-06-26 — log started (schemas_ref: 15b1974)
 
 Baseline. Supported request surface as wired in `lib/gen_mcp/validator.ex`:

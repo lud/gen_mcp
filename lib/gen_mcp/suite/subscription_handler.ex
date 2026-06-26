@@ -187,8 +187,14 @@ defmodule GenMCP.Suite.SubscriptionHandler do
   ties it to this stream), then return to continue or stop.
 
   * `{:stream, state}` - keep the stream open with updated `state`.
-  * `{:stop, reason}` - tear the subscription down; the stream ends with no
-    further result.
+  * `{:stop, reason}` - tear the subscription down gracefully. The Suite ends
+    the stream by sending a `t:GenMCP.MCP.V2607.SubscriptionsListenResult.t/0`
+    (`resultType: "complete"`, stamped with this stream's
+    `io.modelcontextprotocol/subscriptionId`). The `reason` is split two ways:
+    it is **not** surfaced to the client — the spec has no way to signal a failed
+    teardown, so every stop yields the same graceful `complete` result — but it
+    **is** forwarded to the OTP layer as the worker's exit reason. Use `:normal`,
+    `:shutdown`, or `{:shutdown, term}` to keep that a clean exit.
 
   ### Examples
 
@@ -205,13 +211,16 @@ defmodule GenMCP.Suite.SubscriptionHandler do
               {:stream, state} | {:stop, reason :: term}
 
   @doc """
-  Cleans up when the client closes (cancels) the stream. Optional.
+  Cleans up when the stream is closed from the connection side. Optional.
 
-  The Suite-level mirror of `c:GenMCP.handle_close/2`, invoked when the client
-  disconnects while this handler owns the stream. The `channel` is already
-  `:closed`, so nothing more can be sent and the return value is ignored. Use it
-  only for side effects: unsubscribing the event source joined in `c:subscribe/3`,
-  stopping helper processes, and so on.
+  The Suite-level mirror of `c:GenMCP.handle_close/2`, invoked when the
+  subscription stream is torn down from the outside while this handler owns it —
+  the client disconnecting or the network failing — rather than by the handler's
+  own `{:stop, reason}` (which ends the stream with a `SubscriptionsListenResult`
+  and does not run this callback). The `channel` is already `:closed`, so nothing
+  more can be sent and the return value is ignored. Use it only for side effects:
+  unsubscribing the event source joined in `c:subscribe/3`, stopping helper
+  processes, and so on.
 
   If the handler does not implement it, the worker stops immediately with no
   cleanup.

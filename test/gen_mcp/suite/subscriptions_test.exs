@@ -153,8 +153,36 @@ defmodule GenMCP.Suite.SubscriptionsTest do
       assert %MCP.ToolListChangedNotification{} = notif
       assert Map.get(notif.params._meta, @sub_id_key) == 9
 
-      # {:stop, reason} ends the stream with no final result
-      assert {:stop, :done} = Suite.handle_message(:bye, channel, state)
+      # {:stop, reason} on an established stream tears it down gracefully: the
+      # Suite ends the stream with a SubscriptionsListenResult AND forwards the
+      # handler's reason to the OTP layer as the worker stop reason (3-tuple).
+      assert {:result, result, :done} = Suite.handle_message(:bye, channel, state)
+      assert %MCP.SubscriptionsListenResult{resultType: "complete"} = result
+      assert Map.get(result._meta, @sub_id_key) == 9
+    end
+
+    test "{:stop, reason} on an established stream forwards the reason to OTP, client sees a graceful complete" do
+      requested = subscription_filter(toolsListChanged: true)
+
+      SubscriptionHandlerMock
+      |> expect(:subscribe, fn _filter, _channel, :arg -> {:stream, :s0} end)
+      # The reason is split two ways: the client always sees the same graceful
+      # "complete" result (the spec has no way to signal a failed teardown), while
+      # the raw reason is forwarded to the OTP layer as the worker's stop reason.
+      |> expect(:handle_message, fn :shutdown, _channel, :s0, :arg -> {:stop, :whatever} end)
+
+      state = init_suite(subscription_handler: {SubscriptionHandlerMock, :arg})
+      req = listen_req(requested, 42)
+      channel = listen_channel(req)
+
+      assert {:stream, state} = Suite.handle_request(req, channel, state)
+      assert_receive {:"$gen_mcp", :notification, %MCP.SubscriptionsAcknowledgedNotification{}}
+
+      # 3-tuple: the SubscriptionsListenResult for the client, :whatever for OTP.
+      assert {:result, result, :whatever} = Suite.handle_message(:shutdown, channel, state)
+      assert %MCP.SubscriptionsListenResult{resultType: "complete"} = result
+      # stamped with the listen request id, mirroring the ack and stream notifs
+      assert Map.get(result._meta, @sub_id_key) == 42
     end
 
     test "forwards client disconnect to the handler's handle_close/3" do

@@ -131,6 +131,10 @@ defmodule GenMCP.Server do
         send(owner, {:"$gen_mcp", :result, result})
         {:stop, {:shutdown, :reply}, state}
 
+      {:result, result, stop_reason} ->
+        send(owner, {:"$gen_mcp", :result, result})
+        {:stop, stop_reason, state}
+
       {:error, reason} ->
         send(owner, {:"$gen_mcp", :error, reason})
         {:stop, {:shutdown, :reply}, state}
@@ -171,6 +175,10 @@ defmodule GenMCP.Server do
       {:result, result} ->
         send(owner, {:"$gen_mcp", :result, result})
         {:stop, {:shutdown, :reply}, state}
+
+      {:result, result, stop_reason} ->
+        send(owner, {:"$gen_mcp", :result, result})
+        {:stop, stop_reason, state}
 
       {:error, reason} ->
         send(owner, {:"$gen_mcp", :error, reason})
