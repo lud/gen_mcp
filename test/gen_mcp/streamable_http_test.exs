@@ -1365,6 +1365,41 @@ defmodule GenMCP.StreamableHTTPTest do
     end
   end
 
+  describe "subscriptions/listen (spec 016 — transport reachability)" do
+    # `subscriptions/listen` was the canary for spec 016. It is wired in
+    # `GenMCP.Suite.handle_request/3` and unit-tested at the Suite layer
+    # (test/gen_mcp/suite/subscriptions_test.exs), but for a while it was missing
+    # from the `validable` list in lib/gen_mcp/validator.ex, so a real client
+    # POST was rejected with `{:unknown_method}` before it reached the Suite.
+    # The fix was a single validator entry: the transport already drives the
+    # `{:stream, state}` a subscription handler returns through the same path
+    # async tools use, so no bespoke streaming dispatch was needed. This guards
+    # that the method stays reachable over the wire — depth lives in the
+    # Suite-layer unit tests.
+    test "subscriptions/listen round-trips through the transport" do
+      expect_request(fn %MCP.SubscriptionsListenRequest{id: 1} = req, _channel, _state ->
+        # The transport casts the body to the request struct, including the
+        # nested SubscriptionFilter — proof the validator accepted and dispatched
+        # it rather than rejecting it as an unknown method.
+        assert %MCP.SubscriptionsListenRequestParams{notifications: %MCP.SubscriptionFilter{}} =
+                 req.params
+
+        {:result, %MCP.SubscriptionsListenResult{resultType: "complete", _meta: nil}}
+      end)
+
+      assert %{"id" => 1, "jsonrpc" => "2.0", "result" => %{"resultType" => "complete"}} =
+               client(url: @mcp_url)
+               |> post_message(%{
+                 jsonrpc: "2.0",
+                 id: 1,
+                 method: "subscriptions/listen",
+                 params: %{_meta: request_meta(%{}), notifications: %{}}
+               })
+               |> expect_status(200)
+               |> body()
+    end
+  end
+
   describe "logging (deprecated, per-request level)" do
     # Logging is deprecated in 2026-07-28 (SEP-2577) and there is no
     # `logging/setLevel` request. The verbosity is declared per-request in `_meta`

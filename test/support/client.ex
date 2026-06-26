@@ -17,18 +17,15 @@ defmodule GenMCP.Test.Client do
   [
     # Requests
 
-    GenMCP.MCP.V2607.DiscoverRequest,
-    # GenMCP.MCP.V2607.PingRequest,
     GenMCP.MCP.V2607.ListResourcesRequest,
     GenMCP.MCP.V2607.ListResourceTemplatesRequest,
     GenMCP.MCP.V2607.ReadResourceRequest,
-    # GenMCP.MCP.V2607.SubscribeRequest,
-    # GenMCP.MCP.V2607.UnsubscribeRequest,
+    GenMCP.MCP.V2607.SubscriptionsListenRequest,
     GenMCP.MCP.V2607.ListPromptsRequest,
     GenMCP.MCP.V2607.GetPromptRequest,
     GenMCP.MCP.V2607.ListToolsRequest,
+    GenMCP.MCP.V2607.DiscoverRequest,
     GenMCP.MCP.V2607.CallToolRequest,
-    # GenMCP.MCP.V2607.CompleteRequest,
 
     # Notifications
 
