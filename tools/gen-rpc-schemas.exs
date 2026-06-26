@@ -319,12 +319,14 @@ defmodule Generator do
       |> File.read!()
       |> Jason.decode!(keys: :atoms)
 
+    defs = Map.fetch!(schema, :"$defs")
+    validate_mod_config!(defs, ctx)
+
     metaschema = schema."$schema"
     info = build_info(schema)
 
     entitys =
-      schema
-      |> Map.fetch!(:"$defs")
+      defs
       |> Enum.map(fn {name, schema} -> entity(name: name, schema: schema, render_opts: []) end)
       |> filter_schemas(ctx)
       |> Stream.map(&process_schema(&1, ctx))
@@ -358,6 +360,31 @@ defmodule Generator do
 
   defp skip_definition?(name, ctx) do
     Context.mod_config(ctx, name) in [:nogen, :lax]
+  end
+
+  defp validate_mod_config!(defs, ctx) do
+    existing_names = defs |> Map.keys() |> MapSet.new()
+
+    stale_names =
+      ctx.mod_config
+      |> Keyword.keys()
+      |> Enum.uniq()
+      |> Enum.reject(&MapSet.member?(existing_names, &1))
+      |> Enum.sort()
+
+    case stale_names do
+      [] ->
+        :ok
+
+      _ ->
+        names = Enum.map_join(stale_names, "\n", &"  * #{inspect(&1)}")
+
+        raise """
+        Found stale schema entries in :mod_config. Remove or rename them to match the current source schema:
+
+        #{names}
+        """
+    end
   end
 
   defp filter_schemas(defs, ctx) do
