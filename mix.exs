@@ -72,7 +72,7 @@ defmodule GenMCP.MixProject do
     ]
   end
 
-  @schemas_ref "93671a3f2bac3bc11b0eb6327c2d029e272b2871"
+  @schemas_ref "c87328cceac49aa2c95b5b948891cedebb74f96f"
 
   defp mcp_schemas do
     {
