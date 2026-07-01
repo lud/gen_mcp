@@ -12,6 +12,19 @@ defmodule GenMCP do
   negotiated protocol version, authorization assigns) is read from the
   `t:GenMCP.Mux.Channel.t/0` passed to every callback, not from `c:init/1`.
 
+  ## Choosing between `GenMCP.Suite` and a custom implementation
+
+  For most servers, reach for `GenMCP.Suite` instead of implementing this
+  behaviour yourself. `GenMCP.Suite` is a ready-made `GenMCP` implementation, and
+  the default server, that serves tools, resources, and prompts from a composable
+  set of providers: you describe *what* to expose and it handles the protocol
+  wiring. It fits the general, high-level case, and it is where to start.
+
+  Implement `GenMCP` directly when you need tight control over request handling,
+  for a specific need the provider model does not cover: routing raw requests
+  yourself, driving the SSE stream by hand, or shaping responses that the
+  providers do not express. The rest of this document is for that case.
+
   ## One process per request
 
   Each request gets its **own dedicated process**, and every callback for that
@@ -20,11 +33,6 @@ defmodule GenMCP do
   handler can keep transient data in `state`, read its process mailbox, and block
   safely without affecting anyone else. Separate requests run in **separate
   processes** and share none of that state.
-
-  Most applications never implement this behaviour directly. `GenMCP.Suite` is a
-  ready-made implementation that serves tools, resources, and prompts from a
-  composable set of providers, and it is the default server. Reach for a custom
-  `GenMCP` implementation only when you need full control over request handling.
 
   ## Minimal implementation
 
