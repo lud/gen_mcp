@@ -26,7 +26,7 @@ The usual tuple for mix.exs!
 
 <!-- rdmx :app_dep vsn:$app_vsn -->
 ```elixir
-def deps do
+defp deps do
   [
     {:gen_mcp, "~> 0.10"},
   ]
