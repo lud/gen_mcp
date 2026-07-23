@@ -9,11 +9,17 @@ defmodule GenMCP.Test.Helpers do
     GenMCP.Error.cast_error(reason)
   end
 
-  def build_channel(assigns \\ %{}) do
-    GenMCP.Mux.Channel.for_pid(self(), assigns)
-  end
+  # Returns a channel owned by the calling process (the test process plays the
+  # transport relay role). `meta_extras` are merged into the channel's
+  # read-only `meta`, which is where per-request context (including the
+  # transport `assigns`/`copy_assigns`) lives under the stateless contract.
+  def build_channel(meta_extras \\ %{}) do
+    channel = GenMCP.Mux.Channel.for_pid(self())
 
-  def random_session_id do
-    Base.url_encode64(:crypto.strong_rand_bytes(36))
+    %{
+      channel
+      | meta: Map.merge(channel.meta, Map.new(meta_extras)),
+        endpoint: GenMCP.TestWeb.Endpoint
+    }
   end
 end

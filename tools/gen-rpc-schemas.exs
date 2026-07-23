@@ -1,7 +1,6 @@
 alias JSV.Helpers.Traverse
 
 Mix.install([:jason, :jsv, :nimble_options], consolidate_protocols: false)
-
 # This module receives a fun and args, and implements inspect so we can render a
 # call
 #
@@ -34,52 +33,68 @@ defmodule DescriptionWrapper do
     %__MODULE__{description: description}
   end
 
+  def hardwrap(text) do
+    text
+    |> String.replace("\n\n", "--double-line-break--")
+    |> String.replace("\n", " ")
+    |> String.split("--double-line-break--")
+    |> Enum.map_join("\n\n", fn line -> hardwrap_line(line, 70) end)
+  end
+
+  defp hardwrap_line(line, width) do
+    words =
+      line
+      |> String.split(" ", trim: true)
+      |> Enum.map(&{&1, String.length(&1)})
+
+    words
+    |> Enum.reduce({0, [], []}, fn {word, len}, {line_len, this_line, lines} ->
+      cond do
+        line_len == 0 -> {len, [word | this_line], lines}
+        line_len + 1 + len > width -> {len, [word], [:lists.reverse(this_line) | lines]}
+        :_ -> {line_len + 1 + len, [word, " " | this_line], lines}
+      end
+    end)
+    |> case do
+      {_, [], lines} -> lines
+      {_, current, lines} -> [:lists.reverse(current) | lines]
+    end
+    |> :lists.reverse()
+    |> Enum.join("\n")
+  end
+
   defimpl Inspect do
     def inspect(%{description: description}, _) do
       to_string(~s'''
       ~SD"""
-      #{hardwrap(description)}
+      #{DescriptionWrapper.hardwrap(description)}
       """\
       ''')
-    end
-
-    defp hardwrap(text) do
-      text
-      |> String.replace("\n\n", "--double-line-break--")
-      |> String.replace("\n", " ")
-      |> String.split("--double-line-break--")
-      |> Enum.map_join("\n\n", fn line -> hardwrap_line(line, 70) end)
-    end
-
-    defp hardwrap_line(line, width) do
-      words =
-        line
-        |> String.split(" ", trim: true)
-        |> Enum.map(&{&1, String.length(&1)})
-
-      words
-      |> Enum.reduce({0, [], []}, fn {word, len}, {line_len, this_line, lines} ->
-        cond do
-          line_len == 0 -> {len, [word | this_line], lines}
-          line_len + 1 + len > width -> {len, [word], [:lists.reverse(this_line) | lines]}
-          :_ -> {line_len + 1 + len, [word, " " | this_line], lines}
-        end
-      end)
-      |> case do
-        {_, [], lines} -> lines
-        {_, current, lines} -> [:lists.reverse(current) | lines]
-      end
-      |> :lists.reverse()
-      |> Enum.join("\n")
     end
   end
 end
 
 defmodule Context do
-  defstruct [:mod_prefix, :mod_config]
+  defstruct [:mod_prefix, :mod_config, :gh_schema]
 
   def mod_config(%{mod_config: mod_config}, name) do
-    Keyword.fetch!(mod_config, name)
+    case Keyword.fetch(mod_config, name) do
+      {:ok, cfg} ->
+        cfg
+
+      :error ->
+        raise """
+        Missing configuration for schema #{inspect(name)} in :mod_config option
+
+            # Add the following into config
+
+            #{name}: [],
+
+            # Or add a skip
+
+            #{name}: :nogen
+        """
+    end
   end
 
   def mod_config(ctx, name, key, default) do
@@ -89,8 +104,14 @@ defmodule Context do
   def flagged?(ctx, name, flag) do
     case mod_config(ctx, name) do
       list when is_list(list) -> true == Keyword.get(list, flag)
-      :nogen -> raise "flags should no be called for :nogen modules"
+      other -> raise "flags should not be called for #{inspect(other)} modules"
     end
+  end
+
+  # `:lax` definitions are not generated as modules; a `$ref` to one is rendered
+  # as an accept-any schema (see Codegen.schema_with_jsv_helpers_deep/2).
+  def lax?(ctx, name) when is_binary(name) do
+    :lax == mod_config(ctx, String.to_atom(name))
   end
 end
 
@@ -117,7 +138,15 @@ defmodule Codegen do
     Traverse.postwalk(schema, fn
       {:val, %{"$ref": "#/$defs/" <> name} = schema} ->
         case Map.drop(schema, [:description, :"$schema"]) do
-          rest when map_size(rest) == 1 -> module_name(name, ctx)
+          rest when map_size(rest) == 1 ->
+            if Context.lax?(ctx, name) do
+              # Schema-in-data definitions (elicitation field descriptors:
+              # PrimitiveSchemaDefinition and the *Schema / *EnumSchema variants)
+              # are not modeled as structs; accept any value where they appear.
+              %{}
+            else
+              module_name(name, ctx)
+            end
         end
 
       {:val, %{"$ref": _} = schema} ->
@@ -187,10 +216,17 @@ defmodule Codegen do
 
     true = is_binary(value)
 
-    # Nothing else is present in const than :const and :type
-    true = %{} == Map.drop(schema, [:const, :type])
+    # Besides :const and :type, a const subschema may carry a :description
+    # (e.g. the `mode` discriminators on the elicitation request params). Keep
+    # it on the rendered `const/2` helper; nothing else is expected.
+    case Map.drop(schema, [:const, :type, :description]) do
+      empty when map_size(empty) == 0 -> :ok
+    end
 
-    CodeWrapper.of(:const, [value])
+    case schema do
+      %{description: descr} -> CodeWrapper.of(:const, [value, [description: descr]])
+      _ -> CodeWrapper.of(:const, [value])
+    end
   end
 
   defp format_schema_to_list(schema) do
@@ -200,10 +236,14 @@ defmodule Codegen do
     |> Enum.sort_by(&elem(&1, 0))
   end
 
-  def render_struct_module(module, schema, render_opts) do
-    skip_keys = Enum.sort(Keyword.get(render_opts, :skip_keys, []))
-    keep_nils = Enum.sort(Keyword.get(render_opts, :keep_nils, %{}))
-    serialize_merge = Keyword.get(render_opts, :serialize_merge, %{})
+  def render_struct_module(module, schema, render_data) do
+    skip_keys = Enum.sort(Keyword.get(render_data, :skip_keys, []))
+    keep_nils = Enum.sort(Keyword.get(render_data, :keep_nils, %{}))
+    serialize_merge = Keyword.get(render_data, :serialize_merge, %{})
+    moduledoc = Keyword.fetch!(render_data, :moduledoc)
+    gh_schema = Keyword.fetch!(render_data, :gh_schema)
+
+    method = Keyword.get(render_data, :method)
 
     keep_nils =
       Enum.sort(
@@ -215,37 +255,72 @@ defmodule Codegen do
 
     """
     defmodule #{inspect(module)} do
-      use JSV.Schema
 
-      JsonDerive.auto(_merge = #{inspect(serialize_merge)}, _keep_nils = #{inspect(keep_nils)})
+    #{if moduledoc do
+      moduledoc(moduledoc, gh_schema)
+    end}
 
-      #{if skip_keys == [] do
+    use JSV.Schema
+
+    JsonDerive.auto(_merge = #{inspect(serialize_merge)}, _keep_nils = #{inspect(keep_nils)})
+
+    #{if skip_keys == [] do
       ""
     else
       "@skip_keys #{inspect(skip_keys)}"
     end}
 
-      defschema #{inspect(schema, inspect_opts())}
+    @doc "Returns the JSON schema for this entity."
+    defschema #{inspect(schema, inspect_opts())}
 
-      @type t :: %__MODULE__{}
+    @type t :: %__MODULE__{}
+
+    #{if method do
+      """
+      @doc "Returns the JSON RPC method for this request."
+      def method, do: #{inspect(method)}
+      """
+    end}
+
     end
     """
   end
 
-  def render_schema_module(module, schema, render_opts \\ []) do
+  def render_schema_module(module, schema, render_data \\ []) do
+    moduledoc = Keyword.get(render_data, :moduledoc, false)
+    gh_schema = Keyword.fetch!(render_data, :gh_schema)
+
     """
     defmodule #{inspect(module)} do
 
-    #{if Keyword.get(render_opts, :use_jsv, true) do
+
+
+    #{if moduledoc do
+      moduledoc(moduledoc, gh_schema)
+    end}
+
+    #{if Keyword.get(render_data, :use_jsv, true) do
       "use JSV.Schema"
     end}
 
-      #{Keyword.get(render_opts, :body, "")}
+    #{Keyword.get(render_data, :body, "")}
 
-      def json_schema do
-       #{inspect(schema, inspect_opts())}
-      end
+    @doc "Returns the JSON schema for this entity."
+    def json_schema do
+      #{inspect(schema, inspect_opts())}
     end
+    end
+    """
+  end
+
+  defp moduledoc(moduledoc, gh_schema) do
+    """
+    @moduledoc #{~s(""")}
+    Struct and module-based JSON schema generated from
+    [modelcontextprotocol.io JSON schema](#{gh_schema}).
+
+    #{DescriptionWrapper.hardwrap(moduledoc)}
+    #{~s(""")}
     """
   end
 
@@ -257,7 +332,10 @@ end
 defmodule Generator do
   require Record
 
-  Record.defrecordp(:entity, name: nil, schema: nil, render_opts: [], kind: nil)
+  Record.defrecordp(:entity, name: nil, schema: nil, render_data: [], kind: nil)
+
+  @subscriptions_listen_link "{@link SubscriptionsListenRequestsubscriptions/listen}"
+  @cancelled_notification_method "notifications/cancelled"
 
   def run(source_schema_path, opts) do
     opts =
@@ -267,31 +345,46 @@ defmodule Generator do
         mod_config: [type: :keyword_list, required: true]
       )
 
-    ctx = %Context{mod_prefix: opts[:mod_prefix], mod_config: opts[:mod_config]}
+    "deps/modelcontextprotocol/" <> github_schema_rel_path = source_schema_path
+
+    schema_github_path =
+      "https://github.com/modelcontextprotocol/modelcontextprotocol/tree/main/" <>
+        github_schema_rel_path
+
+    ctx = %Context{
+      mod_prefix: opts[:mod_prefix],
+      mod_config: opts[:mod_config],
+      gh_schema: schema_github_path
+    }
 
     schema =
       source_schema_path
       |> File.read!()
       |> Jason.decode!(keys: :atoms)
 
-    metaschema = schema."$schema"
+    defs = Map.fetch!(schema, :"$defs")
+    validate_mod_config!(defs, ctx)
 
-    entitys =
-      schema
-      |> Map.fetch!(:"$defs")
-      |> Enum.map(fn {name, schema} -> entity(name: name, schema: schema, render_opts: []) end)
+    metaschema = schema."$schema"
+    info = build_info(schema)
+
+    entities =
+      defs
+      |> Enum.map(fn {name, schema} ->
+        entity(name: name, schema: schema, render_data: [gh_schema: schema_github_path])
+      end)
       |> filter_schemas(ctx)
       |> Stream.map(&process_schema(&1, ctx))
       |> Enum.sort_by(fn entity(name: name) -> name end)
 
     # We can now generate the modules
-    generated_modules = Enum.map_join(entitys, "\n\n", &generate_module(&1, ctx))
+    generated_modules = Enum.map_join(entities, "\n\n", &generate_module(&1, ctx))
 
     IO.puts("generation done")
 
     generated_block = [
-      prelude(ctx),
-      mod_map(entitys, metaschema, ctx),
+      prelude(ctx, info),
+      mod_map(entities, metaschema, ctx),
       generated_modules
     ]
 
@@ -300,19 +393,43 @@ defmodule Generator do
     File.write!(opts[:output_path], code)
     IO.puts("wrote #{opts[:output_path]}, formatting...")
 
-    case System.cmd("mix", ~w(format --migrate)) do
+    case System.cmd("mix", ~w(format --migrate), into: IO.stream()) do
       {_, 0} ->
         IO.puts("schemas module generated")
         :ok
 
-      {out, 1} ->
-        IO.puts(out)
+      {_, 1} ->
         IO.puts([IO.ANSI.red(), "Schemas generated with invalid syntax", IO.ANSI.reset()])
     end
   end
 
   defp skip_definition?(name, ctx) do
-    :nogen == Context.mod_config(ctx, name)
+    Context.mod_config(ctx, name) in [:nogen, :lax]
+  end
+
+  defp validate_mod_config!(defs, ctx) do
+    existing_names = defs |> Map.keys() |> MapSet.new()
+
+    stale_names =
+      ctx.mod_config
+      |> Keyword.keys()
+      |> Enum.uniq()
+      |> Enum.reject(&MapSet.member?(existing_names, &1))
+      |> Enum.sort()
+
+    case stale_names do
+      [] ->
+        :ok
+
+      _ ->
+        names = Enum.map_join(stale_names, "\n", &"  * #{inspect(&1)}")
+
+        raise """
+        Found stale schema entries in :mod_config. Remove or rename them to match the current source schema:
+
+        #{names}
+        """
+    end
   end
 
   defp filter_schemas(defs, ctx) do
@@ -321,28 +438,21 @@ defmodule Generator do
 
   defp process_schema(entity, ctx) do
     entity
-    |> replace_meta_to_custom_struct(ctx)
     |> skip_request_fields()
     |> skip_content_type(ctx)
     |> classify_schema()
+    |> pull_description()
     |> use_schema_api(ctx)
   end
 
-  def prelude(ctx) do
+  # TODO(spec008) listener request is not needed anymore
+  def prelude(ctx, info) do
     [
       """
+      # quokka:skip-module-directives
+
       require GenMCP.JsonDerive, as: JsonDerive
       """,
-      Codegen.render_schema_module(
-        Codegen.module_name("Meta", ctx),
-        %{
-          additionalProperties: %{},
-          description:
-            "See [General Fields](https://modelcontextprotocol.io/specification/2025-11-25/basic#general-fields) for notes on _meta usage.",
-          properties: %{progressToken: Codegen.module_name("ProgressToken", ctx)},
-          type: "object"
-        }
-      ),
       ~s'''
       defmodule #{inspect(Codegen.module_name("ListenerRequest", ctx))} do
         @moduledoc """
@@ -352,8 +462,71 @@ defmodule Generator do
         defstruct []
         @type t :: %__MODULE__{}
       end
-      '''
+      ''',
+      render_info_module(ctx, info)
     ]
+  end
+
+  defp build_info(schema) do
+    subscription_notification_methods =
+      schema
+      |> Map.fetch!(:"$defs")
+      |> Enum.flat_map(fn {_, def_schema} ->
+        case subscription_notification_method(def_schema) do
+          nil -> []
+          method -> [method]
+        end
+      end)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    %{subscription_notification_methods: subscription_notification_methods}
+  end
+
+  defp subscription_notification_method(def_schema) do
+    description = Map.get(def_schema, :description, "")
+
+    with method when is_binary(method) <- get_in(def_schema, [:properties, :method, :const]),
+         true <- String.starts_with?(method, "notifications/"),
+         true <- method != @cancelled_notification_method,
+         true <- subscription_listen_notification?(description) do
+      method
+    else
+      _ -> nil
+    end
+  end
+
+  defp subscription_listen_notification?(description) when is_binary(description) do
+    description = String.replace(description, ~r/\s+/, " ")
+
+    String.contains?(description, @subscriptions_listen_link)
+  end
+
+  defp render_info_module(ctx, info) do
+    module = Codegen.module_name("Info", ctx)
+
+    ~s'''
+    defmodule #{inspect(module)} do
+      @moduledoc false
+
+      @subscription_notification_methods #{inspect(info.subscription_notification_methods)}
+
+      @spec subscription_notification_methods() :: [String.t()]
+      def subscription_notification_methods, do: @subscription_notification_methods
+
+      def subscription_notification_method?(method)
+
+      Enum.each(@subscription_notification_methods, fn method ->
+        def subscription_notification_method?(unquote(method)) do
+          true
+        end
+      end)
+
+      def subscription_notification_method?(method) when is_binary(method) do
+        false
+      end
+    end
+    '''
   end
 
   defp mod_map(defs, metaschema, ctx) do
@@ -369,7 +542,10 @@ defmodule Generator do
 
     Codegen.render_schema_module(Codegen.module_name("ModMap", ctx), schema,
       use_jsv: false,
+      gh_schema: nil,
       body: """
+
+        @moduledoc false
 
         defmacro require_all do
           Enum.map(json_schema().definitions, fn {_, mod} ->
@@ -405,19 +581,19 @@ defmodule Generator do
     entity(entity, kind: kind, schema: schema)
   end
 
-  defp replace_meta_to_custom_struct(entity, ctx) do
-    entity(schema: schema, name: name) = entity
+  defp pull_description(entity) do
+    entity(render_data: render_data) = entity
 
-    schema =
-      if Context.flagged?(ctx, name, :rpc_request_params) do
-        put_in(schema, [:properties, :_meta], %{
-          "$ref": "#/$defs/Meta"
-        })
-      else
-        schema
-      end
+    case entity do
+      entity(schema: %{description: description})
+      when is_binary(description) and description != "" ->
+        entity(entity, render_data: Keyword.put(render_data, :moduledoc, description))
 
-    entity(entity, schema: schema)
+      _ ->
+        entity(entity,
+          render_data: Keyword.put(render_data, :moduledoc, "No description provided.")
+        )
+    end
   end
 
   defp skip_request_fields(entity) do
@@ -428,7 +604,9 @@ defmodule Generator do
     has_jsonrpc = Map.has_key?(schema[:properties] || %{}, :jsonrpc)
 
     if has_method_const and has_jsonrpc do
-      with_skipped_consts(entity, [:method, :jsonrpc])
+      entity
+      |> with_method()
+      |> with_skipped_consts([:method, :jsonrpc])
     else
       entity
     end
@@ -444,8 +622,13 @@ defmodule Generator do
     end
   end
 
+  defp with_method(entity) do
+    entity(schema: schema, render_data: render_data) = entity
+    entity(entity, render_data: Keyword.put(render_data, :method, schema.properties.method.const))
+  end
+
   defp with_skipped_consts(entity, keys) do
-    entity(schema: schema, render_opts: render_opts) = entity
+    entity(schema: schema, render_data: render_data) = entity
 
     serialize_merge =
       Enum.reduce(keys, %{}, fn key, serialize_merge ->
@@ -464,8 +647,8 @@ defmodule Generator do
       end)
 
     entity(entity,
-      render_opts:
-        Keyword.merge(render_opts,
+      render_data:
+        Keyword.merge(render_data,
           skip_keys: Map.keys(serialize_merge),
           serialize_merge: serialize_merge
         )
@@ -484,181 +667,184 @@ defmodule Generator do
   end
 
   defp generate_module(entity, ctx) do
-    entity(name: name, schema: schema, render_opts: render_opts, kind: kind) = entity
-    IO.puts("generating #{name}")
+    entity(name: name, schema: schema, render_data: render_data, kind: kind) = entity
+
     module = Codegen.module_name(name, ctx)
     keep_nils = Context.mod_config(ctx, name, :keep_nils, [])
-    render_opts = Keyword.put(render_opts, :keep_nils, keep_nils)
+    render_data = Keyword.put(render_data, :keep_nils, keep_nils)
+    render_data = Keyword.put(render_data, :gh_schema, ctx.gh_schema)
 
     case kind do
       :struct ->
-        Codegen.render_struct_module(module, schema, render_opts)
+        Codegen.render_struct_module(module, schema, render_data)
 
       :generic ->
-        Codegen.render_schema_module(module, schema, render_opts)
+        Codegen.render_schema_module(module, schema, render_data)
     end
   end
 end
 
-Generator.run("deps/modelcontextprotocol/schema/2025-11-25/schema.json",
-  output_path: "lib/gen_mcp/mcp/entities.ex",
-  mod_prefix: GenMCP.MCP,
+Generator.run("deps/modelcontextprotocol/schema/draft/schema.json",
+  output_path: "lib/gen_mcp/mcp/v2607/entities.ex",
+  mod_prefix: GenMCP.MCP.V2607,
+  # Allow/deny table reconciled against the 2026-07-28 draft `$defs`
+  # (150 definitions). The generate-set is the transitive `$ref` closure of the
+  # supported RPC surface; everything else is `:nogen`. Re-diff `$defs` vs this
+  # list whenever the schema SHA is bumped in mix.exs.
   mod_config: [
-    # -- Request params (custom extractions or from schema) -------------------
-
-    CallToolRequestParams: [rpc_request_params: true],
-    CancelledNotificationParams: [rpc_request_params: true],
-    GetPromptRequestParams: [rpc_request_params: true],
-    InitializeRequestParams: [rpc_request_params: true],
-    PaginatedRequestParams: [rpc_request_params: true],
-    ReadResourceRequestParams: [rpc_request_params: true],
-    SetLevelRequestParams: [rpc_request_params: true],
-
-    # -- RPC requests ---------------------------------------------------------
-
-    CallToolRequest: [],
-    GetPromptRequest: [],
-    InitializeRequest: [],
-    ListPromptsRequest: [],
-    ListResourcesRequest: [],
-    ListResourceTemplatesRequest: [],
-    ListToolsRequest: [],
-    PingRequest: [],
-    SetLevelRequest: [],
-    ReadResourceRequest: [],
-    SubscribeRequest: [],
-    UnsubscribeRequest: [],
-
-    # -- Generated structs/types ----------------------------------------------
-
     Annotations: [],
     AudioContent: [content_block: true],
-    BlobResourceContents: [],
-    BooleanSchema: [],
-    CallToolResult: [],
-    CancelledNotification: [],
-    ClientCapabilities: [],
-    ContentBlock: [],
-    EmbeddedResource: [content_block: true],
-    GetPromptResult: [],
-    Icon: [],
-    Icons: [],
-    ImageContent: [content_block: true],
-    Implementation: [],
-    InitializedNotification: [],
-    InitializeResult: [],
-    JSONRPCErrorResponse: [keep_nils: [:id]],
-    JSONRPCRequest: [],
-    JSONRPCResponse: [],
-    JSONRPCResultResponse: [],
-    ListPromptsResult: [],
-    ListResourcesResult: [],
-    LoggingLevel: [],
-    LoggingMessageNotification: [],
-    LoggingMessageNotificationParams: [],
-    ListResourceTemplatesResult: [],
-    ListToolsResult: [],
-    ProgressNotification: [],
-    ProgressToken: [],
-    Prompt: [],
-    PromptArgument: [],
-    PromptMessage: [],
-    ReadResourceResult: [],
-    RequestId: [],
-    Resource: [],
-    ResourceLink: [content_block: true],
-    ResourceTemplate: [],
-    Result: [],
-    Role: [],
-    RootsListChangedNotification: [],
-    ServerCapabilities: [],
-    TextContent: [content_block: true],
-    TextResourceContents: [],
-    Tool: [],
-    ToolAnnotations: [],
-
-    # -- Not generated (unsupported, abstract, or internal) -------------------
-
     BaseMetadata: :nogen,
-    CancelTaskRequest: :nogen,
-    CancelTaskResult: :nogen,
+    BlobResourceContents: [],
+    BooleanSchema: :lax,
+    CacheableResult: [],
+    CallToolRequest: [],
+    CallToolRequestParams: [],
+    CallToolResult: [],
+    CallToolResultResponse: :nogen,
+    CancelledNotification: [],
+    CancelledNotificationParams: [],
+    ClientCapabilities: [],
     ClientNotification: :nogen,
     ClientRequest: :nogen,
     ClientResult: :nogen,
     CompleteRequest: :nogen,
     CompleteRequestParams: :nogen,
     CompleteResult: :nogen,
-    CreateMessageRequest: :nogen,
-    CreateMessageRequestParams: :nogen,
-    CreateMessageResult: :nogen,
-    CreateTaskResult: :nogen,
+    CompleteResultResponse: :nogen,
+    ContentBlock: [],
+    CreateMessageRequest: [],
+    CreateMessageRequestParams: [],
+    CreateMessageResult: [],
     Cursor: :nogen,
-    ElicitRequest: :nogen,
-    ElicitRequestFormParams: :nogen,
-    ElicitRequestParams: :nogen,
-    ElicitRequestURLParams: :nogen,
-    ElicitResult: :nogen,
-    ElicitationCompleteNotification: :nogen,
+    DiscoverRequest: [],
+    DiscoverResult: [],
+    DiscoverResultResponse: :nogen,
+    ElicitRequest: [],
+    ElicitRequestFormParams: [],
+    ElicitRequestParams: [],
+    ElicitRequestURLParams: [],
+    ElicitResult: [],
+    EmbeddedResource: [content_block: true],
     EmptyResult: :nogen,
-    EnumSchema: :nogen,
+    EnumSchema: :lax,
     Error: [],
-    GetTaskPayloadRequest: :nogen,
-    GetTaskPayloadResult: :nogen,
-    GetTaskRequest: :nogen,
-    GetTaskResult: :nogen,
+    GetPromptRequest: [],
+    GetPromptRequestParams: [],
+    GetPromptResult: [],
+    GetPromptResultResponse: :nogen,
+    HeaderMismatchError: :nogen,
+    Icon: [],
+    Icons: [],
+    ImageContent: [content_block: true],
+    Implementation: [],
+    InputRequest: [],
+    InputRequests: [],
+    InputRequiredResult: [],
+    InputResponse: [],
+    InputResponseRequestParams: [],
+    InputResponses: [],
+    InternalError: :nogen,
+    InvalidParamsError: :nogen,
+    InvalidRequestError: :nogen,
+    JSONArray: [],
+    JSONObject: [],
+    JSONRPCErrorResponse: [keep_nils: [:id]],
     JSONRPCMessage: :nogen,
     JSONRPCNotification: :nogen,
-    LegacyTitledEnumSchema: :nogen,
-    ListRootsRequest: :nogen,
-    ListRootsResult: :nogen,
-    ListTasksRequest: :nogen,
-    ListTasksResult: :nogen,
-    ModelHint: :nogen,
-    ModelPreferences: :nogen,
-    MultiSelectEnumSchema: :nogen,
+    JSONRPCRequest: [],
+    JSONRPCResponse: [],
+    JSONRPCResultResponse: [],
+    JSONValue: [],
+    LegacyTitledEnumSchema: :lax,
+    ListPromptsRequest: [],
+    ListPromptsResult: [],
+    ListPromptsResultResponse: :nogen,
+    ListResourceTemplatesRequest: [],
+    ListResourceTemplatesResult: [],
+    ListResourceTemplatesResultResponse: :nogen,
+    ListResourcesRequest: [],
+    ListResourcesResult: [],
+    ListResourcesResultResponse: :nogen,
+    ListRootsRequest: [],
+    ListRootsResult: [],
+    ListToolsRequest: [],
+    ListToolsResult: [],
+    ListToolsResultResponse: :nogen,
+    LoggingLevel: [],
+    LoggingMessageNotification: [],
+    LoggingMessageNotificationParams: [],
+    MetaObject: [],
+    MethodNotFoundError: :nogen,
+    MissingRequiredClientCapabilityError: :nogen,
+    ModelHint: [],
+    ModelPreferences: [],
+    MultiSelectEnumSchema: :lax,
     Notification: :nogen,
+    NotificationMetaObject: [],
     NotificationParams: [],
-    NumberSchema: :nogen,
+    NumberSchema: :lax,
     PaginatedRequest: :nogen,
+    PaginatedRequestParams: [],
     PaginatedResult: :nogen,
-    PrimitiveSchemaDefinition: :nogen,
+    ParseError: :nogen,
+    PrimitiveSchemaDefinition: :lax,
+    ProgressNotification: [],
     ProgressNotificationParams: [],
-    PromptListChangedNotification: :nogen,
+    ProgressToken: [],
+    Prompt: [],
+    PromptArgument: [],
+    PromptListChangedNotification: [],
+    PromptMessage: [],
     PromptReference: :nogen,
-    RelatedTaskMetadata: :nogen,
+    ReadResourceRequest: [],
+    ReadResourceRequestParams: [],
+    ReadResourceResult: [],
+    ReadResourceResultResponse: :nogen,
     Request: :nogen,
+    RequestId: [],
+    RequestMetaObject: [],
     RequestParams: [],
+    Resource: [],
     ResourceContents: :nogen,
-    ResourceListChangedNotification: :nogen,
+    ResourceLink: [content_block: true],
+    ResourceListChangedNotification: [],
     ResourceRequestParams: :nogen,
+    ResourceTemplate: [],
     ResourceTemplateReference: :nogen,
-    ResourceUpdatedNotification: :nogen,
-    ResourceUpdatedNotificationParams: :nogen,
-    Root: :nogen,
-    SamplingMessage: :nogen,
-    SamplingMessageContentBlock: :nogen,
+    ResourceUpdatedNotification: [],
+    ResourceUpdatedNotificationParams: [],
+    Result: [],
+    ResultMetaObject: [],
+    ResultType: :nogen,
+    Role: [],
+    Root: [],
+    SamplingMessage: [],
+    SamplingMessageContentBlock: [],
+    ServerCapabilities: [],
     ServerNotification: :nogen,
-    ServerRequest: :nogen,
     ServerResult: :nogen,
-    SingleSelectEnumSchema: :nogen,
-    StringSchema: :nogen,
-    SubscribeRequestParams: [rpc_request_params: true],
-    Task: :nogen,
-    TaskAugmentedRequestParams: :nogen,
-    TaskMetadata: [],
-    TaskStatus: :nogen,
-    TaskStatusNotification: :nogen,
-    TaskStatusNotificationParams: :nogen,
-    TitledMultiSelectEnumSchema: :nogen,
-    TitledSingleSelectEnumSchema: :nogen,
-    ToolChoice: :nogen,
-    ToolExecution: [],
-    ToolListChangedNotification: :nogen,
-    ToolResultContent: :nogen,
-    ToolUseContent: :nogen,
-    URLElicitationRequiredError: :nogen,
-    UnsubscribeRequestParams: [rpc_request_params: true],
-    UntitledMultiSelectEnumSchema: :nogen,
-    UntitledSingleSelectEnumSchema: :nogen
+    SingleSelectEnumSchema: :lax,
+    StringSchema: :lax,
+    SubscriptionFilter: [],
+    SubscriptionsAcknowledgedNotification: [],
+    SubscriptionsAcknowledgedNotificationParams: [],
+    SubscriptionsListenRequest: [],
+    SubscriptionsListenRequestParams: [],
+    SubscriptionsListenResult: [],
+    SubscriptionsListenResultMeta: [],
+    TextContent: [content_block: true],
+    TextResourceContents: [],
+    TitledMultiSelectEnumSchema: :lax,
+    TitledSingleSelectEnumSchema: :lax,
+    Tool: [],
+    ToolAnnotations: [],
+    ToolChoice: [],
+    ToolListChangedNotification: [],
+    ToolResultContent: [],
+    ToolUseContent: [],
+    UnsupportedProtocolVersionError: :nogen,
+    UntitledMultiSelectEnumSchema: :lax,
+    UntitledSingleSelectEnumSchema: :lax
   ]
 )

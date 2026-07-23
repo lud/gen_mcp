@@ -45,12 +45,11 @@ defmodule GenMCP.MixProject do
     [
       # App
       {:phoenix, ">= 1.7.0"},
-      {:jsv, "~> 0.19"},
+      {:jsv, "~> 0.21"},
       {:abnf_parsec, "~> 2.0"},
       {:texture, ">= 0.3.2"},
       {:nimble_options, "~> 1.1"},
       {:telemetry, ">= 0.0.0"},
-      {:syn, "~> 3.3"},
 
       # Resources
       mcp_schemas(),
@@ -61,29 +60,26 @@ defmodule GenMCP.MixProject do
       {:bandit, "~> 1.0", only: [:dev, :test]},
       {:jason, "~> 1.0", only: [:dev, :test]},
       {:mox, "~> 1.2", only: [:dev, :test]},
-      {:credo, ">= 1.7.12", only: [:dev, :test], runtime: false},
-      {:dialyxir, ">= 1.4.5", only: [:dev, :test], runtime: false},
-      {:ex_check, ">= 0.16.0", only: [:dev, :test], runtime: false},
-      {:ex_doc, ">= 0.38.2", only: [:dev, :test], runtime: false},
-      {:mix_audit, ">= 2.1.5", only: [:dev, :test], runtime: false},
-      {:sobelow, ">= 0.14.0", only: [:dev, :test], runtime: false},
+      {:libdev, ">= 0.0.0", only: [:dev, :test], runtime: false},
       {:nvir, "~> 0.16.0", only: [:dev, :test]},
       {:readmix, "~> 0.7", only: [:dev, :test], runtime: false},
       {:quokka, "~> 2.11", only: [:dev, :test], runtime: false}
     ]
   end
 
-  @schemas_vsn "2025-11-25"
+  @schemas_ref "5bed7b30527019e34ccb0eb474636651424501f6"
 
   defp mcp_schemas do
-    {:modelcontextprotocol,
-     git: "https://github.com/modelcontextprotocol/modelcontextprotocol.git",
-     sparse: "schema/#{@schemas_vsn}",
-     ref: @schemas_vsn,
-     only: [:dev, :test],
-     compile: false,
-     runtime: false,
-     app: false}
+    {
+      :modelcontextprotocol,
+      ref: @schemas_ref,
+      git: "https://github.com/modelcontextprotocol/modelcontextprotocol.git",
+      sparse: "schema/draft",
+      only: [:dev, :test],
+      compile: false,
+      runtime: false,
+      app: false
+    }
   end
 
   defp aliases do
@@ -130,7 +126,7 @@ defmodule GenMCP.MixProject do
       flags: [:unmatched_returns, :error_handling, :unknown, :extra_return],
       list_unused_filters: true,
       plt_add_deps: :app_tree,
-      plt_add_apps: [:ex_unit],
+      plt_add_apps: [:ex_unit, :mix],
       plt_local_path: "_build/plts"
     ]
   end
@@ -139,27 +135,27 @@ defmodule GenMCP.MixProject do
     [
       main: "GenMCP",
       extra_section: "GUIDES",
-      nest_modules_by_prefix: [GenMCP.MCP],
+      nest_modules_by_prefix: [GenMCP.MCP.V2607],
       groups_for_modules: [
         Core: [
           GenMCP,
-          GenMCP.MCP,
-          GenMCP.Transport.StreamableHTTP
+          GenMCP.MCP
+        ],
+        Transport: [
+          GenMCP.Transport.StreamableHTTP,
+          GenMCP.Mux.Channel
         ],
         Suite: [
           GenMCP.Suite,
-          GenMCP.Suite.Tool,
-          GenMCP.Suite.PromptRepo,
-          GenMCP.Suite.ResourceRepo,
-          GenMCP.Suite.Extension,
-          GenMCP.Suite.SessionController,
-          GenMCP.Suite.PersistedClientInfo,
-          ~r{^GenMCP\.Suite\.SessionController\..*}
+          ~r/GenMCP\.Suite\..*/
         ],
         Sessions: [
           ~r/GenMCP\.Mux\..*/
         ],
         Utilities: [
+          GenMCP.Token,
+          GenMCP.Validator,
+          GenMCP.Validator.Formats,
           GenMCP.Error,
           GenMCP.TelemetryLogger
         ],
@@ -191,9 +187,7 @@ defmodule GenMCP.MixProject do
 
     defined_guides = [
       "CHANGELOG.md",
-      "guides/001.getting-started.md",
-      "guides/002.using-mcp-suite.md",
-      "guides/009.system-configuration.md"
+      "guides/001.getting-started.md"
     ]
 
     case existing_guides -- defined_guides do

@@ -26,8 +26,31 @@ end
 
 defmodule GenMCP.Error do
   @moduledoc """
-  Helper module used to transform application errors into MCP/RPC error
-  payloads and HTTP status codes.
+  Maps internal error reasons to JSON-RPC error responses.
+
+  While a request is being handled, `GenMCP` represents failures as plain atoms
+  and tagged tuples, for example `:bad_rpc`, `{:unknown_tool, name}`, or
+  `{:invalid_params, error}`. `cast_error/1` turns one of those reasons into the
+  `{http_status, payload}` pair the transport needs to answer the client, where
+  `payload` is the body of a JSON-RPC error object (its `:code`, `:message`, and
+  an optional `:data`).
+
+  The HTTP status reflects where the failure happened. A malformed or rejected
+  request is answered with a 4xx or 5xx status. An error raised after the request
+  was accepted and dispatched (an unknown tool, parameters that fail their
+  schema, a missing resource) is reported as a JSON-RPC error inside a `200`
+  response, as the MCP transport requires.
+
+  The transport pairs the payload with a `GenMCP.MCP.V2607.JSONRPCErrorResponse`
+  and sends it with the returned status:
+
+      {status, error_payload} = GenMCP.Error.cast_error(reason)
+
+      response = %GenMCP.MCP.V2607.JSONRPCErrorResponse{
+        error: error_payload,
+        id: msg_id,
+        jsonrpc: "2.0"
+      }
   """
 
   import GenMCP.Error.Compiler
@@ -36,21 +59,68 @@ defmodule GenMCP.Error do
   @rpc_invalid_params -32_602
   @rpc_method_not_found -32_601
   @rpc_internal_error -32_603
-  @mcp_resource_not_found -32_002
+  @mcp_resource_not_found -32_602
+  @mcp_header_mismatch -32_001
   @mcp_prompt_not_found @rpc_invalid_params
 
   # https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1442
-  @mcp_unsupported_protocol_version -32_000
+  @mcp_unsupported_protocol_version -32_004
 
-  defcasterror :missing_session_id, @rpc_invalid_params, 400 do
+  @doc """
+  Returns the `{http_status, payload}` for an internal error reason.
+
+  `reason` is one of the failure values raised while handling a request, such as
+  `:bad_rpc`, `{:unknown_tool, name}`, `{:invalid_params, error}`, or a
+  `JSV.ValidationError`. The returned `payload` is a map ready to use as the
+  `error` field of a JSON-RPC error response: a numeric `:code`, a human-readable
+  `:message`, and a `:data` map for the reasons that carry extra detail.
+
+  A binary `reason` is treated as an internal error message and answered with a
+  `500` status. Any reason that matches none of the known clauses falls through
+  to a catchall that returns a generic `500` and routes the unrecognized reason
+  to `unknown_error/1`.
+
+  ### Examples
+
+  A rejected request maps to a 4xx status with a bare message:
+
+      iex> GenMCP.Error.cast_error(:bad_rpc)
+      {400, %{code: -32600, message: "Invalid RPC request"}}
+
+  An error raised after dispatch is reported inside a `200` response, and carries
+  the offending value under `:data`:
+
+      iex> GenMCP.Error.cast_error({:unknown_tool, "weather"})
+      {200, %{code: -32602, data: %{tool: "weather"}, message: "Unknown tool weather"}}
+  """
+  # The body of the 403 MAY be an id-less JSON-RPC error (draft transport spec,
+  # Security & Endpoint); no specific code is mandated.
+  defcasterror {:origin_forbidden, origin}, @rpc_invalid_request, 403 do
     %{
-      message: "Header mcp-session-id was not provided"
+      message: "Origin not allowed",
+      data: %{origin: origin}
     }
   end
 
-  defcasterror :unexpected_session_id, @rpc_invalid_params, 400 do
+  # The per-request worker exited without delivering a result (crash or silent
+  # stop). The relay converts it to a proper JSON-RPC error instead of leaking
+  # a generic Bandit 500. Crash details stay in the logs, not in the response.
+  defcasterror :server_crashed, @rpc_internal_error, 500 do
     %{
-      message: "Unexpected mcp-session-id header in initialize request"
+      message: "Internal server error"
+    }
+  end
+
+  defcasterror {:header_missing, header}, @mcp_header_mismatch, 400 do
+    %{
+      message: "Missing required header #{header}"
+    }
+  end
+
+  defcasterror {:header_mismatch, header, hv, bv}, @mcp_header_mismatch, 400 do
+    %{
+      message:
+        "Header mismatch: header #{header} with value #{inspect(hv)} does not match body value #{inspect(bv)}"
     }
   end
 
@@ -66,7 +136,7 @@ defmodule GenMCP.Error do
     }
   end
 
-  defcasterror %JSV.ValidationError{} = e, @rpc_invalid_params, 200 do
+  defcasterror {:invalid_body, %JSV.ValidationError{} = e}, @rpc_invalid_params, 400 do
     %{
       data: JSV.normalize_error(e),
       message: "Invalid Parameters"
@@ -82,7 +152,7 @@ defmodule GenMCP.Error do
 
   defcasterror {:invalid_params, errmsg} when is_binary(errmsg), @rpc_invalid_params, 200 do
     %{
-      message: errmsg
+      message: "Invalid Parameters: " <> errmsg
     }
   end
 
@@ -92,33 +162,16 @@ defmodule GenMCP.Error do
     }
   end
 
-  defcasterror :already_initialized, @rpc_invalid_params, 200 do
-    %{
-      message: "Session is already initialized"
-    }
-  end
-
   # JSON-RPC level: client sent an unsupported protocolVersion in the initialize request.
   # This is an application-level error, returned as HTTP 200 with a JSON-RPC error body.
-  defcasterror {:unsupported_protocol_init, version}, @mcp_unsupported_protocol_version, 200 do
+  defcasterror {:unsupported_protocol_version, unsupported},
+               @mcp_unsupported_protocol_version,
+               400 do
     %{
-      data: %{version: version, supported: GenMCP.supported_protocol_versions()},
+      data: %{requested: unsupported, supported: GenMCP.supported_protocol_versions()},
       message: "Unsupported protocol version"
     }
   end
-
-  # HTTP header level: client sent an invalid MCP-Protocol-Version HTTP header.
-  # Per spec, this MUST return HTTP 400.
-  #
-  # Protocol header is not implemented yet
-  #
-  # defcasterror {:unsupported_protocol_header, version},
-  #              @mcp_unsupported_protocol_version, 400 do
-  #   %{
-  #     data: %{version: version, supported: GenMCP.supported_protocol_versions()},
-  #     message: "Unsupported protocol version"
-  #   }
-  # end
 
   defcasterror {:unknown_tool, name} when is_binary(name), @rpc_invalid_params, 200 do
     %{
@@ -153,38 +206,25 @@ defmodule GenMCP.Error do
     }
   end
 
+  # A legal MCP method that this server does not implement (e.g. an optional
+  # capability it never advertised). The request validated fine and was
+  # dispatched, so this is an application-level JSON-RPC error in a 200 response
+  # — distinct from {:unknown_method, _}, a method outside the protocol entirely
+  # that the transport rejects with 404 before dispatch.
+  defcasterror {:unsupported_method, method} when is_binary(method), @rpc_method_not_found, 200 do
+    %{
+      data: %{method: method},
+      message: "Method not supported: #{method}"
+    }
+  end
+
   defcasterror message when is_binary(message), @rpc_internal_error, 500 do
     %{
       message: message
     }
   end
 
-  defcasterror :not_initialized, @rpc_internal_error, 400 do
-    %{
-      message: "Server not initialized"
-    }
-  end
-
-  defcasterror {:mcp_server_init_failure, _reason}, @rpc_internal_error, 500 do
-    %{
-      message: "Session Start Error"
-    }
-  end
-
-  defcasterror {:session_not_found, sid} when is_binary(sid), @rpc_internal_error, 404 do
-    %{
-      data: %{session_id: sid},
-      message: "Session not found"
-    }
-  end
-
-  defcasterror {:mcp_session_restore_failure, _reason}, @rpc_internal_error, 404 do
-    %{
-      message: "Session Lost"
-    }
-  end
-
-  defcasterror {:unknown_method, method} when is_binary(method), @rpc_method_not_found, 200 do
+  defcasterror {:unknown_method, method} when is_binary(method), @rpc_method_not_found, 404 do
     %{
       data: %{method: method},
       message: "Unknown method #{method}"
@@ -194,6 +234,18 @@ defmodule GenMCP.Error do
   defcasterror %NimbleOptions.ValidationError{}, @rpc_internal_error, 500 do
     %{
       message: "Internal Error"
+    }
+  end
+
+  defcasterror :invalid_request_state, @rpc_invalid_params, 200 do
+    %{
+      message: "Invalid request state"
+    }
+  end
+
+  defcasterror :expired_request_state, @rpc_invalid_params, 200 do
+    %{
+      message: "Expired request state"
     }
   end
 
@@ -213,6 +265,7 @@ defmodule GenMCP.Error do
     }
   end
 
+  @doc false
   if Mix.env() == :test do
     @spec unknown_error(term) :: no_return
     def unknown_error({%ExUnit.AssertionError{} = e, stack}) do
