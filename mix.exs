@@ -26,7 +26,7 @@ defmodule GenMCP.MixProject do
     ]
   end
 
-  defp elixirc_paths(:prod) do
+  defp elixirc_paths(env) when env in [:prod, :docs] do
     ["lib"]
   end
 
@@ -64,7 +64,7 @@ defmodule GenMCP.MixProject do
       {:credo, ">= 1.7.12", only: [:dev, :test], runtime: false},
       {:dialyxir, ">= 1.4.5", only: [:dev, :test], runtime: false},
       {:ex_check, ">= 0.16.0", only: [:dev, :test], runtime: false},
-      {:ex_doc, ">= 0.38.2", only: [:dev, :test], runtime: false},
+      {:ex_doc, ">= 0.38.2", only: [:dev, :test, :docs], runtime: false},
       {:mix_audit, ">= 2.1.5", only: [:dev, :test], runtime: false},
       {:sobelow, ">= 0.14.0", only: [:dev, :test], runtime: false},
       {:nvir, "~> 0.16.0", only: [:dev, :test]},
@@ -120,7 +120,8 @@ defmodule GenMCP.MixProject do
   def cli do
     [
       preferred_envs: [
-        dialyzer: :test
+        dialyzer: :test,
+        docs: :docs
       ]
     ]
   end
@@ -165,10 +166,6 @@ defmodule GenMCP.MixProject do
         ],
         Protocol: [
           ~r/GenMCP\.MCP\..*/
-        ],
-        # Should not be displayed in hexdocs
-        Dev: [
-          ~r/GenMCP\.Test/
         ]
       ],
       extras: doc_extras(),
