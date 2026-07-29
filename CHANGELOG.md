@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2026-07-29
+
+Freeze the stateful 2025 protocol line.
+
+gen_mcp 1.0.0 is the 0.10.x codebase promoted to a stable major. It speaks the
+stateful MCP protocol (2025-06-18 / 2025-11-25), and nothing about how it works
+changes with this release. If you are running gen_mcp today, `{:gen_mcp, "~> 1.0"}`
+keeps you exactly where you are, on a lane that stays supported.
+
+The 1.x branch takes security fixes and dependency-compatibility fixes only. No
+features and no protocol work: the 2025 protocol is frozen here.
+
+Version 2 is a hard fork onto the stateless 2026-07-28 protocol, which removes
+session handling from the core. Staying on 1.x is not the only way to keep your
+current clients working — v2 ships a compatibility transport that serves 2025
+clients from the same application, on their existing route, so upgrading does
+not mean migrating every client at once.
+
+One API removal since 0.10.0: the `GenMCP.MCP.RequestMeta` entity is gone,
+dropped by the MCP schema codegen refactor. The rest of the public surface is
+unchanged.
+
+### ⚙️ Miscellaneous Tasks
+
+- Refactor MCP schemas codegen
+- *(doc)* Generate docs in :docs env
+
 ## [0.10.0] - 2026-05-25
 
 ### 🚀 Features
