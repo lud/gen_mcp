@@ -26,7 +26,7 @@ defmodule GenMCP.MixProject do
     ]
   end
 
-  defp elixirc_paths(env) when env in [:prod, :docs] do
+  defp elixirc_paths(:prod) do
     ["lib"]
   end
 
@@ -59,9 +59,9 @@ defmodule GenMCP.MixProject do
       {:req, "~> 0.5", only: [:dev, :test]},
       {:local_cluster, "~> 2.0", only: [:test]},
       {:bandit, "~> 1.0", only: [:dev, :test]},
-      {:jason, "~> 1.0", only: [:dev, :test, :docs]},
+      {:jason, "~> 1.0", only: [:dev, :test]},
       {:mox, "~> 1.2", only: [:dev, :test]},
-      {:libdev, ">= 0.0.0", only: [:dev, :test, :docs], runtime: false},
+      {:libdev, ">= 0.0.0", only: [:dev, :test], runtime: false},
       {:nvir, "~> 0.16.0", only: [:dev, :test]},
       {:readmix, "~> 0.7", only: [:dev, :test], runtime: false},
       {:quokka, "~> 2.11", only: [:dev, :test], runtime: false}
@@ -117,8 +117,7 @@ defmodule GenMCP.MixProject do
   def cli do
     [
       preferred_envs: [
-        dialyzer: :test,
-        docs: :docs
+        dialyzer: :test
       ]
     ]
   end
@@ -137,6 +136,7 @@ defmodule GenMCP.MixProject do
     [
       main: "GenMCP",
       extra_section: "GUIDES",
+      filter_modules: &document_module?/2,
       nest_modules_by_prefix: [GenMCP.MCP.V2607],
       groups_for_modules: [
         Core: [
@@ -179,6 +179,15 @@ defmodule GenMCP.MixProject do
           ""
       end
     ]
+  end
+
+  # `test/support` is compiled in :dev, and the routers defined there with
+  # `defplug/1` generate documented modules. `mix docs` runs in :dev, so ExDoc
+  # sees them and they have to be filtered out by name.
+  @test_namespaces ["GenMCP.Test.", "GenMCP.TestWeb.", "GenMCP.Support."]
+
+  defp document_module?(module, _metadata) do
+    not String.starts_with?(inspect(module), @test_namespaces)
   end
 
   def doc_extras do
