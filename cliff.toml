@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.\n
 # being cut the tag does not exist yet, so pass the same text with
 # `--with-tag-message`. Tags created by `mix version` default to a "new version
 # X.Y.Z" annotation, which is filtered out rather than rendered as a note.
+
 body = """
 {% if version %}\
     ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
@@ -31,7 +32,8 @@ body = """
     {% for commit in commits %}
         - {% if commit.scope %}*({{ commit.scope }})* {% endif %}\
             {% if commit.breaking %}[**breaking**] {% endif %}\
-            {{ commit.message | upper_first }}\
+            {{ commit.message | upper_first }} \
+            (_{{ commit.author.name }}_)\
     {% endfor %}
 {% endfor %}
 
