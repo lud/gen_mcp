@@ -19,7 +19,7 @@ clients can be migrated one at a time.
 Upgrade guide:
 <https://gen-mcp.hexdocs.pm/090-upgrading-to-v2.html>
 
-## Can I upgrade?
+**Can I upgrade?**
 
 * **Your clients need no changes.** Keep them on their current route and mount
   the 2025 plug there.
@@ -41,7 +41,7 @@ Upgrade guide:
   `[]` and rejects unlisted origins with `403`. Requests with no `Origin`
   header are always accepted, so a test suite passes either way.
 
-## What's new
+**What's new**
 
 * Tools can block. Each request has its own worker process, so slow work runs
   inline in `c:GenMCP.Suite.Tool.call/3`. The `{:async, {tag, task}, channel}`
@@ -63,7 +63,7 @@ Upgrade guide:
   `[:gen_mcp, :transport, :version_rejected]` replace the
   `[:gen_mcp, :session, ...]` and `[:gen_mcp, :cluster, ...]` events.
 
-## 1.x maintenance
+**1.x maintenance**
 
 1.x will only receive security fixes and dependency compatibility updates. It
 implements the 2025 protocols and will not get new features or protocol work.
