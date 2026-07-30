@@ -2,6 +2,76 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.0] - 2026-07-30
+
+Implements the MCP `2026-07-28` protocol with a stateless transport.
+
+`GenMCP.Transport.StreamableHTTP` now targets the `2026-07-28` protocol. There
+is no session process, no `Mcp-Session-Id` header and no cluster
+configuration. Each request is handled by its own worker process, spawned when
+the request arrives and stopped once the request is answered.
+
+Clients using the `2025-06-18` and `2025-11-25` protocols are handled by a
+separate plug, `GenMCP.Transport.StreamableHTTP.V2511`, mounted on the route
+those clients already call. Their requests and responses are unchanged, so
+clients can be migrated one at a time.
+
+Upgrade guide:
+<https://gen-mcp.hexdocs.pm/090-upgrading-to-v2.html>
+
+## Can I upgrade?
+
+* **Your clients need no changes.** Keep them on their current route and mount
+  the 2025 plug there.
+* **The 2025 plug handles tool calls.** It implements `initialize`,
+  `notifications/initialized`, `ping`, `logging/setLevel`, `tools/list`,
+  `tools/call` and the `GET` notification stream. Any other method returns a
+  JSON-RPC `-32601`. Check this first if your 2025 clients read resources or
+  prompts.
+* **You still need Phoenix.** Both plugs read the encryption key from the
+  `Phoenix.Endpoint` on the conn, and `:phoenix` remains a regular dependency.
+  A plain `Plug.Router` mount raises on the first request that mints a token:
+  a 2025 session id, a pagination cursor, or the `requestState` of an
+  `input-required` result.
+* **Your tool modules need edits.** The entity namespace, the `call/3` return
+  tuples and the async API all changed. Two of the three changes only produce a
+  compiler warning and fail at the first tool call, so compile the upgrade with
+  `mix compile --warnings-as-errors` and read the guide.
+* **Browser clients need an origin allowlist.** `:allowed_origins` defaults to
+  `[]` and rejects unlisted origins with `403`. Requests with no `Origin`
+  header are always accepted, so a test suite passes either way.
+
+## What's new
+
+* Tools can block. Each request has its own worker process, so slow work runs
+  inline in `c:GenMCP.Suite.Tool.call/3`. The `{:async, {tag, task}, channel}`
+  return and the `continue/3` callback are removed. Tools driven by messages
+  from another process return `{:stream, state}` and handle each message in
+  `c:GenMCP.Suite.Tool.handle_message/4`.
+* DNS rebinding protection on both plugs, through the `:allowed_origins` mount
+  option.
+* `GenMCP.SessionController.Token`, the default session controller for the 2025
+  plug, uses an encrypted session token as the session id. Nothing is stored
+  server-side and a session minted on one node is readable on any node sharing
+  the `secret_key_base`.
+* `GenMCP.Mux.Channel.send_notification/2` replaces `send_message/2` and takes
+  a notification struct or map instead of an encoded binary.
+* Telemetry events follow the per-request architecture:
+  `[:gen_mcp, :server, :init]`, `[:gen_mcp, :server, :start_error]`,
+  `[:gen_mcp, :transport, :request_rejected]`,
+  `[:gen_mcp, :transport, :server_crashed]` and
+  `[:gen_mcp, :transport, :version_rejected]` replace the
+  `[:gen_mcp, :session, ...]` and `[:gen_mcp, :cluster, ...]` events.
+
+## 1.x maintenance
+
+1.x will only receive security fixes and dependency compatibility updates. It
+implements the 2025 protocols and will not get new features or protocol work.
+
+### 🚀 Features
+
+- [**breaking**] Stateless MCP 2026-07-28 core with 2025 compatibility transport
+
 ## [1.0.0] - 2026-07-29
 
 Freeze the stateful 2025 protocol line.

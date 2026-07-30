@@ -1,21 +1,4 @@
-root = JSV.build!(GenMCP.MCP.TextContent, atoms: false)
-JSV.validate!(%{"text" => "hello", "type" => "text"}, root)
-
-root = JSV.build!(GenMCP.MCP.ListToolsRequest, atoms: false)
-
-JSV.validate!(
-  %{
-    "id" => 1,
-    "jsonrpc" => "2.0",
-    "method" => "tools/list",
-    "params" => %{}
-  },
-  root
-)
-
-# Build a schema that can be anything, so all schemas must be buildable
-
-schema = %{anyOf: Map.values(GenMCP.MCP.ModMap.json_schema().definitions)}
+schema = %{anyOf: Map.values(GenMCP.MCP.V2607.ModMap.json_schema().definitions)}
 
 case JSV.build(schema, atoms: false) do
   {:ok, _} ->
@@ -23,7 +6,7 @@ case JSV.build(schema, atoms: false) do
 
   {:error,
    %JSV.BuildError{
-     reason: {:invalid_sub_schema, location, "Elixir.GenMCP.MCP." <> mod_as_string},
+     reason: {:invalid_sub_schema, location, "Elixir.GenMCP.MCP.V2607." <> mod_as_string},
      action: :building_subschema
    }} ->
     raise """

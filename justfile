@@ -1,7 +1,7 @@
 run X='0':
   GEN_MCP_NODE_ID=AA0{{X}} PORT=500{{X}} iex --name genmcpdev-{{ X }}@127.0.0.1 -S mix run
 
-deps:
+_mix_deps:
   mix deps.get
 
 gen-entities:
@@ -9,11 +9,20 @@ gen-entities:
   elixir tools/gen-rpc-schemas.exs
   mix run tools/check-entities.exs
 
-_mix_format:
-  mix format
+update-schema: _mix_deps
+  mix deps.get
+  mix mcp.update_schema
+  mix deps.get | rg modelcontextprotocol
+  just gen-entities
+  git status
+  mix test
+  just _git_status
 
-_mix_check:
-  mix check
+format:
+  mix format --migrate
+
+_libdev_check:
+  mix libdev.check
 
 _git_status:
   git status
@@ -21,9 +30,11 @@ _git_status:
 sobelow:
   mix sobelow --config
 
-docs:
+readme:
   mix rdmx.update README.md
   rg rdmx guides -l0 | xargs -0 -n 1 mix rdmx.update
+
+docs: readme
   mix docs
 
-check: deps gen-entities _mix_format _mix_check docs _git_status
+check: _mix_deps format gen-entities readme _libdev_check _git_status

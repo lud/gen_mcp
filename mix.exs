@@ -2,7 +2,7 @@ defmodule GenMCP.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/lud/gen_mcp"
-  @version "1.0.0"
+  @version "2.0.0"
   def project do
     [
       app: :gen_mcp,
@@ -45,12 +45,12 @@ defmodule GenMCP.MixProject do
     [
       # App
       {:phoenix, ">= 1.7.0"},
-      {:jsv, "~> 0.19"},
+      {:plug, "~> 1.14"},
+      {:jsv, "~> 0.21"},
       {:abnf_parsec, "~> 2.0"},
       {:texture, ">= 0.3.2"},
       {:nimble_options, "~> 1.1"},
       {:telemetry, ">= 0.0.0"},
-      {:syn, "~> 3.3"},
 
       # Resources
       mcp_schemas(),
@@ -59,31 +59,28 @@ defmodule GenMCP.MixProject do
       {:req, "~> 0.5", only: [:dev, :test]},
       {:local_cluster, "~> 2.0", only: [:test]},
       {:bandit, "~> 1.0", only: [:dev, :test]},
-      {:jason, "~> 1.0", only: [:dev, :test]},
+      {:jason, "~> 1.0", only: [:dev, :test, :docs]},
       {:mox, "~> 1.2", only: [:dev, :test]},
-      {:credo, ">= 1.7.12", only: [:dev, :test], runtime: false},
-      {:dialyxir, ">= 1.4.5", only: [:dev, :test], runtime: false},
-      {:ex_check, ">= 0.16.0", only: [:dev, :test], runtime: false},
-      {:ex_doc, ">= 0.38.2", only: [:dev, :test, :docs], runtime: false},
-      {:mix_audit, ">= 2.1.5", only: [:dev, :test], runtime: false},
-      {:sobelow, ">= 0.14.0", only: [:dev, :test], runtime: false},
+      {:libdev, ">= 0.0.0", only: [:dev, :test, :docs], runtime: false},
       {:nvir, "~> 0.16.0", only: [:dev, :test]},
       {:readmix, "~> 0.7", only: [:dev, :test], runtime: false},
       {:quokka, "~> 2.11", only: [:dev, :test], runtime: false}
     ]
   end
 
-  @schemas_vsn "2025-11-25"
+  @schemas_ref "2026-07-28"
 
   defp mcp_schemas do
-    {:modelcontextprotocol,
-     git: "https://github.com/modelcontextprotocol/modelcontextprotocol.git",
-     sparse: "schema/#{@schemas_vsn}",
-     ref: @schemas_vsn,
-     only: [:dev, :test],
-     compile: false,
-     runtime: false,
-     app: false}
+    {
+      :modelcontextprotocol,
+      ref: @schemas_ref,
+      git: "https://github.com/modelcontextprotocol/modelcontextprotocol.git",
+      sparse: "schema/2026-07-28",
+      only: [:dev, :test],
+      compile: false,
+      runtime: false,
+      app: false
+    }
   end
 
   defp aliases do
@@ -131,7 +128,7 @@ defmodule GenMCP.MixProject do
       flags: [:unmatched_returns, :error_handling, :unknown, :extra_return],
       list_unused_filters: true,
       plt_add_deps: :app_tree,
-      plt_add_apps: [:ex_unit],
+      plt_add_apps: [:ex_unit, :mix],
       plt_local_path: "_build/plts"
     ]
   end
@@ -140,28 +137,29 @@ defmodule GenMCP.MixProject do
     [
       main: "GenMCP",
       extra_section: "GUIDES",
-      nest_modules_by_prefix: [GenMCP.MCP],
+      nest_modules_by_prefix: [GenMCP.MCP.V2607],
       groups_for_modules: [
         Core: [
-          GenMCP,
-          GenMCP.MCP,
-          GenMCP.Transport.StreamableHTTP
+          GenMCP
+        ],
+        Transport: [
+          GenMCP.Transport.StreamableHTTP,
+          GenMCP.Mux.Channel
+        ],
+        "2025 compatibility": [
+          GenMCP.Transport.StreamableHTTP.V2511,
+          GenMCP.SessionController,
+          GenMCP.SessionController.Token
         ],
         Suite: [
           GenMCP.Suite,
-          GenMCP.Suite.Tool,
-          GenMCP.Suite.PromptRepo,
-          GenMCP.Suite.ResourceRepo,
-          GenMCP.Suite.Extension,
-          GenMCP.Suite.SessionController,
-          GenMCP.Suite.PersistedClientInfo,
-          ~r{^GenMCP\.Suite\.SessionController\..*}
-        ],
-        Sessions: [
-          ~r/GenMCP\.Mux\..*/
+          ~r/GenMCP\.Suite\..*/
         ],
         Utilities: [
+          GenMCP.Token,
+          GenMCP.Validator,
           GenMCP.Error,
+          GenMCP.CallbackReturnError,
           GenMCP.TelemetryLogger
         ],
         Protocol: [
@@ -189,8 +187,7 @@ defmodule GenMCP.MixProject do
     defined_guides = [
       "CHANGELOG.md",
       "guides/001.getting-started.md",
-      "guides/002.using-mcp-suite.md",
-      "guides/009.system-configuration.md"
+      "guides/090.upgrading-to-v2.md"
     ]
 
     case existing_guides -- defined_guides do

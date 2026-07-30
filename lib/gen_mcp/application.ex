@@ -11,9 +11,6 @@ defmodule GenMCP.Application do
 
   @impl true
   def start(_type, _args) do
-    :ok = :syn.add_node_to_scopes([:gen_mcp_sessions])
-    :ok = :syn.set_event_handler(GenMCP.SynEventHandler)
-
     children = children(env())
     opts = [strategy: :one_for_one, name: GenMCP.Supervisor]
 
@@ -22,7 +19,7 @@ defmodule GenMCP.Application do
 
   defp children(:prod) do
     [
-      GenMCP.Mux.SessionSupervisor
+      GenMCP.ServerSupervisor
     ]
   end
 

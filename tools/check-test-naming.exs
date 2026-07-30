@@ -1,7 +1,7 @@
 #!/usr/bin/env elixir
 Mix.install([:modkit])
 
-defmodule Tool do
+defmodule Renamer do
   @mount Modkit.Mount.define!([
            {GenMCP, "test/gen_mcp"},
            {GenMCPTest, "test/gen_mcp_test"}
@@ -103,4 +103,4 @@ defmodule Tool do
   end
 end
 
-Tool.run()
+Renamer.run()

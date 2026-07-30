@@ -1,13 +1,26 @@
 alias GenMCP.Support.ServerMock
+alias GenMCP.Support.ToolMock
+alias GenMCP.TestWeb.Router.Mcp2511
+alias GenMCP.TestWeb.Router.Mcp2511Sub
+alias GenMCP.TestWeb.Router.Mcp2511SubFull
 alias GenMCP.TestWeb.Router.McpMock
-alias GenMCP.TestWeb.Router.McpMockControlled
+alias GenMCP.TestWeb.Router.McpMockOrigins
 alias GenMCP.TestWeb.Router.McpReal
 
 require GenMCP.Transport.StreamableHTTP, as: StreamableHTTP
+require GenMCP.Transport.StreamableHTTP.V2511, as: V2511
 
 StreamableHTTP.defplug(McpMock)
 StreamableHTTP.defplug(McpReal)
-StreamableHTTP.defplug(McpMockControlled)
+StreamableHTTP.defplug(McpMockOrigins)
+
+# The 2025 compatibility transport is mounted on a real `GenMCP.Suite` with
+# mock providers, not on a server mock: the point of these endpoints is the
+# translation between the 2025 wire format and the 2026 core, so the core has
+# to be the real one.
+V2511.defplug(Mcp2511)
+V2511.defplug(Mcp2511Sub)
+V2511.defplug(Mcp2511SubFull)
 
 defmodule GenMCP.TestWeb.Router.AuthWrapper do
   @moduledoc false
@@ -31,6 +44,9 @@ defmodule GenMCP.TestWeb.Router.AuthWrapper do
 end
 
 defmodule GenMCP.TestWeb.Router.NoAuth do
+  @moduledoc false
+  @behaviour Plug
+
   def init(opts) do
     opts
   end
@@ -52,6 +68,29 @@ defmodule GenMCP.TestWeb.Router do
     if Mix.env() == :test do
       forward "/mock", McpMock, server: ServerMock, foo: :bar
 
+      forward "/mock-origins", McpMockOrigins,
+        server: ServerMock,
+        allowed_origins: ["https://app.example.com"]
+
+      forward "/v2511", Mcp2511,
+        server_name: "Compat Server",
+        server_version: "9.9.9",
+        tools: [ToolMock]
+
+      forward "/v2511-sub", Mcp2511Sub,
+        server_name: "Compat Server",
+        server_version: "9.9.9",
+        tools: [ToolMock],
+        subscription_handler: GenMCP.Support.SubscriptionHandlerMock
+
+      # Same, on the handler mock that implements the optional `handle_close/3`,
+      # for the client-disconnect test.
+      forward "/v2511-sub-full", Mcp2511SubFull,
+        server_name: "Compat Server",
+        server_version: "9.9.9",
+        tools: [ToolMock],
+        subscription_handler: GenMCP.Support.SubscriptionHandlerFullMock
+
       scope "/" do
         pipe_through :auth
 
@@ -60,25 +99,7 @@ defmodule GenMCP.TestWeb.Router do
           assigns: %{assign_from_forward: "hello", shared_assign: "from forward"},
           copy_assigns: [:assign_from_auth, :shared_assign, :unexisting_assign]
       end
-
-      forward "/controlled", McpMockControlled,
-        server: ServerMock,
-        assigns: %{assign_from_forward: "hello", shared_assign: "from forward"},
-        copy_assigns: [:assign_from_auth, :shared_assign, :unexisting_assign],
-        session_controller: {GenMCP.Support.SessionControllerMock, :foo}
     end
-
-    forward "/real", McpReal,
-      server_name: "Real Server",
-      server_version: "0.0.1",
-      server_title: "GenMCP own development server",
-      tools: [
-        GenMCP.Test.Tools.ErlangHasher,
-        GenMCP.Test.Tools.ErlangHasherAsync,
-        GenMCP.Test.Tools.Addition
-      ],
-      extensions: [],
-      session_controller: GenMCP.Suite.SessionController.DevSessionStore
   end
 
   pipeline :auth do

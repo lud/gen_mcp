@@ -3,9 +3,14 @@
 defmodule GenMCP.Suite.ToolTest do
   use ExUnit.Case, async: true
 
+  # Spec 004: tools speak the V2607 vocabulary and share the server return
+  # contract — `call/3` returns `{:result, result}` | `{:stream, tool_state}` |
+  # `{:error, reason}` (no channel in returns), and the dispatcher's
+  # validation failure is `{:error, {:invalid_params, reason}}`.
+
   import GenMCP.Test.Helpers
 
-  alias GenMCP.MCP
+  alias GenMCP.MCP.V2607, as: MCP
   alias GenMCP.Suite.Tool
 
   defmacro env_mod do
@@ -18,6 +23,40 @@ defmodule GenMCP.Suite.ToolTest do
     |> Macro.camelize()
     |> List.wrap()
     |> Module.concat()
+  end
+
+  # Defined at module scope (not inside a test) on purpose: a module defined
+  # inside a test body compiles at runtime, where the compiler does not surface
+  # a redundant-clause warning. At module scope it compiles with the file, so if
+  # `use GenMCP.Suite.Tool` ever generates a competing validate_request/2
+  # alongside this hand-written one, the warning shows up here.
+  defmodule ManualValidateRequestTool do
+    use GenMCP.Suite.Tool,
+      name: "some_name",
+      input_schema: %{
+        type: :object,
+        properties: %{
+          foo: %{type: :integer}
+        },
+        required: [:foo]
+      }
+
+    alias GenMCP.MCP.V2607, as: MCP
+
+    # Hand-written alongside :input_schema. This clause must be the one used,
+    # not the schema-based validator that `use` would otherwise generate. It
+    # accepts anything and signals that it ran, so the test can prove it was
+    # called rather than infer it from the result.
+    @impl true
+    def validate_request(req, _) do
+      send(self(), :validate_request_called)
+      {:ok, req}
+    end
+
+    @impl true
+    def call(req, _channel, _) do
+      {:result, MCP.call_tool_result(_data: req.params.arguments)}
+    end
   end
 
   describe "with using macro" do
@@ -128,7 +167,7 @@ defmodule GenMCP.Suite.ToolTest do
 
       assert %{"securitySchemes" => [%{"type" => "noauth"}]} == UseMeta.info(:_meta, nil)
 
-      assert %GenMCP.MCP.Tool{
+      assert %MCP.Tool{
                _meta: %{"securitySchemes" => [%{"type" => "noauth"}]},
                annotations: nil,
                description: nil,
@@ -217,8 +256,8 @@ defmodule GenMCP.Suite.ToolTest do
         # Use does not define validate request, it is automatically implemented
         # by "use"
 
-        def call(req, channel, _) do
-          {:result, MCP.call_tool_result(_data: req.params.arguments), channel}
+        def call(req, _channel, _) do
+          {:result, MCP.call_tool_result(_data: req.params.arguments)}
         end
       end
 
@@ -229,12 +268,13 @@ defmodule GenMCP.Suite.ToolTest do
       valid_req = %MCP.CallToolRequest{
         id: 1001,
         params: %MCP.CallToolRequestParams{
+          _meta: nil,
           name: "some_name",
           arguments: %{"foo" => 123}
         }
       }
 
-      assert {:result, %MCP.CallToolResult{structuredContent: %{"foo" => 123}}, _} =
+      assert {:result, %MCP.CallToolResult{structuredContent: %{"foo" => 123}}} =
                Tool.call(tool, valid_req, build_channel())
 
       # invalid request will not hit the call callback if rejected
@@ -242,18 +282,19 @@ defmodule GenMCP.Suite.ToolTest do
       bad_req = %MCP.CallToolRequest{
         id: 1001,
         params: %MCP.CallToolRequestParams{
+          _meta: nil,
           name: "some_name",
           arguments: %{"foo" => "not_an_int"}
         }
       }
 
-      assert {:error, {:invalid_params, %JSV.ValidationError{}}, _} =
+      assert {:error, {:invalid_params, %JSV.ValidationError{}}} =
                Tool.call(tool, bad_req, build_channel())
 
       assert %{type: :object, properties: %{foo: %{type: :integer}}} =
                UseInputSchema.input_schema(nil)
 
-      assert %GenMCP.MCP.Tool{
+      assert %MCP.Tool{
                _meta: nil,
                annotations: nil,
                description: "some descr",
@@ -284,8 +325,8 @@ defmodule GenMCP.Suite.ToolTest do
           {:ok, req}
         end
 
-        def call(req, channel, _) do
-          {:result, MCP.call_tool_result(_data: req.params.arguments), channel}
+        def call(req, _channel, _) do
+          {:result, MCP.call_tool_result(_data: req.params.arguments)}
         end
       end
 
@@ -296,13 +337,38 @@ defmodule GenMCP.Suite.ToolTest do
       bad_req = %MCP.CallToolRequest{
         id: 1001,
         params: %MCP.CallToolRequestParams{
+          _meta: nil,
           name: "some_name",
           arguments: %{"foo" => "not_an_int"}
         }
       }
 
-      assert {:result, %MCP.CallToolResult{structuredContent: %{"foo" => "not_an_int"}}, _} =
+      assert {:result, %MCP.CallToolResult{structuredContent: %{"foo" => "not_an_int"}}} =
                Tool.call(tool, bad_req, build_channel())
+    end
+
+    test "a manually defined validate_request is the one that is called" do
+      tool = Tool.expand(ManualValidateRequestTool)
+
+      # Arguments the schema would reject: foo must be an integer. The
+      # schema-based validator would turn this into {:error, {:invalid_params,
+      # _}} before call/3, so a successful result can only mean the manual
+      # validator (which accepts anything) ran instead.
+      bad_req = %MCP.CallToolRequest{
+        id: 1,
+        params: %MCP.CallToolRequestParams{
+          _meta: nil,
+          name: "some_name",
+          arguments: %{"foo" => "not_an_int"}
+        }
+      }
+
+      assert {:result, %MCP.CallToolResult{structuredContent: %{"foo" => "not_an_int"}}} =
+               Tool.call(tool, bad_req, build_channel())
+
+      # And it was actually invoked. validate_request runs synchronously in this
+      # process, so the message it sends to self/0 reaches the test process.
+      assert_receive :validate_request_called
     end
 
     test "format validation is enabled by default" do
@@ -318,8 +384,8 @@ defmodule GenMCP.Suite.ToolTest do
             required: [:when]
           }
 
-        def call(req, channel, _) do
-          {:result, MCP.call_tool_result(_data: req.params.arguments), channel}
+        def call(req, _channel, _) do
+          {:result, MCP.call_tool_result(_data: req.params.arguments)}
         end
       end
 
@@ -330,13 +396,14 @@ defmodule GenMCP.Suite.ToolTest do
       valid_req = %MCP.CallToolRequest{
         id: 1,
         params: %MCP.CallToolRequestParams{
+          _meta: nil,
           name: "some_name",
           arguments: %{"when" => "2026-05-20T12:34:56Z"}
         }
       }
 
       assert {:result,
-              %MCP.CallToolResult{structuredContent: %{"when" => "2026-05-20T12:34:56Z"}}, _} =
+              %MCP.CallToolResult{structuredContent: %{"when" => "2026-05-20T12:34:56Z"}}} =
                Tool.call(tool, valid_req, build_channel())
 
       # A string that doesn't match the format is rejected.
@@ -344,12 +411,13 @@ defmodule GenMCP.Suite.ToolTest do
       bad_req = %MCP.CallToolRequest{
         id: 2,
         params: %MCP.CallToolRequestParams{
+          _meta: nil,
           name: "some_name",
           arguments: %{"when" => "not a date"}
         }
       }
 
-      assert {:error, {:invalid_params, %JSV.ValidationError{}}, _} =
+      assert {:error, {:invalid_params, %JSV.ValidationError{}}} =
                Tool.call(tool, bad_req, build_channel())
     end
 
@@ -367,8 +435,8 @@ defmodule GenMCP.Suite.ToolTest do
           },
           jsv_build_opts: [formats: false]
 
-        def call(req, channel, _) do
-          {:result, MCP.call_tool_result(_data: req.params.arguments), channel}
+        def call(req, _channel, _) do
+          {:result, MCP.call_tool_result(_data: req.params.arguments)}
         end
       end
 
@@ -379,12 +447,13 @@ defmodule GenMCP.Suite.ToolTest do
       bad_req = %MCP.CallToolRequest{
         id: 1,
         params: %MCP.CallToolRequestParams{
+          _meta: nil,
           name: "some_name",
           arguments: %{"when" => "not a date"}
         }
       }
 
-      assert {:result, %MCP.CallToolResult{structuredContent: %{"when" => "not a date"}}, _} =
+      assert {:result, %MCP.CallToolResult{structuredContent: %{"when" => "not a date"}}} =
                Tool.call(tool, bad_req, build_channel())
     end
 
@@ -408,8 +477,8 @@ defmodule GenMCP.Suite.ToolTest do
           },
           jsv_build_opts: BuildOptsProvider.default_opts()
 
-        def call(req, channel, _) do
-          {:result, MCP.call_tool_result(_data: req.params.arguments), channel}
+        def call(req, _channel, _) do
+          {:result, MCP.call_tool_result(_data: req.params.arguments)}
         end
       end
 
@@ -421,12 +490,13 @@ defmodule GenMCP.Suite.ToolTest do
       bad_req = %MCP.CallToolRequest{
         id: 1,
         params: %MCP.CallToolRequestParams{
+          _meta: nil,
           name: "some_name",
           arguments: %{"when" => "not a date"}
         }
       }
 
-      assert {:result, %MCP.CallToolResult{structuredContent: %{"when" => "not a date"}}, _} =
+      assert {:result, %MCP.CallToolResult{structuredContent: %{"when" => "not a date"}}} =
                Tool.call(tool, bad_req, build_channel())
     end
 
@@ -463,7 +533,7 @@ defmodule GenMCP.Suite.ToolTest do
              } == UseOutputSchema.output_schema(nil)
 
       # Tool.describe should normalize the schema
-      assert %GenMCP.MCP.Tool{
+      assert %MCP.Tool{
                _meta: nil,
                annotations: nil,
                description: nil,
@@ -475,6 +545,51 @@ defmodule GenMCP.Suite.ToolTest do
                },
                title: nil
              } == Tool.describe(UseOutputSchema)
+    end
+
+    test "cache_control option generates the callback" do
+      defmodule UseCacheControl do
+        use GenMCP.Suite.Tool,
+          behaviour: false,
+          name: "some_name",
+          input_schema: %{},
+          cache_control: {:public, 60_000}
+      end
+
+      # The callback is generated from the option.
+      assert {:public, 60_000} == UseCacheControl.cache_control(nil)
+
+      # And the dispatcher returns it.
+      tool = Tool.expand(UseCacheControl)
+      assert {:public, 60_000} == Tool.cache_control(tool)
+    end
+
+    test "no cache_control option leaves the callback undefined" do
+      defmodule UseNoCacheControl do
+        use GenMCP.Suite.Tool,
+          behaviour: false,
+          name: "some_name",
+          input_schema: %{}
+      end
+
+      # Nothing is generated when the option is absent: the optional callback is
+      # left unimplemented rather than returning a default.
+      tool = Tool.expand(UseNoCacheControl)
+      refute function_exported?(UseNoCacheControl, :cache_control, 1)
+
+      # The dispatcher falls back to the no-cache default.
+      assert MCP.default_cache_control() == Tool.cache_control(tool)
+    end
+
+    test "raise on invalid cache_control" do
+      assert_raise ArgumentError, ~r{cache_control .* must be a \{:public \| :private}, fn ->
+        defmodule InvalidCacheControl do
+          use GenMCP.Suite.Tool,
+            behaviour: false,
+            name: "foo",
+            cache_control: {:public, -1}
+        end
+      end
     end
   end
 
@@ -600,7 +715,7 @@ defmodule GenMCP.Suite.ToolTest do
 
       assert %{"securitySchemes" => [%{"type" => "noauth"}]} == RawMeta.info(:_meta, nil)
 
-      assert %GenMCP.MCP.Tool{
+      assert %MCP.Tool{
                _meta: %{"securitySchemes" => [%{"type" => "noauth"}]},
                annotations: nil,
                description: nil,
@@ -641,8 +756,8 @@ defmodule GenMCP.Suite.ToolTest do
           end
         end
 
-        def call(req, channel, _) do
-          {:result, MCP.call_tool_result(_data: req.params.arguments), channel}
+        def call(req, _channel, _) do
+          {:result, MCP.call_tool_result(_data: req.params.arguments)}
         end
       end
 
@@ -653,12 +768,13 @@ defmodule GenMCP.Suite.ToolTest do
       valid_req = %MCP.CallToolRequest{
         id: 1001,
         params: %MCP.CallToolRequestParams{
+          _meta: nil,
           name: "some_name",
           arguments: %{"foo" => 123}
         }
       }
 
-      assert {:result, %MCP.CallToolResult{structuredContent: %{"foo" => 123}}, _} =
+      assert {:result, %MCP.CallToolResult{structuredContent: %{"foo" => 123}}} =
                Tool.call(tool, valid_req, build_channel())
 
       # invalid request will not hit the call callback if rejected
@@ -666,18 +782,19 @@ defmodule GenMCP.Suite.ToolTest do
       bad_req = %MCP.CallToolRequest{
         id: 1001,
         params: %MCP.CallToolRequestParams{
+          _meta: nil,
           name: "some_name",
           arguments: %{"foo" => "not_an_int"}
         }
       }
 
-      assert {:error, {:invalid_params, :bad_int}, _} =
+      assert {:error, {:invalid_params, :bad_int}} =
                Tool.call(tool, bad_req, build_channel())
 
       assert %{type: :nothing_related} =
                RawInputSchema.input_schema(nil)
 
-      assert %GenMCP.MCP.Tool{
+      assert %MCP.Tool{
                _meta: nil,
                annotations: nil,
                description: nil,
@@ -700,8 +817,8 @@ defmodule GenMCP.Suite.ToolTest do
           nil
         end
 
-        def call(req, channel, _) do
-          {:result, MCP.call_tool_result(_data: req.params.arguments), channel}
+        def call(req, _channel, _) do
+          {:result, MCP.call_tool_result(_data: req.params.arguments)}
         end
       end
 
@@ -712,12 +829,13 @@ defmodule GenMCP.Suite.ToolTest do
       bad_req = %MCP.CallToolRequest{
         id: 1001,
         params: %MCP.CallToolRequestParams{
+          _meta: nil,
           name: "some_name",
           arguments: %{"foo" => "not_an_int"}
         }
       }
 
-      assert {:result, %MCP.CallToolResult{structuredContent: %{"foo" => "not_an_int"}}, _} =
+      assert {:result, %MCP.CallToolResult{structuredContent: %{"foo" => "not_an_int"}}} =
                Tool.call(tool, bad_req, build_channel())
     end
 
@@ -752,7 +870,7 @@ defmodule GenMCP.Suite.ToolTest do
              } == RawOutputSchema.output_schema(nil)
 
       # Tool.describe should normalize the schema
-      assert %GenMCP.MCP.Tool{
+      assert %MCP.Tool{
                _meta: nil,
                annotations: nil,
                description: nil,
@@ -771,7 +889,7 @@ defmodule GenMCP.Suite.ToolTest do
     test "invalid params errors" do
       # Custom message
 
-      assert {200, %{code: -32_602, message: "some string"}} =
+      assert {200, %{code: -32_602, message: "Invalid Parameters: some string"}} =
                check_error({:invalid_params, "some string"})
 
       # JSV Validation

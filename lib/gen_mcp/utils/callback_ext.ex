@@ -58,13 +58,4 @@ defmodule GenMCP.Utils.CallbackExt do
       end
     end
   end
-
-  # adds a tag inside a result tuple,
-  def wrap_result({:ok, v}, tag) do
-    {:ok, {tag, v}}
-  end
-
-  def wrap_result({:error, v}, tag) do
-    {:error, {tag, v}}
-  end
 end
