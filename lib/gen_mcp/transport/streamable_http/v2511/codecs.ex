@@ -28,16 +28,27 @@ defmodule GenMCP.Transport.StreamableHTTP.V2511.RpcCodec do
 
   @impl true
   def render_error(reason, msg_id, _ctx) do
-    {status, payload} = Error.cast_error(reason)
+    {status, payload} = cast_error(reason)
 
     {:send, status, %{"jsonrpc" => "2.0", "id" => msg_id, "error" => payload}}
   end
 
   @impl true
   def render_stream_error(reason, msg_id, _ctx) do
-    {_status, payload} = Error.cast_error(reason)
+    {_status, payload} = cast_error(reason)
 
     {:send, %{"jsonrpc" => "2.0", "id" => msg_id, "error" => payload}}
+  end
+
+  # 2026 answers a missing resource with the standard -32602 (spec 005); 2025
+  # had its own code for it, so it is downgraded like the result payloads are.
+  defp cast_error({:resource_not_found, _uri} = reason) do
+    {status, payload} = Error.cast_error(reason)
+    {status, %{payload | code: -32_002}}
+  end
+
+  defp cast_error(reason) do
+    Error.cast_error(reason)
   end
 end
 

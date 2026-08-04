@@ -7,6 +7,7 @@ defmodule GenMCP.V2511CompatTest do
   alias GenMCP.MCP.V2607, as: MCP
   alias GenMCP.Mux.Channel
   alias GenMCP.SessionController
+  alias GenMCP.Support.ResourceRepoMock
   alias GenMCP.Support.SubscriptionHandlerFullMock
   alias GenMCP.Support.SubscriptionHandlerMock
   alias GenMCP.Support.ToolMock
@@ -15,6 +16,7 @@ defmodule GenMCP.V2511CompatTest do
   setup [:set_mox_global, :verify_on_exit!]
 
   @url "/mcp/v2511"
+  @res_url "/mcp/v2511-res"
   @sub_url "/mcp/v2511-sub"
 
   @latest "2025-11-25"
@@ -555,13 +557,182 @@ defmodule GenMCP.V2511CompatTest do
     end
   end
 
+  # -- Resources --------------------------------------------------------------
+
+  describe "resources" do
+    setup do
+      stub(ResourceRepoMock, :prefix, fn :compat_repo -> "ui://" end)
+      :ok
+    end
+
+    test "the handshake advertises the resources capability" do
+      resp = initialize(url: @res_url)
+
+      assert %{"result" => %{"capabilities" => capabilities}} = resp.body
+      assert Map.has_key?(capabilities, "resources")
+    end
+
+    test "the handshake does not advertise resources/subscribe" do
+      stub(SubscriptionHandlerFullMock, :subscription_capabilities, fn _channel, _arg ->
+        %{resources_updated: true}
+      end)
+
+      resp = initialize(url: "/mcp/v2511-sub-full")
+
+      assert %{"result" => %{"capabilities" => %{"resources" => resources}}} = resp.body
+
+      # On 2025 the flag promises `resources/subscribe`, which the shim answers
+      # with -32601. Its update notifications ride the GET stream instead.
+      refute Map.has_key?(resources, "subscribe")
+    end
+
+    test "resources/list downgrades the 2026 result" do
+      expect(ResourceRepoMock, :list, fn nil, _channel, :compat_repo ->
+        {[%{uri: "ui://app/main", name: "main", mimeType: "text/html"}], nil}
+      end)
+
+      session = open_session(url: @res_url)
+
+      resp =
+        post(%{jsonrpc: "2.0", id: 30, method: "resources/list"},
+          session: session,
+          url: @res_url
+        )
+
+      assert resp.status == 200
+
+      assert %{"result" => result} = resp.body
+      assert [%{"uri" => "ui://app/main", "name" => "main"}] = result["resources"]
+
+      # 2026-only fields must not reach a 2025 client.
+      refute Map.has_key?(result, "resultType")
+      refute Map.has_key?(result, "cacheScope")
+      refute Map.has_key?(result, "ttlMs")
+    end
+
+    test "a resources/list cursor round-trips to the next page" do
+      ResourceRepoMock
+      |> expect(:list, fn nil, _channel, :compat_repo ->
+        {[%{uri: "ui://app/one", name: "one"}], "page-2"}
+      end)
+      |> expect(:list, fn "page-2", _channel, :compat_repo ->
+        {[%{uri: "ui://app/two", name: "two"}], nil}
+      end)
+
+      session = open_session(url: @res_url)
+
+      first =
+        post(%{jsonrpc: "2.0", id: 31, method: "resources/list"},
+          session: session,
+          url: @res_url
+        )
+
+      assert %{"result" => %{"nextCursor" => cursor}} = first.body
+      assert is_binary(cursor)
+
+      second =
+        post(
+          %{jsonrpc: "2.0", id: 32, method: "resources/list", params: %{cursor: cursor}},
+          session: session,
+          url: @res_url
+        )
+
+      assert second.status == 200
+      assert %{"result" => result} = second.body
+      assert [%{"uri" => "ui://app/two"}] = result["resources"]
+      refute Map.has_key?(result, "nextCursor")
+    end
+
+    test "resources/list rejects a non-string cursor" do
+      session = open_session(url: @res_url)
+
+      resp =
+        post(
+          %{jsonrpc: "2.0", id: 32, method: "resources/list", params: %{cursor: 12}},
+          session: session,
+          url: @res_url
+        )
+
+      assert resp.status == 400
+      assert %{"error" => %{"code" => -32_602}} = resp.body
+    end
+
+    test "resources/read returns the contents" do
+      expect(ResourceRepoMock, :read, fn "ui://app/main", _channel, :compat_repo ->
+        {:ok, MCP.read_resource_result(uri: "ui://app/main", text: "<h1>Hi</h1>")}
+      end)
+
+      session = open_session(url: @res_url)
+
+      resp =
+        post(
+          %{jsonrpc: "2.0", id: 33, method: "resources/read", params: %{uri: "ui://app/main"}},
+          session: session,
+          url: @res_url
+        )
+
+      assert resp.status == 200
+      assert %{"result" => result} = resp.body
+      assert [%{"uri" => "ui://app/main", "text" => "<h1>Hi</h1>"}] = result["contents"]
+      refute Map.has_key?(result, "resultType")
+    end
+
+    test "resources/read answers a missing resource with the 2025 error code" do
+      expect(ResourceRepoMock, :read, fn "ui://app/missing", _channel, :compat_repo ->
+        {:error, :not_found}
+      end)
+
+      session = open_session(url: @res_url)
+
+      resp =
+        post(
+          %{jsonrpc: "2.0", id: 36, method: "resources/read", params: %{uri: "ui://app/missing"}},
+          session: session,
+          url: @res_url
+        )
+
+      assert resp.status == 200
+
+      # 2026 retired -32002 for the standard -32602; a 2025 client still gets
+      # the code its own spec defines.
+      assert %{"error" => %{"code" => -32_002, "data" => %{"uri" => "ui://app/missing"}}} =
+               resp.body
+    end
+
+    test "resources/read requires a uri" do
+      session = open_session(url: @res_url)
+
+      resp =
+        post(%{jsonrpc: "2.0", id: 34, method: "resources/read"},
+          session: session,
+          url: @res_url
+        )
+
+      assert resp.status == 400
+      assert %{"error" => %{"code" => -32_602}} = resp.body
+    end
+
+    test "resources/templates/list is served" do
+      session = open_session(url: @res_url)
+
+      resp =
+        post(%{jsonrpc: "2.0", id: 35, method: "resources/templates/list"},
+          session: session,
+          url: @res_url
+        )
+
+      assert resp.status == 200
+      assert %{"result" => %{"resourceTemplates" => []}} = resp.body
+    end
+  end
+
   # -- Rejections -------------------------------------------------------------
 
   describe "unsupported surface" do
     test "answers -32601 for a method outside the compat surface" do
       session = open_session()
 
-      resp = post(%{jsonrpc: "2.0", id: 8, method: "resources/list"}, session: session)
+      resp = post(%{jsonrpc: "2.0", id: 8, method: "prompts/list"}, session: session)
 
       assert resp.status == 404
       assert %{"error" => %{"code" => -32_601}} = resp.body
