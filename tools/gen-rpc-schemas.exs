@@ -480,7 +480,58 @@ defmodule Generator do
       |> Enum.uniq()
       |> Enum.sort()
 
-    %{subscription_notification_methods: subscription_notification_methods}
+    %{
+      subscription_notification_methods: subscription_notification_methods,
+      error_codes: build_error_codes(schema)
+    }
+  end
+
+  # The spec allocates the error codes, so they are collected from the schema
+  # rather than written by hand: a renumbered registry then arrives with the
+  # regenerated entities instead of drifting silently. `GenMCP.Error` reads
+  # every code it answers with from the generated map.
+  defp build_error_codes(schema) do
+    codes =
+      schema
+      |> Map.fetch!(:"$defs")
+      |> Enum.flat_map(fn {name, def_schema} ->
+        case error_code_const(def_schema) do
+          nil -> []
+          code -> [{error_code_name!(name), code}]
+        end
+      end)
+      |> Map.new()
+
+    if map_size(codes) == 0 do
+      raise "found no error code in the schema, the shape build_error_codes/1 looks for has changed"
+    end
+
+    codes
+  end
+
+  # Two shapes carry a code: the JSON-RPC error objects state it directly, and
+  # the MCP error responses state it inside the `error` object they compose
+  # with `allOf`.
+  defp error_code_const(%{properties: %{code: %{const: code}}}) when is_integer(code) do
+    code
+  end
+
+  defp error_code_const(%{properties: %{error: %{allOf: variants}}}) do
+    Enum.find_value(variants, &error_code_const/1)
+  end
+
+  defp error_code_const(_def_schema) do
+    nil
+  end
+
+  defp error_code_name!(name) do
+    name = Atom.to_string(name)
+
+    if !String.ends_with?(name, "Error") do
+      raise "definition #{name} states a JSON-RPC code but is not named as an error"
+    end
+
+    name
   end
 
   defp subscription_notification_method(def_schema) do
@@ -511,8 +562,20 @@ defmodule Generator do
 
       @subscription_notification_methods #{inspect(info.subscription_notification_methods)}
 
+      @error_codes #{inspect(info.error_codes)}
+
       @spec subscription_notification_methods() :: [String.t()]
       def subscription_notification_methods, do: @subscription_notification_methods
+
+      @doc false
+      @spec error_codes() :: %{optional(String.t()) => integer()}
+      def error_codes, do: @error_codes
+
+      @doc false
+      @spec error_code!(String.t()) :: integer()
+      def error_code!(definition_name) do
+        Map.fetch!(@error_codes, definition_name)
+      end
 
       def subscription_notification_method?(method)
 

@@ -22,9 +22,32 @@ defmodule GenMCP.MCP.V2607.Info do
     "notifications/tools/list_changed"
   ]
 
+  @error_codes %{
+    "HeaderMismatchError" => -32_020,
+    "InternalError" => -32_603,
+    "InvalidParamsError" => -32_602,
+    "InvalidRequestError" => -32_600,
+    "MethodNotFoundError" => -32_601,
+    "MissingRequiredClientCapabilityError" => -32_021,
+    "ParseError" => -32_700,
+    "UnsupportedProtocolVersionError" => -32_022
+  }
+
   @spec subscription_notification_methods() :: [String.t()]
   def subscription_notification_methods do
     @subscription_notification_methods
+  end
+
+  @doc false
+  @spec error_codes() :: %{optional(String.t()) => integer()}
+  def error_codes do
+    @error_codes
+  end
+
+  @doc false
+  @spec error_code!(String.t()) :: integer()
+  def error_code!(definition_name) do
+    Map.fetch!(@error_codes, definition_name)
   end
 
   def subscription_notification_method?(method)

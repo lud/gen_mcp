@@ -1,5 +1,3 @@
-# credo:disable-for-this-file Credo.Check.Readability.LargeNumbers
-
 defmodule GenMCP.Error.Compiler do
   # RPC codes https://docs.trafficserver.apache.org/en/latest/developer-guide/jsonrpc/jsonrpc-node-errors.en.html
   # MCP specific http://mcpevals.io/blog/mcp-error-codes
@@ -55,17 +53,24 @@ defmodule GenMCP.Error do
 
   import GenMCP.Error.Compiler
 
-  @rpc_invalid_request -32_600
-  @rpc_invalid_params -32_602
-  @rpc_method_not_found -32_601
-  @rpc_internal_error -32_603
-  @mcp_resource_not_found -32_602
-  @mcp_header_mismatch -32_020
-  @mcp_prompt_not_found @rpc_invalid_params
+  alias GenMCP.MCP.V2607.Info
 
-  # UnsupportedProtocolVersionError in the 2026-07-28 schema (the code was
-  # allocated after https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1442).
-  @mcp_unsupported_protocol_version -32_022
+  # The spec allocates these, so they are read from the codes the generator
+  # collects out of the vendored schema. A renumbered registry then arrives with
+  # the regenerated entities rather than drifting away from a literal written
+  # here, and a definition that disappears fails the build instead of the wire.
+  @rpc_invalid_request Info.error_code!("InvalidRequestError")
+  @rpc_invalid_params Info.error_code!("InvalidParamsError")
+  @rpc_method_not_found Info.error_code!("MethodNotFoundError")
+  @rpc_internal_error Info.error_code!("InternalError")
+  @mcp_header_mismatch Info.error_code!("HeaderMismatchError")
+  @mcp_unsupported_protocol_version Info.error_code!("UnsupportedProtocolVersionError")
+
+  # 2026 answers a missing resource with the standard invalid-params code; the
+  # dedicated -32002 belongs to 2025 and earlier, and the 2025 compatibility
+  # transport is what still puts it on the wire.
+  @mcp_resource_not_found @rpc_invalid_params
+  @mcp_prompt_not_found @rpc_invalid_params
 
   @doc """
   Returns the `{http_status, payload}` for an internal error reason.
