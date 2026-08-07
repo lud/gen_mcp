@@ -109,7 +109,7 @@ defmodule GenMCP.Test.Client do
   # A conforming client mirrors the routing headers from the body on every POST
   # (draft transport spec, Request Metadata): `Mcp-Method` always, `Mcp-Name`
   # for tools/call, resources/read and prompts/get. Pass `mirror_headers: false`
-  # to post without them (negative tests for the -32001 validation).
+  # to post without them (negative tests for the -32020 validation).
   defp routing_headers(%{"method" => method} = raw) do
     name_headers =
       case raw do
