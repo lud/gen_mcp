@@ -69,9 +69,9 @@ defmodule GenMCP.MCP.V2607 do
   alias GenMCP.Suite.Tool
 
   # The default result type. Result builders never accept this as an option; the
-  # "input-required" variant is produced by the MRTR path (spec 007), not here.
+  # "input_required" variant is produced by the MRTR path (spec 007), not here.
   #
-  # TODO(spec 007): the framework sets "input-required" when a handler returns
+  # TODO(spec 007): the framework sets "input_required" when a handler returns
   # `{:input_required, …}` (a separate `InputRequiredResult`), keyed on the
   # request. These builders stay "complete".
   @result_type_complete "complete"
