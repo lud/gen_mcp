@@ -58,13 +58,19 @@ defmodule GenMCP.Transport.StreamableHTTP.V2511 do
 
   ### Served methods
 
-  The surface is what a migrating client needs to keep calling tools, not
+  The surface is what a migrating client needs to keep using the server, not
   feature parity with the 2025 spec:
 
   * `initialize` and `notifications/initialized` — the handshake.
   * `ping`.
   * `tools/list` and `tools/call`, including progress and log notifications on
     the POST's own SSE response.
+  * `resources/list`, `resources/templates/list` and `resources/read` — served
+    whenever the server declares the resources capability, which the handshake
+    downgrades minus its `subscribe` flag: on 2025 that flag would promise
+    `resources/subscribe`, which is not served. This is also what carries the
+    MCP Apps extension: a tool's `_meta.ui.resourceUri` points at a `ui://`
+    resource the host fetches with `resources/read`.
   * `GET` — the server-to-client notification stream, served by the Suite's
     subscription handler (see below).
 
@@ -337,6 +343,30 @@ defmodule GenMCP.Transport.StreamableHTTP.V2511.Impl do
   defp route(conn, "tools/call", msg, conf) do
     with_session(conn, msg, conf, fn session ->
       dispatch(conn, Translate.call_tool_request(msg, session), msg.id, @rpc_codec, conf)
+    end)
+  end
+
+  # The resource methods carry the same names and param shapes in both
+  # versions, so they need no more translation than the tool methods do. A
+  # server that declares the resources capability has to answer them: the
+  # handshake advertises it to the 2025 client, and the MCP Apps extension
+  # fetches its `ui://` bundles through `resources/read`.
+  defp route(conn, "resources/list", msg, conf) do
+    with_session(conn, msg, conf, fn session ->
+      dispatch(conn, Translate.list_resources_request(msg, session), msg.id, @rpc_codec, conf)
+    end)
+  end
+
+  defp route(conn, "resources/templates/list", msg, conf) do
+    with_session(conn, msg, conf, fn session ->
+      request = Translate.list_resource_templates_request(msg, session)
+      dispatch(conn, request, msg.id, @rpc_codec, conf)
+    end)
+  end
+
+  defp route(conn, "resources/read", msg, conf) do
+    with_session(conn, msg, conf, fn session ->
+      dispatch(conn, Translate.read_resource_request(msg, session), msg.id, @rpc_codec, conf)
     end)
   end
 

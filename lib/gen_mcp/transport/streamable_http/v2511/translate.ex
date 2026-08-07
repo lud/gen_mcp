@@ -42,19 +42,51 @@ defmodule GenMCP.Transport.StreamableHTTP.V2511.Translate do
   end
 
   def list_tools_request(msg, session) do
+    paginated_request(MCP.ListToolsRequest, msg, session)
+  end
+
+  def list_resources_request(msg, session) do
+    paginated_request(MCP.ListResourcesRequest, msg, session)
+  end
+
+  def list_resource_templates_request(msg, session) do
+    paginated_request(MCP.ListResourceTemplatesRequest, msg, session)
+  end
+
+  # The three list methods differ only in which request struct they build: 2025
+  # and 2026 agree on the method names and on `params.cursor` being the only
+  # field a client sends.
+  defp paginated_request(module, msg, session) do
     case Map.get(msg.params, "cursor") do
       cursor when is_binary(cursor) or is_nil(cursor) ->
         {:ok,
-         %MCP.ListToolsRequest{
+         struct!(module,
            id: msg.id,
            params: %MCP.PaginatedRequestParams{
              cursor: cursor,
              _meta: request_meta(msg, session)
            }
-         }}
+         )}
 
       _ ->
         {:error, invalid_params("params.cursor must be a string")}
+    end
+  end
+
+  def read_resource_request(msg, session) do
+    case Map.get(msg.params, "uri") do
+      uri when is_binary(uri) ->
+        {:ok,
+         %MCP.ReadResourceRequest{
+           id: msg.id,
+           params: %MCP.ReadResourceRequestParams{
+             uri: uri,
+             _meta: request_meta(msg, session)
+           }
+         }}
+
+      _ ->
+        {:error, invalid_params("params.uri is required and must be a string")}
     end
   end
 
@@ -185,6 +217,25 @@ defmodule GenMCP.Transport.StreamableHTTP.V2511.Translate do
     |> put_present("_meta", downgrade_meta(result._meta))
   end
 
+  def downgrade_result(%MCP.ListResourcesResult{} = result) do
+    # 2026-only on this result: resultType, cacheScope, ttlMs. The Resource
+    # objects are a 2025-compatible subset already, same as Tool above.
+    %{"resources" => result.resources}
+    |> put_present("nextCursor", result.nextCursor)
+    |> put_present("_meta", downgrade_meta(result._meta))
+  end
+
+  def downgrade_result(%MCP.ListResourceTemplatesResult{} = result) do
+    %{"resourceTemplates" => result.resourceTemplates}
+    |> put_present("nextCursor", result.nextCursor)
+    |> put_present("_meta", downgrade_meta(result._meta))
+  end
+
+  def downgrade_result(%MCP.ReadResourceResult{} = result) do
+    # `contents` is always present, even empty, because 2025 requires it.
+    put_present(%{"contents" => result.contents || []}, "_meta", downgrade_meta(result._meta))
+  end
+
   def downgrade_result(%MCP.CallToolResult{} = result) do
     # 2026-only on this result: resultType. `content` is always present, even
     # empty, because 2025 requires it.
@@ -264,7 +315,21 @@ defmodule GenMCP.Transport.StreamableHTTP.V2511.Translate do
     %{"logging" => %{}}
     |> put_capability("tools", caps.tools)
     |> put_capability("prompts", caps.prompts)
-    |> put_capability("resources", caps.resources)
+    |> put_capability("resources", resources_capability(caps.resources))
+  end
+
+  # A subscription handler with `resources_updated: true` puts `subscribe` on
+  # the 2026 capability, where it promises `subscriptions/listen`. In 2025 the
+  # same flag promises `resources/subscribe`, which this shim does not serve —
+  # its update notifications ride the GET stream without a per-resource
+  # subscription. `listChanged` survives: those notifications ride the GET
+  # stream too, which is exactly what the flag promises a 2025 client.
+  defp resources_capability(%{subscribe: _} = sub) do
+    Map.delete(sub, :subscribe)
+  end
+
+  defp resources_capability(other) do
+    other
   end
 
   defp put_capability(acc, _key, nil) do

@@ -1,6 +1,7 @@
 alias GenMCP.Support.ServerMock
 alias GenMCP.Support.ToolMock
 alias GenMCP.TestWeb.Router.Mcp2511
+alias GenMCP.TestWeb.Router.Mcp2511Res
 alias GenMCP.TestWeb.Router.Mcp2511Sub
 alias GenMCP.TestWeb.Router.Mcp2511SubFull
 alias GenMCP.TestWeb.Router.McpMock
@@ -19,6 +20,7 @@ StreamableHTTP.defplug(McpMockOrigins)
 # translation between the 2025 wire format and the 2026 core, so the core has
 # to be the real one.
 V2511.defplug(Mcp2511)
+V2511.defplug(Mcp2511Res)
 V2511.defplug(Mcp2511Sub)
 V2511.defplug(Mcp2511SubFull)
 
@@ -76,6 +78,13 @@ defmodule GenMCP.TestWeb.Router do
         server_name: "Compat Server",
         server_version: "9.9.9",
         tools: [ToolMock]
+
+      # A compat mount that declares resources, for the `resources/*` routes.
+      forward "/v2511-res", Mcp2511Res,
+        server_name: "Compat Server",
+        server_version: "9.9.9",
+        tools: [ToolMock],
+        resources: [{GenMCP.Support.ResourceRepoMock, :compat_repo}]
 
       forward "/v2511-sub", Mcp2511Sub,
         server_name: "Compat Server",
