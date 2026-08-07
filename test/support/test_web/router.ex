@@ -74,6 +74,14 @@ defmodule GenMCP.TestWeb.Router do
         server: ServerMock,
         allowed_origins: ["https://app.example.com"]
 
+      # The 2026 transport on a real `GenMCP.Suite`, for the cases where the
+      # Suite is what is under test across two requests — MRTR, whose
+      # `requestState` is minted by one request and read by the next.
+      forward "/real", McpReal,
+        server_name: "Real Server",
+        server_version: "9.9.9",
+        tools: [{ToolMock, :mrtr}]
+
       forward "/v2511", Mcp2511,
         server_name: "Compat Server",
         server_version: "9.9.9",

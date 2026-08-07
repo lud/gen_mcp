@@ -1754,6 +1754,127 @@ defmodule GenMCP.StreamableHTTPTest do
     end
   end
 
+  # Spec 007. The only exchange in the protocol where one request's answer is
+  # the next request's input, and the only place server state crosses a request
+  # boundary — as an opaque blob the client holds, since the core keeps nothing.
+  # These run against `/mcp/real`, a mount on the real `GenMCP.Suite`: the mock
+  # server used everywhere else in this file answers `handle_request/3` itself
+  # and never mints a `requestState`.
+  describe "multi round-trip tool calls (spec 007)" do
+    @mrtr_url "/mcp/real"
+    @mrtr_requests %{"elicit-1" => %{"method" => "elicitation/create"}}
+    @mrtr_answers %{"elicit-1" => %{"action" => "accept"}}
+
+    defp stub_mrtr_tool do
+      ToolMock
+      |> stub(:info, fn
+        :name, :mrtr -> "TransferTool"
+        _, :mrtr -> nil
+      end)
+      |> stub(:input_schema, fn :mrtr -> %{type: :object} end)
+      |> stub(:output_schema, fn :mrtr -> nil end)
+    end
+
+    defp call_transfer_tool(id, params) do
+      post_message(client(url: @mrtr_url), %{
+        jsonrpc: "2.0",
+        id: id,
+        method: "tools/call",
+        params: Map.merge(%{name: "TransferTool", arguments: %{"to" => "alice"}}, params)
+      })
+    end
+
+    test "a tool asks for input, and the retry resumes it with the state it kept" do
+      client_state = %{step: :await_confirmation, pending: 100}
+
+      stub_mrtr_tool()
+
+      ToolMock
+      |> expect(:call, fn req, _channel, :mrtr ->
+        # Nothing kept yet on the first call.
+        assert %MCP.CallToolRequest{params: %{requestState: nil}} = req
+
+        {:input_required, @mrtr_requests, client_state}
+      end)
+      |> expect(:call, fn req, _channel, :mrtr ->
+        # The Suite decrypted the blob back to the term, so the tool resumes
+        # from its own state and never sees the ciphertext. The answers arrive
+        # as `ElicitResult` structs: they went through the schema on the way in,
+        # unlike in a Suite-level test where they are handed over as raw maps.
+        assert %MCP.CallToolRequest{
+                 params: %{
+                   requestState: ^client_state,
+                   inputResponses: %{"elicit-1" => %MCP.ElicitResult{action: :accept}}
+                 }
+               } = req
+
+        {:result, MCP.call_tool_result(text: "transferred 100 to alice")}
+      end)
+
+      asked = call_transfer_tool(1, %{})
+
+      assert asked.status == 200
+
+      assert %{
+               "id" => 1,
+               "result" => %{
+                 "resultType" => "input_required",
+                 "inputRequests" => @mrtr_requests,
+                 "requestState" => request_state
+               }
+             } = asked.body
+
+      # The client holds the state, so it is opaque: sealed, and carrying none
+      # of the term it stands for.
+      assert is_binary(request_state)
+      refute request_state =~ "await_confirmation"
+
+      resumed =
+        call_transfer_tool(2, %{requestState: request_state, inputResponses: @mrtr_answers})
+
+      assert resumed.status == 200
+
+      assert %{
+               "id" => 2,
+               "result" => %{
+                 "resultType" => "complete",
+                 "content" => [%{"type" => "text", "text" => "transferred 100 to alice"}]
+               }
+             } = resumed.body
+    end
+
+    test "a requestState replayed against different arguments is refused" do
+      stub_mrtr_tool()
+
+      expect(ToolMock, :call, fn _req, _channel, :mrtr ->
+        {:input_required, @mrtr_requests, %{pending: 100}}
+      end)
+
+      assert %{"result" => %{"requestState" => request_state}} = call_transfer_tool(1, %{}).body
+
+      # The blob is sealed under {tool, arguments}, so it buys a retry of the
+      # call that minted it and nothing else. `verify_on_exit!` is what asserts
+      # the tool is never invoked a second time.
+      refused =
+        post_message(client(url: @mrtr_url), %{
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: %{
+            name: "TransferTool",
+            arguments: %{"to" => "mallory"},
+            requestState: request_state,
+            inputResponses: @mrtr_answers
+          }
+        })
+
+      assert refused.status == 200
+
+      assert %{"error" => %{"code" => -32_602, "message" => "Invalid request state"}} =
+               refused.body
+    end
+  end
+
   describe "request body size ceiling (spec 007)" do
     # THIS TEST DELIBERATELY EXERCISES PLUG, NOT GEN_MCP CODE.
     #
