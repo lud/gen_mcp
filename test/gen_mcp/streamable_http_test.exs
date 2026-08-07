@@ -116,7 +116,7 @@ defmodule GenMCP.StreamableHTTPTest do
       # Header/body agreement is a transport-layer concern, so individual
       # GenMCP implementations do not need to re-check it. Per the draft spec's
       # Server Validation section, the transport MUST answer 400 with a
-      # `HeaderMismatch` (-32001) JSON-RPC error, and the server behaviour is
+      # `HeaderMismatch` (-32020) JSON-RPC error, and the server behaviour is
       # never invoked.
       #
       # TODO(tighten): also assert the error message names the mismatching
@@ -128,14 +128,14 @@ defmodule GenMCP.StreamableHTTPTest do
           id: 1,
           method: "tools/list",
           # Otherwise-valid _meta; only the body protocol version disagrees with
-          # the header, so -32001 can only be the mismatch.
+          # the header, so -32020 can only be the mismatch.
           params: %{
             _meta: request_meta(%{"io.modelcontextprotocol/protocolVersion" => "1999-01-01"})
           }
         })
         |> expect_status(400)
 
-      assert %{"error" => %{"code" => -32_001}} = resp.body
+      assert %{"error" => %{"code" => -32_020}} = resp.body
       Mox.verify!(ServerMock)
     end
 
@@ -147,7 +147,7 @@ defmodule GenMCP.StreamableHTTPTest do
         |> post_invalid_message(%{jsonrpc: "2.0", id: 1, method: "tools/list", params: %{}})
         |> expect_status(400)
 
-      assert %{"error" => %{"code" => -32_001}} = resp.body
+      assert %{"error" => %{"code" => -32_020}} = resp.body
       Mox.verify!(ServerMock)
     end
 
@@ -155,8 +155,8 @@ defmodule GenMCP.StreamableHTTPTest do
       # The header is well-formed AND agrees with the body `_meta`, but names a
       # version this server does not implement. This is the case the old code
       # got wrong: it fell through to the catch-all and reported a *missing*
-      # header. It is neither missing (-32001) nor a header/body mismatch
-      # (-32001) — it is an `UnsupportedProtocolVersionError` (-32004, HTTP 400)
+      # header. It is neither missing (-32020) nor a header/body mismatch
+      # (-32020) — it is an `UnsupportedProtocolVersionError` (-32022, HTTP 400)
       # whose `data` lists the versions the server supports, per the draft
       # Streamable HTTP spec. The server behaviour is never invoked.
       unsupported = "2025-06-18"
@@ -175,7 +175,7 @@ defmodule GenMCP.StreamableHTTPTest do
 
       assert %{
                "error" => %{
-                 "code" => -32_004,
+                 "code" => -32_022,
                  "message" => message,
                  "data" => %{
                    "requested" => ^unsupported,
@@ -320,7 +320,7 @@ defmodule GenMCP.StreamableHTTPTest do
   describe "routing headers (Mcp-Method / Mcp-Name)" do
     # The transport validates the REQUIRED routing headers against the body
     # (draft transport spec, Request Metadata → Server Validation): missing or
-    # mismatching headers are rejected with 400 + -32001 (HeaderMismatch) and
+    # mismatching headers are rejected with 400 + -32020 (HeaderMismatch) and
     # the server behaviour is never invoked. The test client mirrors them on
     # every conforming POST; `mirror_headers: false` opts out.
 
@@ -333,7 +333,7 @@ defmodule GenMCP.StreamableHTTPTest do
         )
         |> expect_status(400)
 
-      assert %{"error" => %{"code" => -32_001}, "id" => 1} = resp.body
+      assert %{"error" => %{"code" => -32_020}, "id" => 1} = resp.body
       Mox.verify!(ServerMock)
     end
 
@@ -346,7 +346,7 @@ defmodule GenMCP.StreamableHTTPTest do
         )
         |> expect_status(400)
 
-      assert %{"error" => %{"code" => -32_001}, "id" => 1} = resp.body
+      assert %{"error" => %{"code" => -32_020}, "id" => 1} = resp.body
       Mox.verify!(ServerMock)
     end
 
@@ -359,7 +359,7 @@ defmodule GenMCP.StreamableHTTPTest do
         )
         |> expect_status(400)
 
-      assert %{"error" => %{"code" => -32_001}, "id" => nil} = resp.body
+      assert %{"error" => %{"code" => -32_020}, "id" => nil} = resp.body
       Mox.verify!(ServerMock)
     end
 
@@ -377,7 +377,7 @@ defmodule GenMCP.StreamableHTTPTest do
         )
         |> expect_status(400)
 
-      assert %{"error" => %{"code" => -32_001}, "id" => 1} = resp.body
+      assert %{"error" => %{"code" => -32_020}, "id" => 1} = resp.body
       Mox.verify!(ServerMock)
     end
 
@@ -395,7 +395,7 @@ defmodule GenMCP.StreamableHTTPTest do
         )
         |> expect_status(400)
 
-      assert %{"error" => %{"code" => -32_001}, "id" => 1} = resp.body
+      assert %{"error" => %{"code" => -32_020}, "id" => 1} = resp.body
       Mox.verify!(ServerMock)
     end
 

@@ -377,7 +377,7 @@ defmodule GenMCP do
 
   This is the allowlist the transport checks an incoming `MCP-Protocol-Version`
   against. A request carrying a version not in this list is rejected with an
-  `UnsupportedProtocolVersionError` (`-32004`) whose `data.supported` is this
+  `UnsupportedProtocolVersionError` (`-32022`) whose `data.supported` is this
   list.
   """
   def supported_protocol_versions do

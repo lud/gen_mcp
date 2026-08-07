@@ -60,11 +60,12 @@ defmodule GenMCP.Error do
   @rpc_method_not_found -32_601
   @rpc_internal_error -32_603
   @mcp_resource_not_found -32_602
-  @mcp_header_mismatch -32_001
+  @mcp_header_mismatch -32_020
   @mcp_prompt_not_found @rpc_invalid_params
 
-  # https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1442
-  @mcp_unsupported_protocol_version -32_004
+  # UnsupportedProtocolVersionError in the 2026-07-28 schema (the code was
+  # allocated after https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1442).
+  @mcp_unsupported_protocol_version -32_022
 
   @doc """
   Returns the `{http_status, payload}` for an internal error reason.
