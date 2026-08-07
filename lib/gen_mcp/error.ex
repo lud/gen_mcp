@@ -136,7 +136,7 @@ defmodule GenMCP.Error do
     }
   end
 
-  defcasterror :bad_rpc_version, 1, 400 do
+  defcasterror :bad_rpc_version, @rpc_invalid_request, 400 do
     %{
       message: "Invalid RPC version, only 2.0 is accepted"
     }

@@ -761,6 +761,21 @@ defmodule GenMCP.V2511CompatTest do
       assert %{"error" => %{"message" => "Session not found or expired"}} = resp.body
     end
 
+    test "answers -32600 for a jsonrpc version other than 2.0" do
+      # Same answer as the 2026 transport gives: a wrong `jsonrpc` member is an
+      # Invalid Request, and both protocol versions inherit that from JSON-RPC.
+      resp = post(%{jsonrpc: "1.0", id: 23, method: "tools/list"}, session: open_session())
+
+      assert resp.status == 400
+
+      assert %{
+               "error" => %{
+                 "code" => -32_600,
+                 "message" => "Invalid RPC version, only 2.0 is accepted"
+               }
+             } = resp.body
+    end
+
     test "answers ping without touching the session" do
       assert %{"id" => 9, "result" => %{}} = post(%{jsonrpc: "2.0", id: 9, method: "ping"}).body
     end

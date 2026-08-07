@@ -521,6 +521,24 @@ defmodule GenMCP.StreamableHTTPTest do
                |> body()
     end
 
+    test "sending a jsonrpc version other than 2.0" do
+      # JSON-RPC 2.0 calls a wrong `jsonrpc` member an Invalid Request, so this
+      # answers -32600 like a body that is not JSON-RPC at all. The message is
+      # what names the version as the problem.
+      assert %{
+               "error" => %{
+                 "code" => -32_600,
+                 "message" => "Invalid RPC version, only 2.0 is accepted"
+               },
+               "id" => nil,
+               "jsonrpc" => "2.0"
+             } =
+               client(url: @mcp_url)
+               |> Req.post!(json: %{jsonrpc: "1.0", id: 1, method: "tools/list"})
+               |> expect_status(400)
+               |> body()
+    end
+
     test "send invalid request params" do
       assert %{
                "id" => 123,
