@@ -74,7 +74,10 @@ defmodule GenMCP.Transport.StreamableHTTP.V2511 do
   * `GET` — the server-to-client notification stream, served by the Suite's
     subscription handler (see below).
 
-  Any other method is answered with a JSON-RPC `-32601`.
+  Any other method is answered with a JSON-RPC `-32601` in a `200` response. The
+  `404` that a 2026 client gets for an unknown method is not used here: in 2025
+  that status means the session is gone, so a client would answer it by starting
+  a new one instead of reading the error.
 
   ### Sessions
 
@@ -370,8 +373,20 @@ defmodule GenMCP.Transport.StreamableHTTP.V2511.Impl do
     end)
   end
 
-  defp route(conn, method, msg, _conf) do
-    send_error(conn, {:unknown_method, method}, msg.id)
+  # `-32601` in a `200`, never the `404` the 2026 transport answers for a method
+  # outside the protocol. On this transport `404` is the 2025 signal that the
+  # session is gone and the client must run `initialize` again, so answering a
+  # refused method with it turns a capability probe into a dropped connection —
+  # the client cannot tell the two apart.
+  #
+  # The session is still looked up first, unlike for `ping` and
+  # `logging/setLevel`: it is what keeps `404` meaning exactly one thing, so a
+  # client whose session died while probing a method learns to start a new one
+  # rather than reading the refusal and carrying on.
+  defp route(conn, method, msg, conf) do
+    with_session(conn, msg, conf, fn _session ->
+      send_error(conn, {:unsupported_method, method}, msg.id)
+    end)
   end
 
   # -- initialize -------------------------------------------------------------

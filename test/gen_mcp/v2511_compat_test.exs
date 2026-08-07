@@ -734,8 +734,31 @@ defmodule GenMCP.V2511CompatTest do
 
       resp = post(%{jsonrpc: "2.0", id: 8, method: "prompts/list"}, session: session)
 
-      assert resp.status == 404
+      # 200, not the 404 the 2026 transport answers for an unknown method: a
+      # 2025 client reads 404 as "session gone, run initialize again", so a
+      # refused method must not borrow that status.
+      assert resp.status == 200
+
+      assert %{"error" => %{"code" => -32_601, "data" => %{"method" => "prompts/list"}}} =
+               resp.body
+    end
+
+    test "answers -32601 for a method outside the protocol entirely" do
+      session = open_session()
+
+      resp = post(%{jsonrpc: "2.0", id: 21, method: "not/a/method"}, session: session)
+
+      assert resp.status == 200
       assert %{"error" => %{"code" => -32_601}} = resp.body
+    end
+
+    test "a dead session is still the only thing answered 404" do
+      # The counterpart to the two tests above: 404 keeps meaning what the 2025
+      # spec says it means, so the client can still tell the cases apart.
+      resp = post(%{jsonrpc: "2.0", id: 22, method: "prompts/list"}, session: "not-a-session")
+
+      assert resp.status == 404
+      assert %{"error" => %{"message" => "Session not found or expired"}} = resp.body
     end
 
     test "answers ping without touching the session" do

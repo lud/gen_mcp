@@ -211,6 +211,10 @@ defmodule GenMCP.Error do
   # dispatched, so this is an application-level JSON-RPC error in a 200 response
   # — distinct from {:unknown_method, _}, a method outside the protocol entirely
   # that the transport rejects with 404 before dispatch.
+  #
+  # The 2025 compatibility transport answers every method it does not route this
+  # way, dispatched or not: there, 404 means the session is gone and the client
+  # must run `initialize` again.
   defcasterror {:unsupported_method, method} when is_binary(method), @rpc_method_not_found, 200 do
     %{
       data: %{method: method},
