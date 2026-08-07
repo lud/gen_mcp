@@ -540,7 +540,7 @@ defmodule GenMCP.Suite do
      %MCP.InputRequiredResult{
        inputRequests: input_requests,
        requestState: encode_request_state(request_state, tool, req, channel),
-       resultType: "input-required"
+       resultType: "input_required"
      }}
   end
 

@@ -626,10 +626,10 @@ defmodule GenMCP.SuiteTest do
 
       # The tool's convenience tuple becomes a plain result: `inputRequests`
       # passed through untouched, `client_state` encrypted into the opaque
-      # `requestState`, and `resultType` the only place "input-required" is set.
+      # `requestState`, and `resultType` the only place "input_required" is set.
       assert {:result,
               %MCP.InputRequiredResult{
-                resultType: "input-required",
+                resultType: "input_required",
                 inputRequests: @mrtr_requests,
                 requestState: request_state
               }} = Suite.handle_request(req, build_channel(), state)
