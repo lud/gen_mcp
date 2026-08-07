@@ -12,6 +12,7 @@ defmodule GenMCP.V2511CompatTest do
   alias GenMCP.Support.SubscriptionHandlerMock
   alias GenMCP.Support.ToolMock
   alias GenMCP.TestWeb.Endpoint
+  alias GenMCP.Token
 
   setup [:set_mox_global, :verify_on_exit!]
 
@@ -80,6 +81,14 @@ defmodule GenMCP.V2511CompatTest do
   # to get past the handshake.
   defp open_session(opts \\ []) do
     opts |> initialize() |> session_id()
+  end
+
+  defp list_resources(session, cursor, id) do
+    post(
+      %{jsonrpc: "2.0", id: id, method: "resources/list", params: %{cursor: cursor}},
+      session: session,
+      url: @res_url
+    )
   end
 
   # A tool that answers `text` and does nothing else.
@@ -655,6 +664,54 @@ defmodule GenMCP.V2511CompatTest do
 
       assert resp.status == 400
       assert %{"error" => %{"code" => -32_602}} = resp.body
+    end
+
+    # The three tests below cover the cursor the transport hands through
+    # untouched. A non-string is caught by `Translate` before dispatch (above,
+    # 400); these three are sealed-token failures the Suite raises after
+    # dispatch, so they carry the 200 an application-level error gets.
+
+    test "resources/list rejects a cursor the client made up" do
+      session = open_session(url: @res_url)
+
+      resp = list_resources(session, "made-up-token-from-client", 37)
+
+      assert resp.status == 200
+
+      assert %{"error" => %{"code" => -32_602, "message" => "Invalid pagination cursor"}} =
+               resp.body
+    end
+
+    test "resources/list rejects a cursor minted for another listing" do
+      session = open_session(url: @res_url)
+
+      # Cursors are sealed under `{:cursor, method}`, so one handed out by
+      # `tools/list` cannot be replayed here to walk a different repository.
+      cursor = Token.encrypt(Endpoint, {:cursor, "tools/list"}, {0, nil})
+
+      resp = list_resources(session, cursor, 38)
+
+      assert resp.status == 200
+
+      assert %{"error" => %{"code" => -32_602, "message" => "Invalid pagination cursor"}} =
+               resp.body
+    end
+
+    test "resources/list rejects an expired cursor" do
+      session = open_session(url: @res_url)
+
+      cursor =
+        Token.encrypt(Endpoint, {:cursor, "resources/list"}, {0, nil},
+          max_age: 60,
+          signed_at: System.system_time(:second) - 3600
+        )
+
+      resp = list_resources(session, cursor, 39)
+
+      assert resp.status == 200
+
+      assert %{"error" => %{"code" => -32_602, "message" => "Expired pagination cursor"}} =
+               resp.body
     end
 
     test "resources/read returns the contents" do

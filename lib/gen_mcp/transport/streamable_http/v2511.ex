@@ -65,12 +65,12 @@ defmodule GenMCP.Transport.StreamableHTTP.V2511 do
   * `ping`.
   * `tools/list` and `tools/call`, including progress and log notifications on
     the POST's own SSE response.
-  * `resources/list`, `resources/templates/list` and `resources/read` — served
-    whenever the server declares the resources capability, which the handshake
-    downgrades minus its `subscribe` flag: on 2025 that flag would promise
-    `resources/subscribe`, which is not served. This is also what carries the
-    MCP Apps extension: a tool's `_meta.ui.resourceUri` points at a `ui://`
-    resource the host fetches with `resources/read`.
+  * `resources/list`, `resources/templates/list` and `resources/read`. A mount
+    with no `:resources` answers an empty listing. The handshake advertises the
+    downgraded resources capability carrying `listChanged`, the flag whose
+    notifications the `GET` stream below delivers. These methods are also what
+    carries the MCP Apps extension: a tool's `_meta.ui.resourceUri` points at a
+    `ui://` resource the host fetches with `resources/read`.
   * `GET` — the server-to-client notification stream, served by the Suite's
     subscription handler (see below).
 
@@ -350,9 +350,9 @@ defmodule GenMCP.Transport.StreamableHTTP.V2511.Impl do
   end
 
   # The resource methods carry the same names and param shapes in both
-  # versions, so they need no more translation than the tool methods do. A
-  # server that declares the resources capability has to answer them: the
-  # handshake advertises it to the 2025 client, and the MCP Apps extension
+  # versions, so they need no more translation than the tool methods do. They
+  # are routed for every mount, and the Suite answers from whatever `:resources`
+  # holds — an empty listing when it holds nothing. The MCP Apps extension
   # fetches its `ui://` bundles through `resources/read`.
   defp route(conn, "resources/list", msg, conf) do
     with_session(conn, msg, conf, fn session ->
