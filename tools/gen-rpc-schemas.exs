@@ -325,7 +325,13 @@ defmodule Codegen do
   end
 
   defp inspect_opts(overrides \\ []) do
-    overrides ++ [pretty: true, custom_options: [sort_maps: true]]
+    overrides ++
+      [
+        pretty: true,
+        custom_options: [sort_maps: true],
+        limit: :infinity,
+        printable_limit: :infinity
+      ]
   end
 end
 
