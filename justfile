@@ -2,7 +2,7 @@ run X='0':
   GEN_MCP_NODE_ID=AA0{{X}} PORT=500{{X}} iex --name genmcpdev-{{ X }}@127.0.0.1 -S mix run
 
 _mix_deps:
-  mix deps.get
+  out=$(mix deps.get) && echo "all dependencies fetched" || { echo "$out"; exit 1; }
 
 gen-entities:
   rm -vf lib/gen_mcp/entities.ex
