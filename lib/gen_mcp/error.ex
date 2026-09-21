@@ -143,16 +143,20 @@ defmodule GenMCP.Error do
   end
 
   defcasterror {:invalid_body, %JSV.ValidationError{} = e}, @rpc_invalid_params, 400 do
+    normalized = JSV.normalize_error(e, min_error_level: JSV.ErrorFormatter.level_cause())
+
     %{
-      data: JSV.normalize_error(e),
-      message: "Invalid Parameters"
+      data: normalized,
+      message: invalid_params_message(normalized)
     }
   end
 
   defcasterror {:invalid_params, %JSV.ValidationError{} = e}, @rpc_invalid_params, 200 do
+    normalized = JSV.normalize_error(e, min_error_level: JSV.ErrorFormatter.level_cause())
+
     %{
-      data: JSV.normalize_error(e),
-      message: "Invalid Parameters"
+      data: normalized,
+      message: invalid_params_message(normalized)
     }
   end
 
@@ -263,6 +267,47 @@ defmodule GenMCP.Error do
     %{
       message: message
     }
+  end
+
+  # -- invalid parameters -----------------------------------------------------
+
+  # Clients routinely render `message` alone, so a bare "Invalid Parameters"
+  # tells the caller nothing it can act on while the reason sits unread under
+  # `data`. JSV's cause-level normalization drops findings that only restate the
+  # path down to a deeper error; the actionable findings left here are folded
+  # into the message. `data` still carries the whole normalized error.
+
+  @summarized_findings 3
+
+  defp invalid_params_message(%{details: units}) do
+    case findings(units) do
+      [] -> "Invalid Parameters"
+      findings -> "Invalid Parameters: " <> join_findings(findings)
+    end
+  end
+
+  defp findings(units) do
+    units |> Enum.flat_map(&unit_findings/1) |> Enum.uniq()
+  end
+
+  defp unit_findings(%{errors: errors} = unit) do
+    for %{message: message} <- errors do
+      case Map.get(unit, :instanceLocation, "#") do
+        "#" -> message
+        location -> "at #{location}: #{message}"
+      end
+    end
+  end
+
+  defp unit_findings(_unit) do
+    []
+  end
+
+  defp join_findings(findings) do
+    case Enum.split(findings, @summarized_findings) do
+      {shown, []} -> Enum.join(shown, "; ")
+      {shown, rest} -> Enum.join(shown, "; ") <> " (and #{length(rest)} more)"
+    end
   end
 
   # -- catchall ---------------------------------------------------------------

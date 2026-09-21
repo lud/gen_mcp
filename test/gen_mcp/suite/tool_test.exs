@@ -909,7 +909,7 @@ defmodule GenMCP.Suite.ToolTest do
                     }
                   ]
                 },
-                message: "Invalid Parameters"
+                message: "Invalid Parameters: value is not of type integer"
               }} = check_error({:invalid_params, jsv_err})
 
       # Any term

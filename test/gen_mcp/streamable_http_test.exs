@@ -546,7 +546,7 @@ defmodule GenMCP.StreamableHTTPTest do
                "error" => %{
                  "code" => -32_602,
                  "data" => %{"details" => _, "valid" => false},
-                 "message" => "Invalid Parameters"
+                 "message" => "Invalid Parameters: at #/params: property 'name' is required"
                }
              } =
                post_invalid_message(client(url: @mcp_url), %{

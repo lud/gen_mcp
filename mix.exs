@@ -46,7 +46,7 @@ defmodule GenMCP.MixProject do
       # App
       {:phoenix, ">= 1.7.0"},
       {:plug, "~> 1.14"},
-      {:jsv, "~> 0.21"},
+      {:jsv, ">= 0.23.1"},
       {:abnf_parsec, "~> 2.0"},
       {:texture, ">= 0.3.2"},
       {:nimble_options, "~> 1.1"},
