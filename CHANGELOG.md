@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.0] - 2026-09-25
+
+### 🚀 Features
+
+- Emit compile-time schema warnings from `use GenMCP.Suite.Tool` (_lud_)
+
 ## [2.1.0] - 2026-09-21
 
 ### 🚀 Features
