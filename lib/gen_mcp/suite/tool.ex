@@ -278,6 +278,13 @@ defmodule GenMCP.Suite.Tool do
   `use GenMCP.Suite.Tool` generates this callback from the `:input_schema`
   option, and from the same option also generates `c:validate_request/2` that
   enforces the schema on each call.
+
+  Implement it by hand when the schema depends on `arg`. The hand-written
+  callback replaces the `:input_schema` option, and `use GenMCP.Suite.Tool`
+  raises at compile time when both are given. The Suite advertises the returned
+  schema to clients, and the tool enforces it: implement `c:validate_request/2`,
+  for example with `JSV.build!/2` and `JSV.validate/2`, or check the arguments
+  in `c:call/3`.
   """
   @callback input_schema(arg) :: schema
 
@@ -299,6 +306,9 @@ defmodule GenMCP.Suite.Tool do
           properties: %{files: %{type: :array, items: %{type: :string}}}
         }
       end
+
+  The hand-written callback replaces the `:output_schema` option, and `use
+  GenMCP.Suite.Tool` raises at compile time when both are given.
   """
   @callback output_schema(arg) :: nil | schema
 
@@ -424,7 +434,8 @@ defmodule GenMCP.Suite.Tool do
   @callback handle_close(Channel.t(), state, arg) :: term
 
   @doc """
-  Returns the cache hint `{scope, ttl_ms}` for the tool, as `{:public | :private,
+  Returns the cache hint `{scope, ttl_ms}` for the tool, as `{:public |
+  :private,
   milliseconds}`.
 
   Optional. When implemented, the value is used as the tool's cache hint;
@@ -446,6 +457,9 @@ defmodule GenMCP.Suite.Tool do
       def cache_control(_arg) do
         {:public, :timer.minutes(5)}
       end
+
+  The hand-written callback replaces the `:cache_control` option, and `use
+  GenMCP.Suite.Tool` raises at compile time when both are given.
   """
   @callback cache_control(arg) :: {:public | :private, non_neg_integer()}
 
@@ -460,103 +474,151 @@ defmodule GenMCP.Suite.Tool do
 
   defmacro __using__(opts) do
     quote do
-      @gen_mcp_suite_too_opts unquote(Macro.escape(opts))
+      @gen_mcp_suite_tool_using_line unquote(__CALLER__.line)
+      @gen_mcp_suite_tool_quoted_opts unquote(Macro.escape(opts))
       @before_compile unquote(__MODULE__)
     end
   end
 
+  # Options are kept quoted until the end of the module body so aliases to
+  # modules defined after `use` (as with `defschema`) resolve in the options.
   defmacro __before_compile__(env) do
-    opts = Module.get_attribute(env.module, :gen_mcp_suite_too_opts)
+    quoted_opts = Module.get_attribute(env.module, :gen_mcp_suite_tool_quoted_opts)
+    gen_validate_request? = not Module.defines?(env.module, {:validate_request, 2})
+
+    check_opts_def_conflicts(env.module, quoted_opts)
 
     quote do
+      @gen_mcp_suite_tool_opts unquote(quoted_opts)
+
       # The behaviour option is only used to remove warnings from tests, to test
       # incomplete tool implementation.
-      case unquote(opts[:behaviour]) do
+      case Keyword.get(@gen_mcp_suite_tool_opts, :behaviour) do
         false -> :ok
         _ -> @behaviour unquote(__MODULE__)
       end
 
-      unquote(def_infos(opts))
+      # Set stacktrace for JSV warnings to report the `use Tool` line. This must
+      # be changed if `__using__` is not the single way to trigger
+      # __before_compile__ anymore.
+      @gen_mcp_suite_tool_warnings_stacktrace Macro.Env.stacktrace(%{
+                                                __ENV__
+                                                | line: @gen_mcp_suite_tool_using_line
+                                              })
 
-      unquote(
-        def_validator(
-          opts[:input_schema],
-          opts[:jsv_build_opts],
-          _validate_request? = not Module.defines?(env.module, {:validate_request, 2})
-        )
-      )
+      @gen_mcp_suite_tool_jsv_build_opts GenMCP.Suite.Tool.__jsv_build_opts__(
+                                           @gen_mcp_suite_tool_opts,
+                                           @gen_mcp_suite_tool_warnings_stacktrace
+                                         )
 
-      unquote(def_output_schema(opts[:output_schema]))
-      unquote(def_cache_control(opts[:cache_control]))
+      unquote(warn_unused_jsv_build_opts(quoted_opts, gen_validate_request?))
+
+      unquote(def_infos())
+      unquote(def_validator(quoted_opts[:input_schema], gen_validate_request?))
+      unquote(def_output_schema(quoted_opts[:output_schema]))
+      unquote(def_cache_control(quoted_opts[:cache_control]))
+
+      def __gen_mcp__(_) do
+        :error
+      end
     end
   end
 
-  defp def_infos(infos) do
-    quote bind_quoted: binding() do
+  defp check_opts_def_conflicts(module, quoted_opts) do
+    Enum.each([:input_schema, :output_schema, :cache_control], fn opt ->
+      if Keyword.has_key?(quoted_opts, opt) and Module.defines?(module, {opt, 1}) do
+        raise ArgumentError,
+              "option #{inspect(opt)} conflicts with def #{opt}/1 in #{inspect(module)}"
+      end
+    end)
+  end
+
+  defp warn_unused_jsv_build_opts(quoted_opts, gen_validate_request?) do
+    input_built? = Keyword.has_key?(quoted_opts, :input_schema) and gen_validate_request?
+
+    if Keyword.has_key?(quoted_opts, :jsv_build_opts) and not input_built? do
+      quote do
+        IO.warn(":jsv_build_opts is unused", @gen_mcp_suite_tool_warnings_stacktrace)
+      end
+    end
+  end
+
+  @doc false
+  def __jsv_build_opts__(opts, stacktrace) do
+    jsv_build_opts = Keyword.get(opts, :jsv_build_opts) || []
+    __validate_use__(:jsv_build_opts, jsv_build_opts)
+    Keyword.merge([formats: true, atoms: true, stacktrace: stacktrace], jsv_build_opts)
+  end
+
+  @doc false
+  def __infos__(opts) do
+    Map.new([:name, :title, :description, :annotations, :_meta], fn k ->
+      v = Keyword.get(opts, k)
+
+      if Keyword.has_key?(opts, k) do
+        __validate_use__(k, v)
+      end
+
+      {k, v}
+    end)
+  end
+
+  defp def_infos do
+    quote do
+      @gen_mcp_suite_tool_infos GenMCP.Suite.Tool.__infos__(@gen_mcp_suite_tool_opts)
+
       @impl true
-
-      keys = [:name, :title, :description, :annotations, :_meta]
-
-      values =
-        Enum.flat_map(keys, fn k ->
-          case Keyword.fetch(infos, k) do
-            {:ok, v} ->
-              GenMCP.Suite.Tool.__validate_use__(k, v)
-              [{k, v}]
-
-            :error ->
-              []
-          end
-        end)
-
-      values =
-        if length(values) < length(keys) do
-          values ++ [:catchall]
-        else
-          values
-        end
-
-      Enum.each(values, fn
-        {k, v} ->
-          def info(unquote(k), _arg) do
-            unquote(Macro.escape(v))
-          end
-
-        :catchall ->
-          def info(_key, _arg) do
-            nil
-          end
-      end)
+      def info(key, _arg) do
+        Map.get(@gen_mcp_suite_tool_infos, key)
+      end
     end
   end
 
   # No input schema defined, maybe it will be implemented by hand, so we do not
   # raise here.
-  defp def_validator(nil, _, _) do
+  defp def_validator(nil, _) do
     []
   end
 
-  defp def_validator(input_opt, _jsv_build_opts, false = _validate_request?) do
-    quote bind_quoted: [input_opt: input_opt] do
+  defp def_validator(_quoted, false = _gen_validate_request?) do
+    quote unquote: false do
+      input_schema = Keyword.fetch!(@gen_mcp_suite_tool_opts, :input_schema)
+
+      normal_schema =
+        GenMCP.Suite.Tool.normalize_schema(
+          input_schema,
+          warnings: :emit,
+          stacktrace: @gen_mcp_suite_tool_warnings_stacktrace
+        )
+
+      def __gen_mcp__(:normal_input_schema) do
+        {:ok, unquote(Macro.escape(normal_schema))}
+      end
+
       @impl true
       def input_schema(_arg) do
-        unquote(Macro.escape(input_opt))
+        unquote(Macro.escape(input_schema))
       end
     end
   end
 
-  defp def_validator(input_opt, jsv_build_opts, true = _validate_request?) do
-    quote bind_quoted: [input_opt: input_opt, jsv_build_opts: jsv_build_opts] do
-      jsv_build_opts = jsv_build_opts || []
-      GenMCP.Suite.Tool.__validate_use__(:jsv_build_opts, jsv_build_opts)
-      build_opts = Keyword.merge([formats: true, atoms: true], jsv_build_opts)
-      GenMCP.Suite.Tool.__validate_use__(:input_schema, input_opt)
+  defp def_validator(_quoted, true = _gen_validate_request?) do
+    quote unquote: false do
+      input_schema = Keyword.fetch!(@gen_mcp_suite_tool_opts, :input_schema)
+      GenMCP.Suite.Tool.__validate_use__(:input_schema, input_schema)
 
-      @jsv_input_root JSV.build!(input_opt, build_opts)
+      jsv_input_root = JSV.build!(input_schema, @gen_mcp_suite_tool_jsv_build_opts)
+
+      normal_schema =
+        GenMCP.Suite.Tool.normalize_schema(input_schema, warnings: :silence)
+
+      def __gen_mcp__(:normal_input_schema) do
+        {:ok, unquote(Macro.escape(normal_schema))}
+      end
 
       @impl true
       def input_schema(_arg) do
-        unquote(Macro.escape(input_opt))
+        unquote(Macro.escape(input_schema))
       end
 
       @impl true
@@ -569,7 +631,7 @@ defmodule GenMCP.Suite.Tool do
             %{} -> nil
           end
 
-        case JSV.validate(arguments, @jsv_input_root) do
+        case JSV.validate(arguments, unquote(Macro.escape(jsv_input_root))) do
           {:ok, new_arguments} ->
             req = %{req | params: %{params | arguments: new_arguments}}
             {:ok, req}
@@ -585,11 +647,24 @@ defmodule GenMCP.Suite.Tool do
     []
   end
 
-  defp def_output_schema(output_opt) do
-    quote bind_quoted: [output_opt: output_opt] do
+  defp def_output_schema(_) do
+    quote unquote: false do
+      output_schema = Keyword.fetch!(@gen_mcp_suite_tool_opts, :output_schema)
+
+      normal_schema =
+        GenMCP.Suite.Tool.normalize_schema(
+          output_schema,
+          warnings: :emit,
+          stacktrace: @gen_mcp_suite_tool_warnings_stacktrace
+        )
+
+      def __gen_mcp__(:normal_output_schema) do
+        {:ok, unquote(Macro.escape(normal_schema))}
+      end
+
       @impl true
       def output_schema(_arg) do
-        unquote(Macro.escape(output_opt))
+        unquote(Macro.escape(output_schema))
       end
     end
   end
@@ -600,13 +675,14 @@ defmodule GenMCP.Suite.Tool do
     []
   end
 
-  defp def_cache_control(cache_opt) do
-    quote bind_quoted: [cache_opt: cache_opt] do
-      GenMCP.Suite.Tool.__validate_use__(:cache_control, cache_opt)
+  defp def_cache_control(_) do
+    quote do
+      @gen_mcp_suite_tool_cache_control Keyword.fetch!(@gen_mcp_suite_tool_opts, :cache_control)
+      GenMCP.Suite.Tool.__validate_use__(:cache_control, @gen_mcp_suite_tool_cache_control)
 
       @impl true
       def cache_control(_arg) do
-        unquote(Macro.escape(cache_opt))
+        @gen_mcp_suite_tool_cache_control
       end
     end
   end
@@ -658,8 +734,8 @@ defmodule GenMCP.Suite.Tool do
       annotations: mod.info(:annotations, arg),
       description: mod.info(:description, arg),
       title: mod.info(:title, arg),
-      inputSchema: normalize_schema(mod.input_schema(arg)),
-      outputSchema: normalize_schema(output_schema(mod, arg))
+      inputSchema: normal_input_schema(mod, arg),
+      outputSchema: normal_output_schema(mod, arg)
     }
   end
 
@@ -684,15 +760,31 @@ defmodule GenMCP.Suite.Tool do
     end
   end
 
-  defp output_schema(mod, arg) do
-    if function_exported?(mod, :output_schema, 1) do
-      mod.output_schema(arg)
+  defp normal_output_schema(mod, arg) do
+    with true <- function_exported?(mod, :__gen_mcp__, 1),
+         {:ok, normal} <- mod.__gen_mcp__(:normal_output_schema) do
+      normal
+    else
+      _ ->
+        if function_exported?(mod, :output_schema, 1) do
+          normalize_schema(mod.output_schema(arg))
+        end
     end
   end
 
-  defp normalize_schema(schema) when is_atom(schema) when is_map(schema) do
+  defp normal_input_schema(mod, arg) do
+    with true <- function_exported?(mod, :__gen_mcp__, 1),
+         {:ok, normal} <- mod.__gen_mcp__(:normal_input_schema) do
+      normal
+    else
+      _ -> normalize_schema(mod.input_schema(arg))
+    end
+  end
+
+  @doc false
+  def normalize_schema(schema, opts \\ []) when is_atom(schema) when is_map(schema) do
     schema
-    |> JSV.Schema.normalize_collect(as_root: true)
+    |> JSV.Schema.normalize_collect(Keyword.put(opts, :as_root, true))
     |> JSV.Helpers.Traverse.prewalk(fn
       {:val, map} when is_map(map) -> Map.drop(map, ["jsv-cast", "x-jsv-cast"])
       other -> elem(other, 1)

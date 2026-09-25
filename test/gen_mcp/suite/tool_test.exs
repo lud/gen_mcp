@@ -512,6 +512,69 @@ defmodule GenMCP.Suite.ToolTest do
       end
     end
 
+    test "raise on invalid jsv_build_opts with a custom validate_request" do
+      assert_raise ArgumentError, ~r{jsv_build_opts .* must be a keyword list}, fn ->
+        defmodule InvalidBuildOptsCustomValidate do
+          use GenMCP.Suite.Tool,
+            behaviour: false,
+            name: "foo",
+            input_schema: %{type: :object},
+            jsv_build_opts: "not a keyword list"
+
+          def validate_request(req, _arg) do
+            {:ok, req}
+          end
+        end
+      end
+    end
+
+    test "raise when input_schema is given as option and defined by hand" do
+      assert_raise ArgumentError, ~r{:input_schema.*input_schema/1}s, fn ->
+        defmodule InputSchemaOptionAndFunction do
+          use GenMCP.Suite.Tool,
+            behaviour: false,
+            name: "foo",
+            input_schema: %{type: :object}
+
+          def input_schema(_arg) do
+            %{type: :object}
+          end
+        end
+      end
+    end
+
+    test "raise when output_schema is given as option and defined by hand" do
+      assert_raise ArgumentError, ~r{:output_schema.*output_schema/1}s, fn ->
+        defmodule OutputSchemaOptionAndFunction do
+          use GenMCP.Suite.Tool,
+            behaviour: false,
+            name: "foo",
+            input_schema: %{type: :object},
+            output_schema: %{type: :object}
+
+          def output_schema(_arg) do
+            %{type: :object}
+          end
+        end
+      end
+    end
+
+    test "raise when cache_control is given as option and defined by hand" do
+      assert_raise ArgumentError, ~r{:cache_control.*cache_control/1}s, fn ->
+        defmodule CacheControlOptionAndFunction do
+          use GenMCP.Suite.Tool,
+            behaviour: false,
+            name: "foo",
+            input_schema: %{type: :object},
+            cache_control: {:public, 1000}
+
+          def cache_control(_arg) do
+            {:private, 1000}
+          end
+        end
+      end
+    end
+
     test "output schema with use" do
       defmodule UseOutputSchema do
         use GenMCP.Suite.Tool,
@@ -1013,6 +1076,229 @@ defmodule GenMCP.Suite.ToolTest do
                  }
                }
              } = description.outputSchema
+    end
+  end
+
+  describe "compile-time schema warnings" do
+    defp compile_diagnostics(source) do
+      {result, diagnostics} =
+        Code.with_diagnostics(fn ->
+          try do
+            {:ok, Code.compile_string(source, "lib/some_tool.ex")}
+          rescue
+            e -> {:error, Exception.format(:error, e, __STACKTRACE__)}
+          end
+        end)
+
+      case result do
+        {:ok, _} ->
+          diagnostics
+
+        {:error, formatted} ->
+          flunk("""
+          Could not compile:
+
+          #{source}
+
+          Diagnostics:
+
+          #{Enum.map_join(diagnostics, "\n", &format_diagnostic/1)}
+
+          Exception:
+
+          #{formatted}
+          """)
+      end
+    end
+
+    defp format_diagnostic(diagnostic) do
+      %{severity: severity, message: message, position: position} = diagnostic
+      "#{severity} at #{inspect(position)}: #{message}"
+    end
+
+    defp assert_warned_at(diagnostics, module_name, line) do
+      message = assert_single_warning_at(diagnostics, line)
+      assert message =~ "Module #{module_name} found in schema does not exist"
+    end
+
+    defp assert_single_warning_at(diagnostics, line) do
+      assert [%{severity: :warning, message: message, stacktrace: [{_, _, _, location} | _]}] =
+               diagnostics
+
+      assert ~c"lib/some_tool.ex" == Keyword.fetch!(location, :file)
+      assert line == Keyword.fetch!(location, :line)
+      message
+    end
+
+    test "jsv_build_opts without input_schema warns at the use line" do
+      diagnostics =
+        compile_diagnostics("""
+        defmodule GenMCP.Suite.ToolTest.UnusedBuildOptsNoSchemas do
+          use GenMCP.Suite.Tool,
+            name: "some_tool",
+            jsv_build_opts: [formats: false]
+
+          @impl true
+          def input_schema(_arg), do: %{type: :object}
+
+          @impl true
+          def call(_req, _channel, _arg), do: {:error, :unused}
+        end
+        """)
+
+      message = assert_single_warning_at(diagnostics, 2)
+      assert message =~ "jsv_build_opts"
+    end
+
+    test "jsv_build_opts with input_schema and a custom validate_request warns at the use line" do
+      diagnostics =
+        compile_diagnostics("""
+        defmodule GenMCP.Suite.ToolTest.UnusedBuildOptsCustomValidate do
+          use GenMCP.Suite.Tool,
+            name: "some_tool",
+            input_schema: %{type: :object},
+            jsv_build_opts: [formats: false]
+
+          @impl true
+          def validate_request(req, _arg), do: {:ok, req}
+
+          @impl true
+          def call(_req, _channel, _arg), do: {:error, :unused}
+        end
+        """)
+
+      message = assert_single_warning_at(diagnostics, 2)
+      assert message =~ "jsv_build_opts"
+    end
+
+    test "unresolved module in output schema warns at the use line" do
+      diagnostics =
+        compile_diagnostics("""
+        defmodule GenMCP.Suite.ToolTest.UnresolvedOutput do
+          use JSV.Schema
+
+          use GenMCP.Suite.Tool,
+            name: "some_tool",
+            input_schema: %{type: :object},
+            output_schema: Output
+
+          defschema Output, status: Status
+          defschema Status, %{type: :object, properties: %{state: string()}}
+
+          @impl true
+          def call(_req, _channel, _arg), do: {:error, :unused}
+        end
+        """)
+
+      assert_warned_at(diagnostics, "Status", 4)
+
+      {description, diagnostics} =
+        Code.with_diagnostics(fn -> Tool.describe(GenMCP.Suite.ToolTest.UnresolvedOutput) end)
+
+      assert [] == diagnostics
+
+      assert %{"properties" => %{"status" => "Elixir.Status"}} = description.outputSchema
+    end
+
+    test "unresolved module in input schema warns at the use line" do
+      diagnostics =
+        compile_diagnostics("""
+        defmodule GenMCP.Suite.ToolTest.UnresolvedInput do
+          use GenMCP.Suite.Tool,
+          name: "some_tool",
+          input_schema: %{type: :object, properties: %{kind: %{const: Kind}}}
+
+          @impl true
+          def call(_req, _channel, _arg), do: {:error, :unused}
+        end
+        """)
+
+      assert_warned_at(diagnostics, "Kind", 2)
+
+      {description, diagnostics} =
+        Code.with_diagnostics(fn -> Tool.describe(GenMCP.Suite.ToolTest.UnresolvedInput) end)
+
+      assert [] == diagnostics
+
+      assert %{"properties" => %{"kind" => %{"const" => "Elixir.Kind"}}} = description.inputSchema
+    end
+
+    test "jsv_build_opts warnings config silences input schema warnings" do
+      diagnostics =
+        compile_diagnostics("""
+        defmodule GenMCP.Suite.ToolTest.SilencedInput do
+          use GenMCP.Suite.Tool,
+            name: "some_tool",
+            input_schema: %{type: :object, properties: %{kind: %{const: Kind}}},
+            jsv_build_opts: [warnings: {:silence, [unresolved_module: Kind]}]
+
+          @impl true
+          def call(_req, _channel, _arg), do: {:error, :unused}
+        end
+        """)
+
+      assert [] == diagnostics
+    end
+
+    test "resolved module schemas compile without warnings" do
+      diagnostics =
+        compile_diagnostics("""
+        defmodule GenMCP.Suite.ToolTest.ResolvedSchemas do
+          use JSV.Schema
+
+          use GenMCP.Suite.Tool,
+            name: "some_tool",
+            input_schema: Input,
+            output_schema: Output
+
+          defschema Input, id: string()
+          defschema Status, state: string()
+          defschema Output, status: Status
+
+          @impl true
+          def call(_req, _channel, _arg), do: {:error, :unused}
+        end
+        """)
+
+      assert [] == diagnostics
+    end
+
+    test "output schema from use is described without cast keywords" do
+      compile_diagnostics("""
+      defmodule GenMCP.Suite.ToolTest.CastOutput do
+        use JSV.Schema
+
+        use GenMCP.Suite.Tool,
+          name: "some_tool",
+          input_schema: %{type: :object},
+          output_schema: Output
+
+        defschema Status, state: string()
+        defschema Output, status: Status
+
+        @impl true
+        def call(_req, _channel, _arg), do: {:error, :unused}
+      end
+      """)
+
+      mod = Module.concat(__MODULE__, CastOutput)
+
+      assert Module.concat(mod, Output) == mod.output_schema(nil)
+
+      assert %{
+               "$defs" => %{
+                 "Status" => %{
+                   "properties" => %{"state" => %{"type" => "string"}},
+                   "required" => ["state"],
+                   "title" => "Status",
+                   "type" => "object"
+                 }
+               },
+               "properties" => %{"status" => %{"$ref" => "#/$defs/Status"}},
+               "required" => ["status"],
+               "title" => "Output",
+               "type" => "object"
+             } == Tool.describe(mod).outputSchema
     end
   end
 end
