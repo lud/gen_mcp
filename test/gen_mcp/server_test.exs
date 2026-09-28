@@ -170,6 +170,159 @@ defmodule GenMCP.ServerTest do
     assert_receive {:DOWN, ^wref, :process, ^worker, {:shutdown, :stream_done}}, 1000
   end
 
+  describe "{:end, reason}" do
+    # The relay may only start monitoring the worker after it is already gone,
+    # in which case the monitor reports `:noproc` instead of the real reason.
+    # So the worker always announces how it ended with `{:"$gen_mcp", :end,
+    # reason}`, sent from `terminate/2` just before it exits, whatever it sent
+    # before: a result may already have gone out through the channel.
+
+    defp start_worker(handle_request) do
+      ServerMockNoClose
+      |> expect(:init, fn _opts -> {:ok, :server_state} end)
+      |> expect(:handle_request, handle_request)
+
+      assert {:ok, worker} =
+               Server.start_request(
+                 [server: ServerMockNoClose],
+                 :fake_request,
+                 Channel.for_pid(self())
+               )
+
+      {worker, Process.monitor(worker)}
+    end
+
+    defp start_streaming_worker(handle_message) do
+      expect(ServerMockNoClose, :handle_message, handle_message)
+      {worker, wref} = start_worker(fn :fake_request, _channel, state -> {:stream, state} end)
+      assert_receive {:"$gen_mcp", :stream}, 1000
+      {worker, wref}
+    end
+
+    defp assert_ends_with(worker, wref, reason) do
+      assert_receive message, 1000
+      assert {:"$gen_mcp", :end, ^reason} = message
+      assert_receive {:DOWN, ^wref, :process, ^worker, ^reason}, 1000
+    end
+
+    for reason <- [:normal, :shutdown, {:shutdown, :done}] do
+      test "handle_message {:stop, #{inspect(reason)}}" do
+        reason = unquote(Macro.escape(reason))
+        {worker, wref} = start_streaming_worker(fn :quit, _channel, _state -> {:stop, reason} end)
+
+        send(worker, :quit)
+
+        assert_ends_with(worker, wref, reason)
+      end
+
+      test "exit(#{inspect(reason)}) from handle_message" do
+        reason = unquote(Macro.escape(reason))
+        {worker, wref} = start_streaming_worker(fn :quit, _channel, _state -> exit(reason) end)
+
+        send(worker, :quit)
+
+        assert_ends_with(worker, wref, reason)
+      end
+
+      test "exit(#{inspect(reason)}) from handle_request" do
+        reason = unquote(Macro.escape(reason))
+        {worker, wref} = start_worker(fn :fake_request, _channel, _state -> exit(reason) end)
+
+        assert_ends_with(worker, wref, reason)
+      end
+    end
+
+    @tag capture_log: true
+    test "handle_message {:stop, reason} with an unclean reason" do
+      {worker, wref} = start_streaming_worker(fn :quit, _channel, _state -> {:stop, :boom} end)
+
+      send(worker, :quit)
+
+      assert_ends_with(worker, wref, :boom)
+    end
+
+    @tag capture_log: true
+    test "an unclean exit from handle_request" do
+      {worker, wref} = start_worker(fn :fake_request, _channel, _state -> exit(:boom) end)
+
+      assert_ends_with(worker, wref, :boom)
+    end
+
+    @tag capture_log: true
+    test "a raise from handle_message" do
+      {worker, wref} = start_streaming_worker(fn :quit, _channel, _state -> raise "boom" end)
+
+      send(worker, :quit)
+
+      assert_receive {:"$gen_mcp", :end, {%RuntimeError{message: "boom"}, _stack}}, 1000
+      assert_receive {:DOWN, ^wref, :process, ^worker, {%RuntimeError{}, _}}, 1000
+    end
+
+    @tag capture_log: true
+    test "an invalid callback return" do
+      {worker, wref} = start_worker(fn :fake_request, _channel, _state -> :not_a_valid_return end)
+
+      assert_receive {:"$gen_mcp", :end, {%GenMCP.CallbackReturnError{}, _stack}}, 1000
+      assert_receive {:DOWN, ^wref, :process, ^worker, {%GenMCP.CallbackReturnError{}, _}}, 1000
+    end
+
+    test "after a result returned from handle_request" do
+      {worker, wref} = start_worker(fn :fake_request, _channel, _state -> {:result, :done} end)
+
+      assert_receive {:"$gen_mcp", :result, :done}, 1000
+      assert_ends_with(worker, wref, {:shutdown, :reply})
+    end
+
+    test "after an error returned from handle_message" do
+      {worker, wref} =
+        start_streaming_worker(fn :fail, _channel, _state -> {:error, :some_error} end)
+
+      send(worker, :fail)
+
+      assert_receive {:"$gen_mcp", :error, :some_error}, 1000
+      assert_ends_with(worker, wref, {:shutdown, :reply})
+    end
+
+    test "after a result sent through the channel, then {:stop, :normal}" do
+      {worker, wref} =
+        start_streaming_worker(fn :finish, channel, _state ->
+          {:ok, _channel} = Channel.send_result(channel, :sent_result)
+          {:stop, :normal}
+        end)
+
+      send(worker, :finish)
+
+      assert_receive {:"$gen_mcp", :result, :sent_result}, 1000
+      assert_ends_with(worker, wref, :normal)
+    end
+
+    test "after a :closed acknowledgement" do
+      {worker, wref} = start_worker(fn :fake_request, _channel, state -> {:stream, state} end)
+      assert_receive {:"$gen_mcp", :stream}, 1000
+
+      send(worker, {:"$gen_mcp", :closed})
+
+      assert_ends_with(worker, wref, {:shutdown, :closed})
+    end
+
+    test "after a notification was accepted" do
+      expect(ServerMockNoClose, :init, fn _opts -> {:ok, :server_state} end)
+      expect(ServerMockNoClose, :handle_notification, fn :fake_notif, _channel, _state -> :ok end)
+
+      assert {:ok, worker} =
+               Server.start_notification(
+                 [server: ServerMockNoClose],
+                 :fake_notif,
+                 Channel.for_pid(self())
+               )
+
+      wref = Process.monitor(worker)
+
+      assert_receive {:"$gen_mcp", :accepted}, 1000
+      assert_ends_with(worker, wref, {:shutdown, :reply})
+    end
+  end
+
   test "a linked Task.async crash kills the worker before its :DOWN message is handled" do
     # A streaming handler may be tempted to hold a `Task.async/1` in its stream
     # state and wait for the `:DOWN` on failure. That message never gets

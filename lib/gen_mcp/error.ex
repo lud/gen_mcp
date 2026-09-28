@@ -108,12 +108,17 @@ defmodule GenMCP.Error do
     }
   end
 
-  # The per-request worker exited without delivering a result (crash or silent
-  # stop). The relay converts it to a proper JSON-RPC error instead of leaking
-  # a generic Bandit 500. Crash details stay in the logs, not in the response.
+  # The per-request worker exited without completing the response. Crash
+  # details stay in the logs, not in the response.
   defcasterror :server_crashed, @rpc_internal_error, 500 do
     %{
       message: "Internal server error"
+    }
+  end
+
+  defcasterror :no_result, @rpc_internal_error, 500 do
+    %{
+      message: "Server stopped with no result"
     }
   end
 

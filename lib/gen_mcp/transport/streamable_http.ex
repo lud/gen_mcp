@@ -419,7 +419,7 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
     channel = make_channel(conn, req, conf)
 
     case Server.start_request(conf.server_opts, req, channel) do
-      {:ok, pid} -> Relay.respond(conn, @codec, msg_id, pid)
+      {:ok, pid} -> Relay.respond_and_close(conn, @codec, msg_id, pid, channel)
       {:error, reason} -> send_error(conn, reason, msg_id)
     end
   end
@@ -435,7 +435,7 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
     channel = make_channel(conn, notif, conf)
 
     case Server.start_notification(conf.server_opts, notif, channel) do
-      {:ok, pid} -> Relay.respond(conn, @codec, _msg_id = nil, pid)
+      {:ok, pid} -> Relay.respond_and_close(conn, @codec, _msg_id = nil, pid, channel)
       {:error, reason} -> send_error(conn, reason, _msg_id = nil)
     end
   end
@@ -458,7 +458,7 @@ defmodule GenMCP.Transport.StreamableHTTP.Impl do
   defp send_accepted(conn) do
     conn
     |> send_resp(202, "")
-    |> Relay.finalize()
+    |> halt()
   end
 
   # Public: also used by the router module (origin validation).

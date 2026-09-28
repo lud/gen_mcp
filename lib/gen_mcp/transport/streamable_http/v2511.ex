@@ -318,7 +318,7 @@ defmodule GenMCP.Transport.StreamableHTTP.V2511.Impl do
   defp route(conn, "notifications/" <> _, _msg, _conf) do
     conn
     |> send_resp(202, "")
-    |> Relay.finalize()
+    |> halt()
   end
 
   defp route(conn, "ping", msg, _conf) do
@@ -473,7 +473,7 @@ defmodule GenMCP.Transport.StreamableHTTP.V2511.Impl do
     case get_req_header(conn, @session_header) do
       [session_id | _] ->
         _ = SessionController.delete(conf.session_controller, session_id, conn)
-        conn |> send_resp(200, "") |> Relay.finalize()
+        conn |> send_resp(200, "") |> halt()
 
       [] ->
         send_error(conn, session_required_error(), _msg_id = nil)
@@ -518,7 +518,7 @@ defmodule GenMCP.Transport.StreamableHTTP.V2511.Impl do
     channel = make_channel(conn, req, conf)
 
     case Server.start_request(conf.server_opts, req, channel) do
-      {:ok, pid} -> Relay.respond(conn, codec, msg_id, pid)
+      {:ok, pid} -> Relay.respond_and_close(conn, codec, msg_id, pid, channel)
       {:error, reason} -> Relay.send_error(conn, reason, msg_id, codec)
     end
   end
@@ -544,7 +544,7 @@ defmodule GenMCP.Transport.StreamableHTTP.V2511.Impl do
     conn
     |> put_resp_content_type("application/json")
     |> send_resp(200, JSV.Codec.format_to_iodata!(payload))
-    |> Relay.finalize()
+    |> halt()
   end
 
   # Public: also used by the router module (origin validation).

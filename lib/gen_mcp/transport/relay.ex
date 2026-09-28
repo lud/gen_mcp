@@ -14,6 +14,7 @@ defmodule GenMCP.Transport.Relay do
 
   import Plug.Conn
 
+  alias GenMCP.Mux.Channel
   alias JSV.Codec
 
   @stream_keepalive_timeout to_timeout(second: 25)
@@ -55,7 +56,15 @@ defmodule GenMCP.Transport.Relay do
   through `codec`, until the response ends. Returns the halted conn. It spawns
   nothing: the worker is already running when this is called.
   """
-  def respond(conn, codec, msg_id, server_pid) do
+  def respond_and_close(conn, codec, msg_id, server_pid, channel) do
+    conn = respond(conn, codec, msg_id, server_pid)
+
+    finalize(conn, channel)
+  end
+
+  # Every branch that ends the response returns the conn to
+  # respond_and_close/5, which runs the cleanup once.
+  defp respond(conn, codec, msg_id, server_pid) do
     mref = :erlang.monitor(:process, server_pid, tag: :SERVER_DOWN)
 
     conn
@@ -75,7 +84,7 @@ defmodule GenMCP.Transport.Relay do
         send_result(conn, result)
 
       {:"$gen_mcp", :accepted} ->
-        send_accepted(conn)
+        send_resp(conn, 202, "")
 
       {:"$gen_mcp", :notification, notif} ->
         conn = init_stream(conn)
@@ -90,10 +99,15 @@ defmodule GenMCP.Transport.Relay do
 
       {:"$gen_mcp", :close} ->
         send(conn.private.gen_mcp_server, {:"$gen_mcp", :closed})
-        finalize(conn)
+        conn
 
-      {:SERVER_DOWN, _mref, :process, _pid, reason} ->
-        handle_server_down(conn, reason)
+      {:"$gen_mcp", :end, reason} ->
+        handle_server_end(conn, reason)
+
+      {:SERVER_DOWN, _mref, :process, _pid, _reason} ->
+        # terminate/2 sends :end first; a bare DOWN is a crash even if its
+        # reported reason is :normal or :noproc.
+        send_error(conn, :server_crashed)
 
       {:timeout, tref, {__MODULE__, :keepalive}} ->
         # Bracket access: a stale timeout from a previous request on the same
@@ -116,15 +130,7 @@ defmodule GenMCP.Transport.Relay do
     end
   end
 
-  # The worker died before delivering a result or error. A reply-exit
-  # (`{:shutdown, :reply}`) is never seen here: the reply message is enqueued
-  # before the exit, so the loop sends the response and returns first.
-  #
-  # * Clean exit while streaming — a `{:stop, reason}` continuation (listener
-  #   exit with no final result): terminate the stream.
-  # * Clean exit with no output at all, or a crash — convert to a proper
-  #   JSON-RPC internal error instead of a generic Bandit 500.
-  defp handle_server_down(conn, reason) do
+  defp handle_server_end(conn, reason) do
     clean? =
       case reason do
         :normal -> true
@@ -134,8 +140,9 @@ defmodule GenMCP.Transport.Relay do
       end
 
     case {clean?, conn.private.gen_mcp_status} do
-      {true, :streaming} -> finalize(conn)
-      {_, _} -> send_error(conn, :server_crashed)
+      {true, :streaming} -> conn
+      {true, _} -> send_error(conn, :no_result)
+      {false, _} -> send_error(conn, :server_crashed)
     end
   end
 
@@ -153,7 +160,7 @@ defmodule GenMCP.Transport.Relay do
     case mod.render_result(result, conn.private.gen_mcp_msg_id, ctx) do
       {:send, payload} -> write(conn, 200, payload)
       :drop -> stream_loop(conn)
-      :end -> finalize(conn)
+      :end -> conn
     end
   end
 
@@ -164,12 +171,12 @@ defmodule GenMCP.Transport.Relay do
     case mod.render_notification(notif, ctx) do
       {:send, payload} -> send_stream_message(conn, payload, &reenter_stream_loop/1)
       :drop -> reenter_stream_loop(conn)
-      :end -> finalize(conn)
+      :end -> conn
     end
   end
 
   defp send_error(conn, reason) do
-    send_error(conn, reason, Map.get(conn.private, :gen_mcp_msg_id), conn.private.gen_mcp_codec)
+    write_error(conn, reason, conn.private.gen_mcp_msg_id, conn.private.gen_mcp_codec)
   end
 
   @doc """
@@ -178,20 +185,26 @@ defmodule GenMCP.Transport.Relay do
   Used by the plugs to reject a request before a worker is ever started (origin
   check, header validation, an unknown method).
   """
-  def send_error(conn, reason, msg_id, {mod, ctx}) do
+  def send_error(conn, reason, msg_id, codec) do
+    conn
+    |> write_error(reason, msg_id, codec)
+    |> halt()
+  end
+
+  defp write_error(conn, reason, msg_id, {mod, ctx}) do
     emit_rejection(reason)
 
     case conn.private[:gen_mcp_status] do
       :streaming ->
         case mod.render_stream_error(reason, msg_id, ctx) do
-          {:send, payload} -> send_stream_message(conn, payload, &finalize/1)
-          :end -> finalize(conn)
+          {:send, payload} -> send_stream_message(conn, payload, & &1)
+          :end -> conn
         end
 
       _ ->
         case mod.render_error(reason, msg_id, ctx) do
           {:send, status, payload} -> write(conn, status, payload)
-          :end -> finalize(conn)
+          :end -> conn
         end
     end
   end
@@ -201,20 +214,13 @@ defmodule GenMCP.Transport.Relay do
   defp write(conn, status, payload) do
     case conn.private[:gen_mcp_status] do
       :streaming ->
-        send_stream_message(conn, payload, &finalize/1)
+        send_stream_message(conn, payload, & &1)
 
       _ ->
         conn
         |> put_resp_content_type("application/json")
         |> send_resp(status, Codec.format_to_iodata!(payload))
-        |> finalize()
     end
-  end
-
-  defp send_accepted(conn) do
-    conn
-    |> send_resp(202, "")
-    |> finalize()
   end
 
   defp send_stream_message(conn, payload, continuation) do
@@ -240,14 +246,11 @@ defmodule GenMCP.Transport.Relay do
   # cleanup is tied to the write failing rather than to the connection process
   # dying afterwards.
   #
-  # Finalizing here matters as much as the notification: `halt/1` is a pure
-  # struct update so it is safe on a dead socket, and skipping it would hand
-  # the connection process back with the worker monitor un-flushed and the
-  # keepalive timer live, for the next request on this keep-alive connection to
-  # trip over.
+  # The conn is returned like on any other ending, so the cleanup still runs:
+  # `finalize/1` is safe on a dead socket.
   defp client_gone(conn) do
     send(conn.private.gen_mcp_server, {:"$gen_mcp", :closed})
-    finalize(conn)
+    conn
   end
 
   @doc """
@@ -305,17 +308,11 @@ defmodule GenMCP.Transport.Relay do
     _conn = start_keepalive(conn)
   end
 
-  # Terminal cleanup, called from every point where the response ends: result
-  # or error sent (direct or streamed), 202 accepted, clean worker shutdown, or
-  # the client closing the socket. Flushes the worker monitor and cancels the
-  # keepalive timer — the conn process may serve further requests on a
-  # keepalive connection, and a late :SERVER_DOWN or stale timeout would be
-  # read by the next request's receive loop.
-  def finalize(conn) do
-    case conn.private[:gen_mcp_mref] do
-      nil -> :ok
-      mref -> :erlang.demonitor(mref, [:flush])
-    end
+  # Bandit may reuse this process; clear server messages before returning it.
+  defp finalize(conn, channel) do
+    :erlang.demonitor(conn.private.gen_mcp_mref, [:flush])
+    :ok = Channel.unalias(channel)
+    flush_worker_messages()
 
     case conn.private[:gen_mcp_keepalive] do
       nil -> :ok
@@ -323,6 +320,14 @@ defmodule GenMCP.Transport.Relay do
     end
 
     halt(conn)
+  end
+
+  defp flush_worker_messages do
+    receive do
+      message when elem(message, 0) == :"$gen_mcp" -> flush_worker_messages()
+    after
+      0 -> :ok
+    end
   end
 
   if Mix.env() == :test do

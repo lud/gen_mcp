@@ -11,10 +11,10 @@ defmodule GenMCP.Mux.Channel do
 
   Because the `2026-07-28` core is stateless, a channel lives only for the
   request that created it. It carries everything the server needs to talk back
-  to the client without a session: the client process to deliver messages to,
-  the request id, the progress token the client supplied, the negotiated minimum
-  log level, and the client metadata (info, capabilities, protocol version) read
-  from the request `_meta`.
+  to the client without a session: the client process to monitor, a per-request
+  client alias, the request id, the progress token the client supplied, the
+  negotiated minimum log level, and the client metadata (info, capabilities,
+  protocol version) read from the request `_meta`.
 
   The common case is a request handler that reports progress and logs while it
   works, then returns its result:
@@ -83,7 +83,16 @@ defmodule GenMCP.Mux.Channel do
 
   alias GenMCP.MCP.V2607, as: MCP
 
-  @enforce_keys [:client, :progress_token, :status, :log_level, :meta, :endpoint, :request_id]
+  @enforce_keys [
+    :client,
+    :client_alias,
+    :progress_token,
+    :status,
+    :log_level,
+    :meta,
+    :endpoint,
+    :request_id
+  ]
   defstruct @enforce_keys
 
   @type status :: :open | :closed
@@ -99,6 +108,7 @@ defmodule GenMCP.Mux.Channel do
 
   @type t :: %__MODULE__{
           client: pid | nil,
+          client_alias: reference | nil,
           status: status,
           progress_token: nil | binary | integer,
           log_level: log_level() | nil,
@@ -113,8 +123,8 @@ defmodule GenMCP.Mux.Channel do
   Builds a channel for an incoming request, targeting the calling process.
 
   The transport calls this while handling a request. The returned channel
-  delivers its messages to `self()`, the process that builds it, which owns the
-  HTTP response stream.
+  delivers its messages through an alias of `self()`, the process that builds
+  it and owns the HTTP response stream.
 
   Values are read from the parsed `req`:
 
@@ -139,6 +149,7 @@ defmodule GenMCP.Mux.Channel do
 
     %__MODULE__{
       client: self(),
+      client_alias: :erlang.alias(),
       request_id: request_id_from_request(req),
       endpoint: endpoint,
       progress_token: progress_token_from_request(req),
@@ -190,6 +201,7 @@ defmodule GenMCP.Mux.Channel do
   def for_pid(pid, meta_assigns \\ %{}) do
     %__MODULE__{
       client: pid,
+      client_alias: :erlang.alias(),
       request_id: nil,
       endpoint: nil,
       progress_token: nil,
@@ -244,7 +256,7 @@ defmodule GenMCP.Mux.Channel do
         params: %{progress: progress, progressToken: token, total: total, message: message}
       }
 
-    send(channel.client, {:"$gen_mcp", :notification, payload})
+    send(channel.client_alias, {:"$gen_mcp", :notification, payload})
     :ok
   end
 
@@ -302,7 +314,7 @@ defmodule GenMCP.Mux.Channel do
         params: %{level: level, data: data, logger: logger}
       }
 
-      send(channel.client, {:"$gen_mcp", :notification, payload})
+      send(channel.client_alias, {:"$gen_mcp", :notification, payload})
     end
 
     :ok
@@ -319,7 +331,7 @@ defmodule GenMCP.Mux.Channel do
   end
 
   def send_result(channel, payload) do
-    send(channel.client, {:"$gen_mcp", :result, payload})
+    send(channel.client_alias, {:"$gen_mcp", :result, payload})
     {:ok, channel}
   end
 
@@ -334,7 +346,7 @@ defmodule GenMCP.Mux.Channel do
   end
 
   def send_error(channel, error) do
-    send(channel.client, {:"$gen_mcp", :error, error})
+    send(channel.client_alias, {:"$gen_mcp", :error, error})
     {:ok, channel}
   end
 
@@ -373,7 +385,7 @@ defmodule GenMCP.Mux.Channel do
         notification
       end
 
-    send(channel.client, {:"$gen_mcp", :notification, notification})
+    send(channel.client_alias, {:"$gen_mcp", :notification, notification})
     :ok
   end
 
@@ -527,7 +539,7 @@ defmodule GenMCP.Mux.Channel do
   end
 
   def start_stream(channel) do
-    send(channel.client, {:"$gen_mcp", :stream})
+    send(channel.client_alias, {:"$gen_mcp", :stream})
     :ok
   end
 
@@ -558,7 +570,7 @@ defmodule GenMCP.Mux.Channel do
   end
 
   def close(%{status: :open} = channel) do
-    send(channel.client, {:"$gen_mcp", :close})
+    send(channel.client_alias, {:"$gen_mcp", :close})
     {:ok, set_closed(channel)}
   end
 
@@ -573,14 +585,24 @@ defmodule GenMCP.Mux.Channel do
     %{channel | status: :closed}
   end
 
+  @doc false
+  def unalias(%__MODULE__{client_alias: nil}) do
+    :ok
+  end
+
+  def unalias(%__MODULE__{client_alias: client_alias}) do
+    :erlang.unalias(client_alias)
+    :ok
+  end
+
   @doc """
   Returns a closed copy of the channel with no client attached.
 
-  The status is set to `:closed` and the client process is cleared, so the
-  channel can be carried in state to satisfy a callback signature while silently
-  dropping any send.
+  The status is set to `:closed` and the client process and client alias are
+  cleared, so the channel can be carried in state to satisfy a callback
+  signature while silently dropping any send.
   """
   def as_closed(t) do
-    %{t | status: :closed, client: nil}
+    %{t | status: :closed, client: nil, client_alias: nil}
   end
 end

@@ -1169,6 +1169,115 @@ defmodule GenMCP.StreamableHTTPTest do
 
       assert [] == chunks
     end
+
+    for reason <- [:shutdown, {:shutdown, :done}] do
+      test "a {:stop, #{inspect(reason)}} continuation ends the stream with no final result" do
+        reason = unquote(Macro.escape(reason))
+
+        ServerMock
+        |> expect(:init, fn _opts -> {:ok, :server_state} end)
+        |> expect(:handle_request, fn _req, _channel, state ->
+          send(self(), :quit)
+          {:stream, state}
+        end)
+        |> expect(:handle_message, fn :quit, _channel, _state -> {:stop, reason} end)
+
+        chunks =
+          client(url: @mcp_url)
+          |> post_message(
+            %{jsonrpc: "2.0", id: 460, method: "tools/list", params: %{}},
+            into: :self
+          )
+          |> stream_chunks()
+          |> parse_stream()
+          |> Enum.to_list()
+
+        assert [] == chunks
+      end
+    end
+
+    @tag capture_log: true
+    test "a {:stop, reason} continuation with an unclean reason emits an error on the stream" do
+      ServerMock
+      |> expect(:init, fn _opts -> {:ok, :server_state} end)
+      |> expect(:handle_request, fn _req, _channel, state ->
+        send(self(), :quit)
+        {:stream, state}
+      end)
+      |> expect(:handle_message, fn :quit, _channel, _state -> {:stop, :boom} end)
+
+      chunks =
+        client(url: @mcp_url)
+        |> post_message(
+          %{jsonrpc: "2.0", id: 461, method: "tools/list", params: %{}},
+          into: :self
+        )
+        |> stream_chunks()
+        |> parse_stream()
+        |> Enum.map(fn %{event: "message", data: data} -> data end)
+
+      assert [%{"error" => %{"code" => -32_603}, "id" => 461}] = chunks
+    end
+
+    @tag capture_log: true
+    test "a clean exit from handle_request with no reply yields a no-result error" do
+      expect_request(fn %MCP.ListToolsRequest{}, _channel, _state ->
+        exit(:normal)
+      end)
+
+      resp =
+        client(url: @mcp_url)
+        |> post_message(%{jsonrpc: "2.0", id: 462, method: "tools/list", params: %{}})
+        |> expect_status(500)
+
+      assert %{"error" => %{"code" => -32_603, "message" => message}, "id" => 462} = resp.body
+      assert message =~ ~r/no result/i
+    end
+
+    test "a clean exit from a streaming continuation ends the stream with no final result" do
+      ServerMock
+      |> expect(:init, fn _opts -> {:ok, :server_state} end)
+      |> expect(:handle_request, fn _req, _channel, state ->
+        send(self(), :quit)
+        {:stream, state}
+      end)
+      |> expect(:handle_message, fn :quit, _channel, _state -> exit(:normal) end)
+
+      chunks =
+        client(url: @mcp_url)
+        |> post_message(
+          %{jsonrpc: "2.0", id: 464, method: "tools/list", params: %{}},
+          into: :self
+        )
+        |> stream_chunks()
+        |> parse_stream()
+        |> Enum.to_list()
+
+      assert [] == chunks
+    end
+
+    @tag capture_log: true
+    test "an unclean exit from a streaming continuation emits the error on the SSE stream" do
+      ServerMock
+      |> expect(:init, fn _opts -> {:ok, :server_state} end)
+      |> expect(:handle_request, fn _req, _channel, state ->
+        send(self(), :quit)
+        {:stream, state}
+      end)
+      |> expect(:handle_message, fn :quit, _channel, _state -> exit(:boom) end)
+
+      chunks =
+        client(url: @mcp_url)
+        |> post_message(
+          %{jsonrpc: "2.0", id: 463, method: "tools/list", params: %{}},
+          into: :self
+        )
+        |> stream_chunks()
+        |> parse_stream()
+        |> Enum.map(fn %{event: "message", data: data} -> data end)
+
+      assert [%{"error" => %{"code" => -32_603}, "id" => 463}] = chunks
+    end
   end
 
   describe "notifications" do

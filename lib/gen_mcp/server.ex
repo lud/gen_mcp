@@ -9,7 +9,7 @@ defmodule GenMCP.Server do
 
   require Logger
 
-  @enforce_keys [:server_mod, :server_state, :owner, :mref, :channel]
+  @enforce_keys [:server_mod, :server_state, :mref, :channel]
   defstruct @enforce_keys
 
   @init_opts_schema NimbleOptions.new!(
@@ -124,7 +124,6 @@ defmodule GenMCP.Server do
         state = %__MODULE__{
           server_mod: server_mod,
           server_state: server_state,
-          owner: owner,
           mref: mref,
           channel: initiator_channel(initiator)
         }
@@ -148,25 +147,24 @@ defmodule GenMCP.Server do
     %__MODULE__{
       server_mod: server_mod,
       server_state: server_state,
-      owner: owner,
       channel: channel
     } = state
 
     callback GenMCP, server_mod.handle_request(req, channel, server_state) do
       {:result, result} ->
-        send(owner, {:"$gen_mcp", :result, result})
+        send(channel.client_alias, {:"$gen_mcp", :result, result})
         {:stop, {:shutdown, :reply}, state}
 
       {:result, result, stop_reason} ->
-        send(owner, {:"$gen_mcp", :result, result})
+        send(channel.client_alias, {:"$gen_mcp", :result, result})
         {:stop, stop_reason, state}
 
       {:error, reason} ->
-        send(owner, {:"$gen_mcp", :error, reason})
+        send(channel.client_alias, {:"$gen_mcp", :error, reason})
         {:stop, {:shutdown, :reply}, state}
 
       {:stream, server_state} ->
-        send(owner, {:"$gen_mcp", :stream})
+        send(channel.client_alias, {:"$gen_mcp", :stream})
         {:noreply, %{state | server_state: server_state}}
     end
   end
@@ -175,7 +173,7 @@ defmodule GenMCP.Server do
     callback GenMCP,
              state.server_mod.handle_notification(notif, state.channel, state.server_state) do
       :ok ->
-        send(state.owner, {:"$gen_mcp", :accepted})
+        send(state.channel.client_alias, {:"$gen_mcp", :accepted})
         {:stop, {:shutdown, :reply}, state}
     end
   end
@@ -193,25 +191,24 @@ defmodule GenMCP.Server do
     %__MODULE__{
       server_mod: server_mod,
       server_state: server_state,
-      owner: owner,
       channel: channel
     } = state
 
     callback GenMCP, server_mod.handle_message(msg, channel, server_state) do
       {:result, result} ->
-        send(owner, {:"$gen_mcp", :result, result})
+        send(channel.client_alias, {:"$gen_mcp", :result, result})
         {:stop, {:shutdown, :reply}, state}
 
       {:result, result, stop_reason} ->
-        send(owner, {:"$gen_mcp", :result, result})
+        send(channel.client_alias, {:"$gen_mcp", :result, result})
         {:stop, stop_reason, state}
 
       {:error, reason} ->
-        send(owner, {:"$gen_mcp", :error, reason})
+        send(channel.client_alias, {:"$gen_mcp", :error, reason})
         {:stop, {:shutdown, :reply}, state}
 
       {:stream, server_state} ->
-        send(owner, {:"$gen_mcp", :stream})
+        send(channel.client_alias, {:"$gen_mcp", :stream})
         {:noreply, %{state | server_state: server_state}}
 
       # End the stream with no final result (a listener's exit). Implementations
@@ -229,5 +226,12 @@ defmodule GenMCP.Server do
     end
 
     %{state | channel: channel}
+  end
+
+  def terminate(reason, state) do
+    # Send the actual exit reason, including callback failures. A DOWN without
+    # :end means termination bypassed this callback.
+    send(state.channel.client_alias, {:"$gen_mcp", :end, reason})
+    :ok
   end
 end

@@ -267,6 +267,83 @@ defmodule GenMCP.ChannelTest do
     end
   end
 
+  describe "client alias" do
+    # Messages for the relay go to an alias owned by the process that built the
+    # channel. Once the relay is done with the request it unaliases the
+    # channel, so late messages are dropped instead of reaching the next
+    # request served by the same connection process.
+
+    test "from_request/3 targets an alias of the calling process" do
+      req = %MCP.CallToolRequest{id: 1, params: nil}
+      channel = Channel.from_request(nil, req, %{})
+
+      assert channel.client == self()
+      assert is_reference(channel.client_alias)
+
+      send(channel.client_alias, :ping)
+      assert_received :ping
+    end
+
+    test "for_pid/2 targets an alias of the calling process" do
+      channel = Channel.for_pid(self())
+
+      assert channel.client == self()
+      assert is_reference(channel.client_alias)
+
+      send(channel.client_alias, :ping)
+      assert_received :ping
+    end
+
+    test "each channel gets its own alias" do
+      channel_a = Channel.for_pid(self())
+      channel_b = Channel.for_pid(self())
+
+      assert channel_a.client_alias != channel_b.client_alias
+      assert :ok = Channel.unalias(channel_a)
+
+      send(channel_a.client_alias, :to_a)
+      send(channel_b.client_alias, :to_b)
+
+      refute_received :to_a
+      assert_received :to_b
+    end
+
+    test "unalias/1 drops messages sent afterwards" do
+      channel = Channel.for_pid(self())
+
+      assert :ok = Channel.unalias(channel)
+      send(channel.client_alias, :late)
+
+      refute_received :late
+    end
+
+    test "unalias/1 can be called more than once" do
+      channel = Channel.for_pid(self())
+
+      assert :ok = Channel.unalias(channel)
+      assert :ok = Channel.unalias(channel)
+    end
+
+    test "channel sends go through the alias" do
+      channel = Channel.for_pid(self())
+      :ok = Channel.unalias(channel)
+
+      assert {:ok, _} = Channel.send_result(channel, :late_result)
+      assert {:ok, _} = Channel.send_error(channel, :late_error)
+      assert :ok = Channel.send_log(%{channel | log_level: :debug}, :error, "late log")
+
+      refute_received {:"$gen_mcp", _, _}
+    end
+
+    test "sends from another process reach the channel owner" do
+      channel = Channel.for_pid(self())
+
+      Task.await(Task.async(fn -> Channel.send_result(channel, :from_task) end))
+
+      assert_received {:"$gen_mcp", :result, :from_task}
+    end
+  end
+
   describe "send_notification/2 — subscriptionId stamping" do
     test "stamps a schema struct payload (atom key form)" do
       channel = %{build_channel() | request_id: 99}
