@@ -126,6 +126,48 @@ defmodule GenMCP.Suite.ToolTest do
       end
     end
 
+    test "combines use options with info clauses" do
+      defmodule UseMixedInfos do
+        use GenMCP.Suite.Tool,
+          behaviour: false,
+          name: "foo",
+          title: "Foo",
+          input_schema: %{},
+          annotations: %{readOnlyHint: true}
+
+        def info(:description, arg) do
+          "descr #{arg}"
+        end
+
+        def info(:annotations, _) do
+          %{destructiveHint: true}
+        end
+      end
+
+      # options without a matching clause are kept
+      assert "foo" == UseMixedInfos.info(:name, :some_arg)
+      assert "Foo" == UseMixedInfos.info(:title, :some_arg)
+
+      # clauses receive the arg
+      assert "descr some_arg" == UseMixedInfos.info(:description, :some_arg)
+
+      # a clause takes precedence over the option for the same key
+      assert %{destructiveHint: true} == UseMixedInfos.info(:annotations, :some_arg)
+
+      # neither option nor clause
+      assert nil == UseMixedInfos.info(:_meta, :some_arg)
+
+      assert %MCP.Tool{
+               _meta: nil,
+               annotations: %{destructiveHint: true},
+               description: "descr some_arg",
+               inputSchema: %{},
+               name: "foo",
+               outputSchema: nil,
+               title: "Foo"
+             } == Tool.describe({UseMixedInfos, :some_arg})
+    end
+
     test "supports annotations map in macro" do
       # Checks that maps get macro-escaped
 
