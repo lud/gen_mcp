@@ -24,3 +24,6 @@ gen_mcp-*.tar
 
 .env*
 .pm.current
+
+# Skills copied by the recompilation tests.
+/priv/test_skills/tmp/

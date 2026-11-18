@@ -474,6 +474,104 @@ defmodule GenMCP.StreamableHTTPTest do
     end
   end
 
+  describe "skills extension" do
+    @skills_url "/mcp/skills"
+
+    test "server/discover declares resources and the skills extension" do
+      assert %{
+               "result" => %{
+                 "capabilities" => %{
+                   "resources" => %{},
+                   "extensions" => %{"io.modelcontextprotocol/skills" => %{}}
+                 }
+               }
+             } =
+               client(url: @skills_url)
+               |> post_message(%{jsonrpc: "2.0", id: 1, method: "server/discover", params: %{}})
+               |> expect_status(200)
+               |> body()
+    end
+
+    test "skills/list answers the static skills" do
+      assert %{
+               "result" => %{
+                 "resultType" => "complete",
+                 "ttlMs" => 0,
+                 "cacheScope" => "private",
+                 "skills" => [
+                   %{"uri" => "skill://test/alpha/SKILL.md", "resources" => [_ | _]},
+                   %{
+                     "uri" => "skill://test/beta/SKILL.md",
+                     "frontmatter" => %{"license" => nil, "metadata" => %{"version" => 2}}
+                   },
+                   %{"uri" => "skill://test/gamma/SKILL.md"}
+                 ]
+               }
+             } =
+               client(url: @skills_url)
+               |> post_message(%{jsonrpc: "2.0", id: 1, method: "skills/list", params: %{}})
+               |> expect_status(200)
+               |> body()
+    end
+
+    test "skills/list is empty on a server without skills" do
+      assert %{"result" => %{"skills" => []}} =
+               client(url: "/mcp/real")
+               |> post_message(%{jsonrpc: "2.0", id: 1, method: "skills/list", params: %{}})
+               |> expect_status(200)
+               |> body()
+    end
+
+    test "skills/get answers a known skill and -32602 for an unknown one" do
+      assert %{"result" => %{"skill" => %{"uri" => "skill://test/gamma/SKILL.md"}}} =
+               client(url: @skills_url)
+               |> post_message(%{
+                 jsonrpc: "2.0",
+                 id: 1,
+                 method: "skills/get",
+                 params: %{uri: "skill://test/gamma/SKILL.md"}
+               })
+               |> expect_status(200)
+               |> body()
+
+      assert %{"error" => %{"code" => -32_602, "data" => %{"uri" => "skill://test/x/SKILL.md"}}} =
+               client(url: @skills_url)
+               |> post_message(%{
+                 jsonrpc: "2.0",
+                 id: 2,
+                 method: "skills/get",
+                 params: %{uri: "skill://test/x/SKILL.md"}
+               })
+               |> expect_status(200)
+               |> body()
+    end
+
+    test "the bytes resources/read serves match the advertised manifest" do
+      %{"result" => %{"skills" => skills}} =
+        client(url: @skills_url)
+        |> post_message(%{jsonrpc: "2.0", id: 1, method: "skills/list", params: %{}})
+        |> body()
+
+      for %{"resources" => resources} <- skills,
+          %{"uri" => uri, "digest" => digest, "size" => size} <- resources do
+        %{"result" => %{"contents" => [content]}} =
+          client(url: @skills_url)
+          |> post_message(%{jsonrpc: "2.0", id: 2, method: "resources/read", params: %{uri: uri}})
+          |> expect_status(200)
+          |> body()
+
+        bytes =
+          case content do
+            %{"text" => text} -> text
+            %{"blob" => blob} -> Base.decode64!(blob)
+          end
+
+        assert size == byte_size(bytes)
+        assert digest == "sha256:" <> Base.encode16(:crypto.hash(:sha256, bytes), case: :lower)
+      end
+    end
+  end
+
   describe "bad requests" do
     test "unknown RPC method is 404 Not Found with a -32601 error body" do
       # The draft spec requires 404 (not 200) for an unimplemented method; the

@@ -1,6 +1,7 @@
 alias GenMCP.Suite.Extension
 alias GenMCP.Suite.PromptRepo
 alias GenMCP.Suite.ResourceRepo
+alias GenMCP.Suite.SkillRepo
 alias GenMCP.Suite.SubscriptionHandler
 alias GenMCP.Suite.Tool
 
@@ -23,7 +24,10 @@ Mox.defmock(GenMCP.Support.ServerMockNoClose,
 #
 # -- Extensions ---------------------------------------------------------------
 
-Mox.defmock(GenMCP.Support.ExtensionMock, for: Extension)
+# Skips the optional `skills/2`, as an extension written before skills existed.
+Mox.defmock(GenMCP.Support.ExtensionMock, for: Extension, skip_optional_callbacks: true)
+
+Mox.defmock(GenMCP.Support.ExtensionFullMock, for: Extension)
 
 #
 # -- Tools --------------------------------------------------------------------
@@ -61,6 +65,19 @@ Mox.defmock(GenMCP.Support.ResourceRepoCacheMock,
 Mox.defmock(GenMCP.Support.ResourceRepoTplCacheMock,
   for: ResourceRepo,
   skip_optional_callbacks: [parse_uri: 2]
+)
+
+#
+# -- Skills -------------------------------------------------------------------
+
+Mox.defmock(GenMCP.Support.SkillRepoMock,
+  for: [ResourceRepo, SkillRepo],
+  skip_optional_callbacks: true
+)
+
+Mox.defmock(GenMCP.Support.SkillRepoCacheMock,
+  for: [ResourceRepo, SkillRepo],
+  skip_optional_callbacks: [template: 1, parse_uri: 2]
 )
 
 #

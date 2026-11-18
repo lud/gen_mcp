@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "ListSkillsRequest": {
+      "description": "Sent from the client to request the list of skills the server offers.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "jsonrpc": {
+          "const": "2.0",
+          "type": "string"
+        },
+        "method": {
+          "const": "skills/list",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/PaginatedRequestParams"
+        }
+      },
+      "required": [
+        "id",
+        "jsonrpc",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    "ListSkillsResult": {
+      "description": "The result returned by the server for a skills/list request.",
+      "properties": {
+        "_meta": {
+          "$ref": "#/$defs/ResultMetaObject"
+        },
+        "cacheScope": {
+          "description": "Indicates the intended scope of the cached response, analogous to HTTP\n`Cache-Control: public` vs `Cache-Control: private`.\n\n- `\"public\"`: The response does not contain user-specific data. Any\n  client or intermediary (e.g., shared gateway, caching proxy) MAY cache\n  the response and serve it across authorization contexts.\n- `\"private\"`: The response MAY be cached and reused only within the\n  same authorization context. Caches MUST NOT be shared across\n  authorization contexts (e.g., a different access token requires a\n  different cache).",
+          "enum": [
+            "private",
+            "public"
+          ],
+          "type": "string"
+        },
+        "nextCursor": {
+          "description": "An opaque token representing the pagination position after the last returned result.\nIf present, there may be more results available.",
+          "type": "string"
+        },
+        "resultType": {
+          "description": "Indicates the type of the result, which allows the client to determine\nhow to parse the result object.\n\nServers implementing this protocol version MUST include this field.\nFor backward compatibility, when a client receives a result from a\nserver implementing an earlier protocol version (which does not include\n`resultType`), the client MUST treat the absent field as `\"complete\"`.",
+          "type": "string"
+        },
+        "skills": {
+          "items": {
+            "$ref": "#/$defs/Skill"
+          },
+          "type": "array"
+        },
+        "ttlMs": {
+          "description": "A hint from the server indicating how long (in milliseconds) the\nclient MAY cache this response before re-fetching. Semantics are\nanalogous to HTTP Cache-Control max-age.\n\n- If 0, The response SHOULD be considered immediately stale,\n  The client MAY re-fetch every time the result is needed.\n- If positive, the client SHOULD consider the result fresh for this many\n  milliseconds after receiving the response.",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cacheScope",
+        "resultType",
+        "skills",
+        "ttlMs"
+      ],
+      "type": "object"
+    },
+    "GetSkillRequest": {
+      "description": "Sent from the client to fetch the entry of a single skill by the URI of its SKILL.md.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "jsonrpc": {
+          "const": "2.0",
+          "type": "string"
+        },
+        "method": {
+          "const": "skills/get",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/$defs/GetSkillRequestParams"
+        }
+      },
+      "required": [
+        "id",
+        "jsonrpc",
+        "method",
+        "params"
+      ],
+      "type": "object"
+    },
+    "GetSkillRequestParams": {
+      "description": "Parameters for a `skills/get` request.",
+      "properties": {
+        "_meta": {
+          "$ref": "#/$defs/RequestMetaObject"
+        },
+        "uri": {
+          "description": "URI of the skill's SKILL.md.",
+          "format": "uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "_meta",
+        "uri"
+      ],
+      "type": "object"
+    },
+    "GetSkillResult": {
+      "description": "The result returned by the server for a skills/get request.",
+      "properties": {
+        "_meta": {
+          "$ref": "#/$defs/ResultMetaObject"
+        },
+        "cacheScope": {
+          "description": "Indicates the intended scope of the cached response, analogous to HTTP\n`Cache-Control: public` vs `Cache-Control: private`.\n\n- `\"public\"`: The response does not contain user-specific data. Any\n  client or intermediary (e.g., shared gateway, caching proxy) MAY cache\n  the response and serve it across authorization contexts.\n- `\"private\"`: The response MAY be cached and reused only within the\n  same authorization context. Caches MUST NOT be shared across\n  authorization contexts (e.g., a different access token requires a\n  different cache).",
+          "enum": [
+            "private",
+            "public"
+          ],
+          "type": "string"
+        },
+        "resultType": {
+          "description": "Indicates the type of the result, which allows the client to determine\nhow to parse the result object.\n\nServers implementing this protocol version MUST include this field.\nFor backward compatibility, when a client receives a result from a\nserver implementing an earlier protocol version (which does not include\n`resultType`), the client MUST treat the absent field as `\"complete\"`.",
+          "type": "string"
+        },
+        "skill": {
+          "$ref": "#/$defs/Skill"
+        },
+        "ttlMs": {
+          "description": "A hint from the server indicating how long (in milliseconds) the\nclient MAY cache this response before re-fetching. Semantics are\nanalogous to HTTP Cache-Control max-age.\n\n- If 0, The response SHOULD be considered immediately stale,\n  The client MAY re-fetch every time the result is needed.\n- If positive, the client SHOULD consider the result fresh for this many\n  milliseconds after receiving the response.",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cacheScope",
+        "resultType",
+        "skill",
+        "ttlMs"
+      ],
+      "type": "object"
+    },
+    "Skill": {
+      "description": "The entry for a single skill.",
+      "properties": {
+        "_meta": {
+          "$ref": "#/$defs/MetaObject",
+          "description": "See the base protocol's notes on `_meta` usage. Keys defined by this\nextension use the `io.modelcontextprotocol.skills/` prefix."
+        },
+        "frontmatter": {
+          "description": "The skill's SKILL.md YAML frontmatter, rendered verbatim as a JSON object.\n`name` and `description` are always present; every other field the author\nwrote passes through unchanged.",
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "description"
+          ],
+          "type": "object"
+        },
+        "resources": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/SkillResource"
+              },
+              "type": "array"
+            },
+            {
+              "const": "dynamic",
+              "type": "string"
+            }
+          ],
+          "description": "The skill's files: a complete enumeration of SKILL.md and every supporting\nfile, or the string \"dynamic\" when the skill's content is generated such\nthat stable digests cannot be published."
+        },
+        "uri": {
+          "description": "Resource URI of the skill's SKILL.md, readable via resources/read.",
+          "format": "uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "frontmatter",
+        "resources",
+        "uri"
+      ],
+      "type": "object"
+    },
+    "SkillResource": {
+      "description": "A file belonging to a skill, with the digest and size of its content.",
+      "properties": {
+        "digest": {
+          "description": "SHA-256 digest of the file's raw bytes, formatted as `sha256:{hex}`\nwhere {hex} is 64 lowercase hexadecimal characters.",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size": {
+          "description": "Length in bytes of the file's raw content (the same bytes that `digest` covers).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "uri": {
+          "description": "Resource URI of the file.",
+          "format": "uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "digest",
+        "size",
+        "uri"
+      ],
+      "type": "object"
+    }
+  }
+}

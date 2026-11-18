@@ -7,6 +7,7 @@ alias GenMCP.TestWeb.Router.Mcp2511SubFull
 alias GenMCP.TestWeb.Router.McpMock
 alias GenMCP.TestWeb.Router.McpMockOrigins
 alias GenMCP.TestWeb.Router.McpReal
+alias GenMCP.TestWeb.Router.McpSkills
 
 require GenMCP.Transport.StreamableHTTP, as: StreamableHTTP
 require GenMCP.Transport.StreamableHTTP.V2511, as: V2511
@@ -14,6 +15,7 @@ require GenMCP.Transport.StreamableHTTP.V2511, as: V2511
 StreamableHTTP.defplug(McpMock)
 StreamableHTTP.defplug(McpReal)
 StreamableHTTP.defplug(McpMockOrigins)
+StreamableHTTP.defplug(McpSkills)
 
 # The 2025 compatibility transport is mounted on a real `GenMCP.Suite` with
 # mock providers, not on a server mock: the point of these endpoints is the
@@ -81,6 +83,11 @@ defmodule GenMCP.TestWeb.Router do
         server_name: "Real Server",
         server_version: "9.9.9",
         tools: [{ToolMock, :mrtr}]
+
+      forward "/skills", McpSkills,
+        server_name: "Skills Server",
+        server_version: "9.9.9",
+        skills: [GenMCP.Support.StaticSkills]
 
       forward "/v2511", Mcp2511,
         server_name: "Compat Server",

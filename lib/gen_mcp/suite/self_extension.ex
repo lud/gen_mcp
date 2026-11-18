@@ -3,8 +3,11 @@ defmodule GenMCP.Suite.SelfExtension do
 
   @behaviour GenMCP.Suite.Extension
 
-  def new(tools, resources, prompts) do
-    %{mod: __MODULE__, arg: %{tools: tools, resources: resources, prompts: prompts}}
+  def new(tools, resources, prompts, skills) do
+    %{
+      mod: __MODULE__,
+      arg: %{tools: tools, resources: resources, prompts: prompts, skills: skills}
+    }
   end
 
   def tools(_, arg) do
@@ -17,5 +20,9 @@ defmodule GenMCP.Suite.SelfExtension do
 
   def prompts(_, arg) do
     arg.prompts
+  end
+
+  def skills(_, arg) do
+    arg.skills
   end
 end

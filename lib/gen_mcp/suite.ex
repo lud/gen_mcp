@@ -1,13 +1,14 @@
 defmodule GenMCP.Suite do
   @moduledoc ~S"""
-  Ready-made `GenMCP` server that serves tools, resources, and prompts from a set
-  of configured providers.
+  Ready-made `GenMCP` server that serves tools, resources, prompts, and skills
+  from a set of configured providers.
 
   `GenMCP.Suite` is the default `:server` for `GenMCP.Transport.StreamableHTTP`.
   Instead of implementing the `GenMCP` behaviour yourself, you configure a Suite
   with lists of provider modules and it answers every Model Context Protocol
   request by dispatching to them: `server/discover`, `tools/list`, `tools/call`,
-  the `resources/*` and `prompts/*` requests, and subscription requests. The
+  the `resources/*` and `prompts/*` requests, the `skills/*` requests of the
+  `io.modelcontextprotocol/skills` extension, and subscription requests. The
   `server/discover` capability snapshot is self-describing, computed from the
   providers you configured, so you never hand-declare capabilities. A request for
   a method the Suite does not implement is answered with a JSON-RPC "method not
@@ -78,9 +79,13 @@ defmodule GenMCP.Suite do
     serve resources from. Defaults to `[]`.
   * `:prompts` - the list of `GenMCP.Suite.PromptRepo` implementations to generate
     prompts with. Defaults to `[]`.
+  * `:skills` - the list of `GenMCP.Suite.SkillRepo` implementations to serve
+    Agent Skills from, such as a `GenMCP.Suite.SkillRepo.Static` module. Their
+    files are served through `resources/read`, ahead of the `:resources`
+    repositories. Defaults to `[]`.
   * `:extensions` - the list of `GenMCP.Suite.Extension` implementations that
-    contribute further tools, resource repositories, and prompt repositories,
-    typically computed from the request's `t:GenMCP.Mux.Channel.t/0`. Defaults to
+    contribute further tools, resource repositories, prompt repositories, and
+    skill repositories, typically computed from the request's `t:GenMCP.Mux.Channel.t/0`. Defaults to
     `[]`.
   * `:subscription_handler` - a single `GenMCP.Suite.SubscriptionHandler`
     implementation that answers subscription requests. Defaults to `nil` (no
@@ -92,7 +97,8 @@ defmodule GenMCP.Suite do
 
   ## Providers and their arguments
 
-  Every provider entry (in `:tools`, `:resources`, `:prompts`, `:extensions`, and
+  Every provider entry (in `:tools`, `:resources`, `:prompts`, `:skills`,
+  `:extensions`, and
   `:subscription_handler`) is given in one of three forms: a bare `module`, a
   `{module, arg}` tuple, or a ready-built descriptor map. The provider behaviours
   (`GenMCP.Suite.Tool`, `GenMCP.Suite.ResourceRepo`, `GenMCP.Suite.PromptRepo`,
@@ -128,6 +134,7 @@ defmodule GenMCP.Suite do
   alias GenMCP.Suite.Extension
   alias GenMCP.Suite.PromptRepo
   alias GenMCP.Suite.ResourceRepo
+  alias GenMCP.Suite.SkillRepo
   alias GenMCP.Suite.SubscriptionHandler
   alias GenMCP.Suite.Tool
   alias GenMCP.Utils.OptsValidator
@@ -173,10 +180,16 @@ defmodule GenMCP.Suite do
           "A list of `GenMCP.Suite.PromptRepo` implementations" <>
             " to generate prompts with."
         ),
+      skills:
+        provider_list.(
+          "A list of `GenMCP.Suite.SkillRepo` implementations" <>
+            " to serve skills from."
+        ),
       extensions:
         provider_list.(
           "A list `Extension` implementations" <>
-            " to add more tools, resource repositories and prompt repositories."
+            " to add more tools, resource repositories, prompt repositories" <>
+            " and skill repositories."
         ),
       subscription_handler: provider_single.("A handler for subscription requests."),
       send_server_info: [
@@ -201,6 +214,7 @@ defmodule GenMCP.Suite do
       :tools,
       :resources,
       :prompts,
+      :skills,
       :extensions,
       :on_message
     ]
@@ -209,6 +223,8 @@ defmodule GenMCP.Suite do
   end
 
   Record.defrecordp(:tracker, id: nil, data: nil, channel: nil, mref: nil)
+
+  @skills_extension "io.modelcontextprotocol/skills"
 
   @init_opts_schema init_opts_schema
   @doc false
@@ -271,6 +287,14 @@ defmodule GenMCP.Suite do
 
   defp dispatch_request(%MCP.SubscriptionsListenRequest{} = req, channel, state) do
     handle_subscription(state, req, channel)
+  end
+
+  defp dispatch_request(%MCP.ListSkillsRequest{} = req, channel, state) do
+    handle_list_skills(state, req, channel)
+  end
+
+  defp dispatch_request(%MCP.GetSkillRequest{} = req, channel, state) do
+    handle_get_skill(state, req, channel)
   end
 
   # Catch-all: a request that validated as legal MCP but that this server does
@@ -361,8 +385,8 @@ defmodule GenMCP.Suite do
   end
 
   defp self_extension(state) do
-    %State{tools: tools, resources: resources, prompts: prompts} = state
-    __MODULE__.SelfExtension.new(tools, resources, prompts)
+    %State{tools: tools, resources: resources, prompts: prompts, skills: skills} = state
+    __MODULE__.SelfExtension.new(tools, resources, prompts, skills)
   end
 
   defp capabilities(state, channel) do
@@ -374,20 +398,30 @@ defmodule GenMCP.Suite do
         handler -> SubscriptionHandler.subscription_capabilities(handler, channel)
       end
 
-    accin = %{tools: false, prompts: false, resources: false, logging: true}
+    accin = %{tools: false, prompts: false, resources: false, skills: false}
 
-    impl_capabilities =
+    provided =
       Enum.reduce_while(extensions, accin, fn
-        _, %{tools: true, prompts: true, resources: true} = acc ->
+        _, %{tools: true, prompts: true, resources: true, skills: true} = acc ->
           {:halt, acc}
 
         ext, acc ->
-          tools = acc.tools || [] != Extension.tools(ext, channel)
-          prompts = acc.prompts || [] != Extension.prompts(ext, channel)
-          resources = acc.resources || [] != Extension.resources(ext, channel)
-
-          {:cont, %{acc | tools: tools, prompts: prompts, resources: resources, logging: true}}
+          {:cont,
+           %{
+             tools: acc.tools || [] != Extension.tools(ext, channel),
+             prompts: acc.prompts || [] != Extension.prompts(ext, channel),
+             resources: acc.resources || [] != Extension.resources(ext, channel),
+             skills: acc.skills || [] != Extension.skills(ext, channel)
+           }}
       end)
+
+    impl_capabilities = %{
+      tools: provided.tools,
+      prompts: provided.prompts,
+      resources: provided.resources || provided.skills,
+      logging: true,
+      extensions: provided.skills && %{@skills_extension => %{}}
+    }
 
     Enum.reduce(subscription_flags, impl_capabilities, fn
       {:tools_list_changed, true}, acc ->
@@ -428,6 +462,18 @@ defmodule GenMCP.Suite do
 
     case mode do
       :expand -> Stream.map(stream, &ResourceRepo.expand/1)
+      :bare -> stream
+    end
+  end
+
+  defp stream_skill_repos(state, channel, mode \\ :expand) do
+    stream =
+      state
+      |> stream_extensions()
+      |> Stream.flat_map(fn ext -> Extension.skills(ext, channel) end)
+
+    case mode do
+      :expand -> Stream.map(stream, &SkillRepo.expand/1)
       :bare -> stream
     end
   end
@@ -711,7 +757,63 @@ defmodule GenMCP.Suite do
   end
 
   defp find_resource_repo_for_uri(state, uri, channel) do
-    find_repo(uri, stream_resource_repos(state, channel))
+    repos =
+      Stream.concat(stream_skill_repos(state, channel), stream_resource_repos(state, channel))
+
+    find_repo(uri, repos)
+  end
+
+  # -- Skills -----------------------------------------------------------------
+
+  defp handle_list_skills(state, req, channel) do
+    method = "skills/list"
+
+    cursor =
+      case req do
+        %{params: %{cursor: global_cursor}} when is_binary(global_cursor) -> global_cursor
+        _ -> nil
+      end
+
+    case decode_pagination(cursor, method, channel) do
+      {:ok, pagination} ->
+        {skills, next_pagination, cache_control} = list_skills(state, pagination, channel)
+
+        result =
+          MCP.list_skills_result(
+            skills,
+            encode_pagination(next_pagination, method, channel),
+            cache_opts(cache_control)
+          )
+
+        {:result, result}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  defp list_skills(state, pagination, channel) do
+    repos = state |> stream_skill_repos(channel, :bare) |> Enum.to_list()
+
+    paginate_repos(repos, pagination, fn repo, repo_cursor ->
+      repo = SkillRepo.expand(repo)
+      {list, cursor} = SkillRepo.list_skills(repo, repo_cursor, channel)
+      cache_control = ResourceRepo.cache_control(repo)
+      {list, cursor, cache_control}
+    end)
+  end
+
+  defp handle_get_skill(state, req, channel) do
+    uri = req.params.uri
+
+    with {:ok, repo} <- find_repo(uri, stream_skill_repos(state, channel)),
+         {:ok, skill} <- SkillRepo.get_skill(repo, uri, channel) do
+      {:result,
+       MCP.get_skill_result([skill: skill] ++ cache_opts(ResourceRepo.cache_control(repo)))}
+    else
+      {:error, :no_matching_repo} -> {:error, {:skill_not_found, uri}}
+      {:error, _} = err -> err
+    end
   end
 
   # -- Prompts ----------------------------------------------------------------

@@ -75,7 +75,7 @@ defmodule DescriptionWrapper do
 end
 
 defmodule Context do
-  defstruct [:mod_prefix, :mod_config, :gh_schema]
+  defstruct [:mod_prefix, :mod_config]
 
   def mod_config(%{mod_config: mod_config}, name) do
     case Keyword.fetch(mod_config, name) do
@@ -241,7 +241,7 @@ defmodule Codegen do
     keep_nils = Enum.sort(Keyword.get(render_data, :keep_nils, %{}))
     serialize_merge = Keyword.get(render_data, :serialize_merge, %{})
     moduledoc = Keyword.fetch!(render_data, :moduledoc)
-    gh_schema = Keyword.fetch!(render_data, :gh_schema)
+    doc_source = Keyword.fetch!(render_data, :doc_source)
 
     method = Keyword.get(render_data, :method)
 
@@ -257,7 +257,7 @@ defmodule Codegen do
     defmodule #{inspect(module)} do
 
     #{if moduledoc do
-      moduledoc(moduledoc, gh_schema)
+      moduledoc(moduledoc, doc_source)
     end}
 
     use JSV.Schema
@@ -288,7 +288,7 @@ defmodule Codegen do
 
   def render_schema_module(module, schema, render_data \\ []) do
     moduledoc = Keyword.get(render_data, :moduledoc, false)
-    gh_schema = Keyword.fetch!(render_data, :gh_schema)
+    doc_source = Keyword.fetch!(render_data, :doc_source)
 
     """
     defmodule #{inspect(module)} do
@@ -296,7 +296,7 @@ defmodule Codegen do
 
 
     #{if moduledoc do
-      moduledoc(moduledoc, gh_schema)
+      moduledoc(moduledoc, doc_source)
     end}
 
     #{if Keyword.get(render_data, :use_jsv, true) do
@@ -313,11 +313,11 @@ defmodule Codegen do
     """
   end
 
-  defp moduledoc(moduledoc, gh_schema) do
+  defp moduledoc(moduledoc, {source_label, source_url}) do
     """
     @moduledoc #{~s(""")}
     Struct and module-based JSON schema generated from
-    [modelcontextprotocol.io JSON schema](#{gh_schema}).
+    [#{source_label}](#{source_url}).
 
     #{DescriptionWrapper.hardwrap(moduledoc)}
     #{~s(""")}
@@ -348,7 +348,8 @@ defmodule Generator do
       NimbleOptions.validate!(opts,
         output_path: [type: :string, required: true],
         mod_prefix: [type: :atom, required: true],
-        mod_config: [type: :keyword_list, required: true]
+        mod_config: [type: :keyword_list, required: true],
+        extension_schemas: [type: {:list, {:tuple, [:string, :string, :string]}}, default: []]
       )
 
     "deps/modelcontextprotocol/" <> github_schema_rel_path = source_schema_path
@@ -359,25 +360,22 @@ defmodule Generator do
 
     ctx = %Context{
       mod_prefix: opts[:mod_prefix],
-      mod_config: opts[:mod_config],
-      gh_schema: schema_github_path
+      mod_config: opts[:mod_config]
     }
 
-    schema =
-      source_schema_path
-      |> File.read!()
-      |> Jason.decode!(keys: :atoms)
+    base_source = {source_schema_path, "modelcontextprotocol.io JSON schema", schema_github_path}
+    sources = [base_source | opts[:extension_schemas]]
 
-    defs = Map.fetch!(schema, :"$defs")
+    {metaschema, sourced_defs} = load_sources(sources)
+    defs = Map.new(sourced_defs, fn {name, schema, _doc_source} -> {name, schema} end)
     validate_mod_config!(defs, ctx)
 
-    metaschema = schema."$schema"
-    info = build_info(schema)
+    info = build_info(%{"$defs": defs})
 
     entities =
-      defs
-      |> Enum.map(fn {name, schema} ->
-        entity(name: name, schema: schema, render_data: [gh_schema: schema_github_path])
+      sourced_defs
+      |> Enum.map(fn {name, schema, doc_source} ->
+        entity(name: name, schema: schema, render_data: [doc_source: doc_source])
       end)
       |> filter_schemas(ctx)
       |> Stream.map(&process_schema(&1, ctx))
@@ -407,6 +405,41 @@ defmodule Generator do
       {_, 1} ->
         IO.puts([IO.ANSI.red(), "Schemas generated with invalid syntax", IO.ANSI.reset()])
     end
+  end
+
+  defp load_sources([{base_path, _, _} | _] = sources) do
+    metaschema = base_path |> read_schema!() |> Map.fetch!(:"$schema")
+
+    sourced_defs =
+      Enum.flat_map(sources, fn {path, source_label, source_url} ->
+        schema = read_schema!(path)
+
+        if schema."$schema" != metaschema do
+          raise "schema #{path} uses metaschema #{schema."$schema"}, expected #{metaschema}"
+        end
+
+        schema
+        |> Map.fetch!(:"$defs")
+        |> Enum.map(fn {name, def_schema} -> {name, def_schema, {source_label, source_url}} end)
+      end)
+
+    duplicates =
+      sourced_defs
+      |> Enum.frequencies_by(fn {name, _, _} -> name end)
+      |> Enum.filter(fn {_, count} -> count > 1 end)
+      |> Enum.map(fn {name, _} -> name end)
+
+    if duplicates != [] do
+      raise "definitions defined in more than one schema source: #{inspect(Enum.sort(duplicates))}"
+    end
+
+    {metaschema, sourced_defs}
+  end
+
+  defp read_schema!(path) do
+    path
+    |> File.read!()
+    |> Jason.decode!(keys: :atoms)
   end
 
   defp skip_definition?(name, ctx) do
@@ -611,7 +644,7 @@ defmodule Generator do
 
     Codegen.render_schema_module(Codegen.module_name("ModMap", ctx), schema,
       use_jsv: false,
-      gh_schema: nil,
+      doc_source: nil,
       body: """
 
         @moduledoc false
@@ -741,7 +774,6 @@ defmodule Generator do
     module = Codegen.module_name(name, ctx)
     keep_nils = Context.mod_config(ctx, name, :keep_nils, [])
     render_data = Keyword.put(render_data, :keep_nils, keep_nils)
-    render_data = Keyword.put(render_data, :gh_schema, ctx.gh_schema)
 
     case kind do
       :struct ->
@@ -756,6 +788,10 @@ end
 Generator.run("deps/modelcontextprotocol/schema/2026-07-28/schema.json",
   output_path: "lib/gen_mcp/mcp/v2607/entities.ex",
   mod_prefix: GenMCP.MCP.V2607,
+  extension_schemas: [
+    {"tools/schemas/ext-skills.json", "MCP Skills extension specification",
+     "https://github.com/modelcontextprotocol/ext-skills/blob/main/specification/beta/skills.mdx"}
+  ],
   # Allow/deny table reconciled against the 2026-07-28 draft `$defs`
   # (150 definitions). The generate-set is the transitive `$ref` closure of the
   # supported RPC surface; everything else is `:nogen`. Re-diff `$defs` vs this
@@ -802,6 +838,9 @@ Generator.run("deps/modelcontextprotocol/schema/2026-07-28/schema.json",
     GetPromptRequestParams: [],
     GetPromptResult: [],
     GetPromptResultResponse: :nogen,
+    GetSkillRequest: [],
+    GetSkillRequestParams: [],
+    GetSkillResult: [],
     HeaderMismatchError: :nogen,
     Icon: [],
     Icons: [],
@@ -837,6 +876,8 @@ Generator.run("deps/modelcontextprotocol/schema/2026-07-28/schema.json",
     ListResourcesResultResponse: :nogen,
     ListRootsRequest: [],
     ListRootsResult: [],
+    ListSkillsRequest: [],
+    ListSkillsResult: [],
     ListToolsRequest: [],
     ListToolsResult: [],
     ListToolsResultResponse: :nogen,
@@ -894,6 +935,8 @@ Generator.run("deps/modelcontextprotocol/schema/2026-07-28/schema.json",
     ServerNotification: :nogen,
     ServerResult: :nogen,
     SingleSelectEnumSchema: :lax,
+    Skill: [],
+    SkillResource: [],
     StringSchema: :lax,
     SubscriptionFilter: [],
     SubscriptionsAcknowledgedNotification: [],

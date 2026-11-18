@@ -202,6 +202,13 @@ defmodule GenMCP.Error do
     }
   end
 
+  defcasterror {:skill_not_found, uri} when is_binary(uri), @rpc_invalid_params, 200 do
+    %{
+      data: %{uri: uri},
+      message: "Skill not found: #{uri}"
+    }
+  end
+
   defcasterror {:prompt_not_found, name} when is_binary(name), @mcp_prompt_not_found, 200 do
     %{
       data: %{name: name},

@@ -105,6 +105,9 @@ defmodule GenMCP.MCP.V2607.ModMap do
         "GetPromptRequest" => GenMCP.MCP.V2607.GetPromptRequest,
         "GetPromptRequestParams" => GenMCP.MCP.V2607.GetPromptRequestParams,
         "GetPromptResult" => GenMCP.MCP.V2607.GetPromptResult,
+        "GetSkillRequest" => GenMCP.MCP.V2607.GetSkillRequest,
+        "GetSkillRequestParams" => GenMCP.MCP.V2607.GetSkillRequestParams,
+        "GetSkillResult" => GenMCP.MCP.V2607.GetSkillResult,
         "Icon" => GenMCP.MCP.V2607.Icon,
         "Icons" => GenMCP.MCP.V2607.Icons,
         "ImageContent" => GenMCP.MCP.V2607.ImageContent,
@@ -130,6 +133,8 @@ defmodule GenMCP.MCP.V2607.ModMap do
         "ListResourcesResult" => GenMCP.MCP.V2607.ListResourcesResult,
         "ListRootsRequest" => GenMCP.MCP.V2607.ListRootsRequest,
         "ListRootsResult" => GenMCP.MCP.V2607.ListRootsResult,
+        "ListSkillsRequest" => GenMCP.MCP.V2607.ListSkillsRequest,
+        "ListSkillsResult" => GenMCP.MCP.V2607.ListSkillsResult,
         "ListToolsRequest" => GenMCP.MCP.V2607.ListToolsRequest,
         "ListToolsResult" => GenMCP.MCP.V2607.ListToolsResult,
         "LoggingLevel" => GenMCP.MCP.V2607.LoggingLevel,
@@ -167,6 +172,8 @@ defmodule GenMCP.MCP.V2607.ModMap do
         "SamplingMessage" => GenMCP.MCP.V2607.SamplingMessage,
         "SamplingMessageContentBlock" => GenMCP.MCP.V2607.SamplingMessageContentBlock,
         "ServerCapabilities" => GenMCP.MCP.V2607.ServerCapabilities,
+        "Skill" => GenMCP.MCP.V2607.Skill,
+        "SkillResource" => GenMCP.MCP.V2607.SkillResource,
         "SubscriptionFilter" => GenMCP.MCP.V2607.SubscriptionFilter,
         "SubscriptionsAcknowledgedNotification" =>
           GenMCP.MCP.V2607.SubscriptionsAcknowledgedNotification,
@@ -1404,6 +1411,130 @@ defmodule GenMCP.MCP.V2607.GetPromptResult do
   @type t :: %__MODULE__{}
 end
 
+defmodule GenMCP.MCP.V2607.GetSkillRequest do
+  @moduledoc """
+  Struct and module-based JSON schema generated from
+  [MCP Skills extension specification](https://github.com/modelcontextprotocol/ext-skills/blob/main/specification/beta/skills.mdx).
+
+  Sent from the client to fetch the entry of a single skill by the URI
+  of its SKILL.md.
+  """
+
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{method: "skills/get", jsonrpc: "2.0"}, _keep_nils = [:id, :params])
+
+  @skip_keys [:jsonrpc, :method]
+
+  @doc "Returns the JSON schema for this entity."
+  defschema %{
+    description: ~SD"""
+    Sent from the client to fetch the entry of a single skill by the URI
+    of its SKILL.md.
+    """,
+    properties: %{
+      id: GenMCP.MCP.V2607.RequestId,
+      jsonrpc: const("2.0"),
+      method: const("skills/get"),
+      params: GenMCP.MCP.V2607.GetSkillRequestParams
+    },
+    required: [:id, :jsonrpc, :method, :params],
+    title: "MCP:GetSkillRequest",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+
+  @doc "Returns the JSON RPC method for this request."
+  def method do
+    "skills/get"
+  end
+end
+
+defmodule GenMCP.MCP.V2607.GetSkillRequestParams do
+  @moduledoc """
+  Struct and module-based JSON schema generated from
+  [MCP Skills extension specification](https://github.com/modelcontextprotocol/ext-skills/blob/main/specification/beta/skills.mdx).
+
+  Parameters for a `skills/get` request.
+  """
+
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:_meta, :uri])
+
+  @doc "Returns the JSON schema for this entity."
+  defschema %{
+    description: "Parameters for a `skills/get` request.",
+    properties: %{
+      _meta: GenMCP.MCP.V2607.RequestMetaObject,
+      uri: uri(description: "URI of the skill's SKILL.md.")
+    },
+    required: [:_meta, :uri],
+    title: "MCP:GetSkillRequestParams",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.V2607.GetSkillResult do
+  @moduledoc """
+  Struct and module-based JSON schema generated from
+  [MCP Skills extension specification](https://github.com/modelcontextprotocol/ext-skills/blob/main/specification/beta/skills.mdx).
+
+  The result returned by the server for a skills/get request.
+  """
+
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:cacheScope, :resultType, :skill, :ttlMs])
+
+  @doc "Returns the JSON schema for this entity."
+  defschema %{
+    description: ~SD"""
+    The result returned by the server for a skills/get request.
+    """,
+    properties: %{
+      _meta: GenMCP.MCP.V2607.ResultMetaObject,
+      cacheScope: string_enum_to_atom([:private, :public]),
+      resultType:
+        string(
+          description: ~SD"""
+          Indicates the type of the result, which allows the client to determine
+          how to parse the result object.
+
+          Servers implementing this protocol version MUST include this field.
+          For backward compatibility, when a client receives a result from a
+          server implementing an earlier protocol version (which does not
+          include `resultType`), the client MUST treat the absent field as
+          `"complete"`.
+          """
+        ),
+      skill: GenMCP.MCP.V2607.Skill,
+      ttlMs: %{
+        description: ~SD"""
+        A hint from the server indicating how long (in milliseconds) the
+        client MAY cache this response before re-fetching. Semantics are
+        analogous to HTTP Cache-Control max-age.
+
+        - If 0, The response SHOULD be considered immediately stale, The
+        client MAY re-fetch every time the result is needed. - If positive,
+        the client SHOULD consider the result fresh for this many milliseconds
+        after receiving the response.
+        """,
+        minimum: 0,
+        type: "integer"
+      }
+    },
+    required: [:cacheScope, :resultType, :skill, :ttlMs],
+    title: "MCP:GetSkillResult",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
 defmodule GenMCP.MCP.V2607.Icon do
   @moduledoc """
   Struct and module-based JSON schema generated from
@@ -2360,6 +2491,108 @@ defmodule GenMCP.MCP.V2607.ListRootsResult do
     properties: %{roots: array_of(GenMCP.MCP.V2607.Root)},
     required: [:roots],
     title: "MCP:ListRootsResult",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.V2607.ListSkillsRequest do
+  @moduledoc """
+  Struct and module-based JSON schema generated from
+  [MCP Skills extension specification](https://github.com/modelcontextprotocol/ext-skills/blob/main/specification/beta/skills.mdx).
+
+  Sent from the client to request the list of skills the server offers.
+  """
+
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{method: "skills/list", jsonrpc: "2.0"}, _keep_nils = [:id, :params])
+
+  @skip_keys [:jsonrpc, :method]
+
+  @doc "Returns the JSON schema for this entity."
+  defschema %{
+    description: ~SD"""
+    Sent from the client to request the list of skills the server offers.
+    """,
+    properties: %{
+      id: GenMCP.MCP.V2607.RequestId,
+      jsonrpc: const("2.0"),
+      method: const("skills/list"),
+      params: GenMCP.MCP.V2607.PaginatedRequestParams
+    },
+    required: [:id, :jsonrpc, :method, :params],
+    title: "MCP:ListSkillsRequest",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+
+  @doc "Returns the JSON RPC method for this request."
+  def method do
+    "skills/list"
+  end
+end
+
+defmodule GenMCP.MCP.V2607.ListSkillsResult do
+  @moduledoc """
+  Struct and module-based JSON schema generated from
+  [MCP Skills extension specification](https://github.com/modelcontextprotocol/ext-skills/blob/main/specification/beta/skills.mdx).
+
+  The result returned by the server for a skills/list request.
+  """
+
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:cacheScope, :resultType, :skills, :ttlMs])
+
+  @doc "Returns the JSON schema for this entity."
+  defschema %{
+    description: ~SD"""
+    The result returned by the server for a skills/list request.
+    """,
+    properties: %{
+      _meta: GenMCP.MCP.V2607.ResultMetaObject,
+      cacheScope: string_enum_to_atom([:private, :public]),
+      nextCursor:
+        string(
+          description: ~SD"""
+          An opaque token representing the pagination position after the last
+          returned result. If present, there may be more results available.
+          """
+        ),
+      resultType:
+        string(
+          description: ~SD"""
+          Indicates the type of the result, which allows the client to determine
+          how to parse the result object.
+
+          Servers implementing this protocol version MUST include this field.
+          For backward compatibility, when a client receives a result from a
+          server implementing an earlier protocol version (which does not
+          include `resultType`), the client MUST treat the absent field as
+          `"complete"`.
+          """
+        ),
+      skills: array_of(GenMCP.MCP.V2607.Skill),
+      ttlMs: %{
+        description: ~SD"""
+        A hint from the server indicating how long (in milliseconds) the
+        client MAY cache this response before re-fetching. Semantics are
+        analogous to HTTP Cache-Control max-age.
+
+        - If 0, The response SHOULD be considered immediately stale, The
+        client MAY re-fetch every time the result is needed. - If positive,
+        the client SHOULD consider the result fresh for this many milliseconds
+        after receiving the response.
+        """,
+        minimum: 0,
+        type: "integer"
+      }
+    },
+    required: [:cacheScope, :resultType, :skills, :ttlMs],
+    title: "MCP:ListSkillsResult",
     type: "object"
   }
 
@@ -4121,6 +4354,100 @@ defmodule GenMCP.MCP.V2607.ServerCapabilities do
       }
     },
     title: "MCP:ServerCapabilities",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.V2607.Skill do
+  @moduledoc """
+  Struct and module-based JSON schema generated from
+  [MCP Skills extension specification](https://github.com/modelcontextprotocol/ext-skills/blob/main/specification/beta/skills.mdx).
+
+  The entry for a single skill.
+  """
+
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:frontmatter, :resources, :uri])
+
+  @doc "Returns the JSON schema for this entity."
+  defschema %{
+    description: "The entry for a single skill.",
+    properties: %{
+      _meta: GenMCP.MCP.V2607.MetaObject,
+      frontmatter: %{
+        description: ~SD"""
+        The skill's SKILL.md YAML frontmatter, rendered verbatim as a JSON
+        object. `name` and `description` are always present; every other field
+        the author wrote passes through unchanged.
+        """,
+        properties: %{description: string(), name: string()},
+        required: ["name", "description"],
+        type: "object"
+      },
+      resources: %{
+        anyOf: [array_of(GenMCP.MCP.V2607.SkillResource), const("dynamic")],
+        description: ~SD"""
+        The skill's files: a complete enumeration of SKILL.md and every
+        supporting file, or the string "dynamic" when the skill's content is
+        generated such that stable digests cannot be published.
+        """
+      },
+      uri:
+        uri(
+          description: ~SD"""
+          Resource URI of the skill's SKILL.md, readable via resources/read.
+          """
+        )
+    },
+    required: [:frontmatter, :resources, :uri],
+    title: "MCP:Skill",
+    type: "object"
+  }
+
+  @type t :: %__MODULE__{}
+end
+
+defmodule GenMCP.MCP.V2607.SkillResource do
+  @moduledoc """
+  Struct and module-based JSON schema generated from
+  [MCP Skills extension specification](https://github.com/modelcontextprotocol/ext-skills/blob/main/specification/beta/skills.mdx).
+
+  A file belonging to a skill, with the digest and size of its content.
+  """
+
+  use JSV.Schema
+
+  JsonDerive.auto(_merge = %{}, _keep_nils = [:digest, :size, :uri])
+
+  @doc "Returns the JSON schema for this entity."
+  defschema %{
+    description: ~SD"""
+    A file belonging to a skill, with the digest and size of its content.
+    """,
+    properties: %{
+      digest: %{
+        description: ~SD"""
+        SHA-256 digest of the file's raw bytes, formatted as `sha256:{hex}`
+        where {hex} is 64 lowercase hexadecimal characters.
+        """,
+        pattern: "^sha256:[0-9a-f]{64}$",
+        type: "string"
+      },
+      size: %{
+        description: ~SD"""
+        Length in bytes of the file's raw content (the same bytes that
+        `digest` covers).
+        """,
+        minimum: 0,
+        type: "integer"
+      },
+      uri: uri(description: "Resource URI of the file.")
+    },
+    required: [:digest, :size, :uri],
+    title: "MCP:SkillResource",
     type: "object"
   }
 

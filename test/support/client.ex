@@ -26,6 +26,8 @@ defmodule GenMCP.Test.Client do
     GenMCP.MCP.V2607.ListToolsRequest,
     GenMCP.MCP.V2607.DiscoverRequest,
     GenMCP.MCP.V2607.CallToolRequest,
+    GenMCP.MCP.V2607.ListSkillsRequest,
+    GenMCP.MCP.V2607.GetSkillRequest,
 
     # Notifications
 

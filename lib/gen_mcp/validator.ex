@@ -12,7 +12,9 @@ defmodule GenMCP.Validator do
   body does not conform to the schema, is rejected before it reaches a handler.
 
   The set of recognized methods is the request and notification surface of the
-  `2026-07-28` protocol that the library currently serves. The full JSON Schema
+  `2026-07-28` protocol that the library currently serves, plus the methods of
+  the protocol extensions it supports (`skills/list` and `skills/get` from the
+  `io.modelcontextprotocol/skills` extension). The full JSON Schema
   root is assembled once at compile time, so validation at runtime is a lookup
   by method followed by a single `JSV.validate/3` call.
 
@@ -60,7 +62,9 @@ defmodule GenMCP.Validator do
       GenMCP.MCP.V2607.GetPromptRequest,
       GenMCP.MCP.V2607.ListToolsRequest,
       GenMCP.MCP.V2607.DiscoverRequest,
-      GenMCP.MCP.V2607.CallToolRequest
+      GenMCP.MCP.V2607.CallToolRequest,
+      GenMCP.MCP.V2607.ListSkillsRequest,
+      GenMCP.MCP.V2607.GetSkillRequest
     ],
     notification: [
       GenMCP.MCP.V2607.CancelledNotification

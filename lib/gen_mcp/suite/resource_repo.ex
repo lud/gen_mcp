@@ -9,8 +9,11 @@ defmodule GenMCP.Suite.ResourceRepo do
 
   The prefix is what ties the requests together. The Suite routes a
   `resources/read` to the repository whose prefix the requested URI starts with,
-  so every URI a repository lists must begin with its prefix, and the prefixes of
-  the configured repositories must not collide.
+  so every URI a repository lists must begin with its prefix. The first
+  repository whose prefix matches answers, and its answer is final, so give each
+  repository a prefix of its own, made of complete path segments and ending with
+  a slash. The trailing slash keeps `file:///docs/` apart from
+  `file:///docs-archive/`.
 
   A repository is a thin adapter: keep the real content (the files, the rows) in
   a module or store of your own, and let the callbacks route to it. The two
@@ -149,7 +152,8 @@ defmodule GenMCP.Suite.ResourceRepo do
   start with this prefix, because the Suite uses it to route a `resources/read`
   to the right repository: it picks the repository whose prefix the requested URI
   starts with. The prefixes of the configured repositories must therefore be
-  distinct. `arg` is the value configured alongside the module.
+  distinct: use complete path segments ending with a slash, so one prefix never
+  begins another. `arg` is the value configured alongside the module.
 
       @impl true
       def prefix(_arg), do: "file:///docs/"

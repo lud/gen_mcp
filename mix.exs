@@ -51,6 +51,8 @@ defmodule GenMCP.MixProject do
       {:texture, ">= 0.3.2"},
       {:nimble_options, "~> 1.1"},
       {:telemetry, ">= 0.0.0"},
+      {:mime, "~> 2.0"},
+      {:yamerl, "~> 0.10", optional: true},
 
       # Resources
       mcp_schemas(),
@@ -107,6 +109,7 @@ defmodule GenMCP.MixProject do
   defp package do
     [
       licenses: ["MIT"],
+      exclude_patterns: [~r{^priv/test_skills}],
       links: %{
         "Changelog" => "https://github.com/lud/gen_mcp/blob/main/CHANGELOG.md",
         "Github" => @source_url

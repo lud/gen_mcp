@@ -36,6 +36,9 @@ defmodule GenMCP.MCP.V2607 do
   * **Reads**: `read_resource_result/1` and `resource_contents/1` build the
     contents returned for a `resources/read`. `get_prompt_result/1` builds a
     prompt's messages.
+  * **Skills**: `skill/1` builds one skill entry, and `list_skills_result/3` and
+    `get_skill_result/1` build the answers to `skills/list` and `skills/get`.
+    `skill_entry_from_path/3` builds an entry from a skill directory on disk.
   * **Discovery**: `discover_result/1`, `capabilities/1`, and `server_info/1`
     build the `server/discover` response and its parts.
 
@@ -53,20 +56,33 @@ defmodule GenMCP.MCP.V2607 do
   alias GenMCP.MCP.V2607.DiscoverResult
   alias GenMCP.MCP.V2607.EmbeddedResource
   alias GenMCP.MCP.V2607.GetPromptResult
+  alias GenMCP.MCP.V2607.GetSkillResult
   alias GenMCP.MCP.V2607.ImageContent
   alias GenMCP.MCP.V2607.Implementation
   alias GenMCP.MCP.V2607.ListPromptsResult
   alias GenMCP.MCP.V2607.ListResourcesResult
   alias GenMCP.MCP.V2607.ListResourceTemplatesResult
+  alias GenMCP.MCP.V2607.ListSkillsResult
   alias GenMCP.MCP.V2607.ListToolsResult
   alias GenMCP.MCP.V2607.PromptMessage
   alias GenMCP.MCP.V2607.ReadResourceResult
   alias GenMCP.MCP.V2607.ResourceLink
   alias GenMCP.MCP.V2607.ResultMetaObject
   alias GenMCP.MCP.V2607.ServerCapabilities
+  alias GenMCP.MCP.V2607.Skill
+  alias GenMCP.MCP.V2607.SkillResource
   alias GenMCP.MCP.V2607.TextContent
   alias GenMCP.MCP.V2607.TextResourceContents
   alias GenMCP.Suite.Tool
+
+  alias GenMCP.Utils.SkillFiles
+
+  @typedoc """
+  Describes one file of a skill read by `skill_entry_from_path/3`: its path
+  relative to the skill directory, whether its content is valid UTF-8, and its
+  MIME type.
+  """
+  @type skill_file_info :: %{path: String.t(), text?: boolean, mime_type: String.t()}
 
   # The default result type. Result builders never accept this as an option; the
   # "input_required" variant is produced by the MRTR path (spec 007), not here.
@@ -477,6 +493,243 @@ defmodule GenMCP.MCP.V2607 do
       resources: resources,
       nextCursor: next_cursor
     }
+  end
+
+  @doc """
+  Wraps skill entries and a cursor into a `GenMCP.MCP.V2607.ListSkillsResult`.
+
+  This is the answer to a `skills/list` request of the
+  `io.modelcontextprotocol/skills` extension. The `skills` are placed in the
+  result as given, and `next_cursor` becomes `nextCursor` (pass `nil` for the
+  last page). Build each entry with `skill/1`.
+
+  ### Options
+
+  * `:cache_scope` - the `cacheScope` cache hint. Defaults to the no-cache hint
+    (see `default_cache_control/0`).
+  * `:ttl_ms` - the `ttlMs` cache hint. Same default.
+
+  ### Examples
+
+      iex> alias GenMCP.MCP.V2607, as: MCP
+      iex> skill =
+      ...>   MCP.skill(
+      ...>     uri: "skill://acme/refunds/SKILL.md",
+      ...>     frontmatter: %{"name" => "refunds", "description" => "Process refunds"},
+      ...>     resources: :dynamic
+      ...>   )
+      iex> result = MCP.list_skills_result([skill], "next-page")
+      iex> {length(result.skills), result.nextCursor}
+      {1, "next-page"}
+  """
+  @spec list_skills_result([Skill.t()], term() | nil, keyword) :: ListSkillsResult.t()
+  def list_skills_result(skills, next_cursor, opts \\ []) do
+    %ListSkillsResult{
+      resultType: @result_type_complete,
+      cacheScope: Keyword.get(opts, :cache_scope, @default_cache_scope),
+      ttlMs: Keyword.get(opts, :ttl_ms, @default_ttl_ms),
+      skills: skills,
+      nextCursor: next_cursor
+    }
+  end
+
+  @doc """
+  Builds the `GenMCP.MCP.V2607.GetSkillResult` returned for `skills/get`.
+
+  There are two ways to give the skill entry:
+
+  * **Flat form**: pass `:uri`, `:frontmatter` and `:resources`. The entry is
+    built for you with `skill/1`.
+  * **`:skill` form**: pass `:skill` with an entry already built by `skill/1` or
+    `skill_entry_from_path/3`. The flat options are then ignored.
+
+  ### Options
+
+  * `:uri`, `:frontmatter`, `:resources`, `:_meta` - the entry in the flat form,
+    as described in `skill/1`.
+  * `:skill` - a `GenMCP.MCP.V2607.Skill`, used instead of the flat options.
+  * `:cache_scope` - the `cacheScope` cache hint. Defaults to the no-cache hint
+    (see `default_cache_control/0`).
+  * `:ttl_ms` - the `ttlMs` cache hint. Same default.
+
+  ### Examples
+
+  The flat form builds the entry and the result in one call:
+
+      iex> alias GenMCP.MCP.V2607, as: MCP
+      iex> result =
+      ...>   MCP.get_skill_result(
+      ...>     uri: "skill://acme/refunds/SKILL.md",
+      ...>     frontmatter: %{"name" => "refunds", "description" => "Process refunds"},
+      ...>     resources: :dynamic,
+      ...>     cache_scope: :public,
+      ...>     ttl_ms: 60_000
+      ...>   )
+      iex> {result.skill.uri, result.skill.resources, result.cacheScope, result.ttlMs}
+      {"skill://acme/refunds/SKILL.md", "dynamic", :public, 60_000}
+  """
+  @spec get_skill_result(keyword) :: GetSkillResult.t()
+  def get_skill_result(opts) do
+    {wrapper_opts, opts} = Keyword.split(opts, [:cache_scope, :ttl_ms])
+
+    skill =
+      case :proplists.get_value(:skill, opts) do
+        :undefined -> skill(opts)
+        %Skill{} = skill -> skill
+      end
+
+    %GetSkillResult{
+      resultType: @result_type_complete,
+      cacheScope: Keyword.get(wrapper_opts, :cache_scope, @default_cache_scope),
+      ttlMs: Keyword.get(wrapper_opts, :ttl_ms, @default_ttl_ms),
+      skill: skill
+    }
+  end
+
+  @doc ~S"""
+  Builds one `GenMCP.MCP.V2607.Skill`, the entry describing a skill.
+
+  A skill entry is what `skills/list` and `skills/get` return for each skill:
+  the URI of its `SKILL.md`, the frontmatter of that file, and the manifest of
+  the files that make up the skill. Hosts compare the digest and size of each
+  manifest entry with the bytes they receive from `resources/read`, so both must
+  describe the raw bytes of the file.
+
+  ### Options
+
+  * `:uri` - the URI of the skill's `SKILL.md`, required. Its last segment before
+    `/SKILL.md` is the skill's `name`.
+  * `:frontmatter` - the YAML frontmatter of `SKILL.md` as a map with string
+    keys, required. It carries at least `"name"` and `"description"`, and every
+    other key the author wrote, unchanged.
+  * `:resources` - the manifest, required. Either a list with one entry per file
+    of the skill, `SKILL.md` included, or `:dynamic` for a skill whose content is
+    generated on demand. Each file entry is a map with `:uri`, `:digest`
+    (`"sha256:"` followed by 64 lowercase hexadecimal characters) and `:size`
+    (the length in bytes), or a `GenMCP.MCP.V2607.SkillResource`.
+  * `:_meta` - optional metadata attached to the entry.
+
+  ### Examples
+
+  An entry with a one-file manifest, computing the digest and size from the
+  content that `resources/read` serves:
+
+      iex> alias GenMCP.MCP.V2607, as: MCP
+      iex> content = "---\nname: refunds\ndescription: Process refunds\n---\n"
+      iex> digest = "sha256:" <> Base.encode16(:crypto.hash(:sha256, content), case: :lower)
+      iex> skill =
+      ...>   MCP.skill(
+      ...>     uri: "skill://acme/refunds/SKILL.md",
+      ...>     frontmatter: %{"name" => "refunds", "description" => "Process refunds"},
+      ...>     resources: [
+      ...>       %{uri: "skill://acme/refunds/SKILL.md", digest: digest, size: byte_size(content)}
+      ...>     ]
+      ...>   )
+      iex> [%MCP.SkillResource{uri: uri, size: size}] = skill.resources
+      iex> {uri, size}
+      {"skill://acme/refunds/SKILL.md", 51}
+
+  A skill generated on demand declares a dynamic manifest:
+
+      iex> alias GenMCP.MCP.V2607, as: MCP
+      iex> skill =
+      ...>   MCP.skill(
+      ...>     uri: "skill://acme/report/SKILL.md",
+      ...>     frontmatter: %{"name" => "report", "description" => "Build a report"},
+      ...>     resources: :dynamic
+      ...>   )
+      iex> skill.resources
+      "dynamic"
+  """
+  @spec skill(keyword) :: Skill.t()
+  def skill(opts) do
+    %Skill{
+      uri: require_key!(opts, :uri, "option :uri is required by #{cur_fun()}"),
+      frontmatter:
+        require_key!(opts, :frontmatter, "option :frontmatter is required by #{cur_fun()}"),
+      resources:
+        opts
+        |> require_key!(:resources, "option :resources is required by #{cur_fun()}")
+        |> skill_resources(),
+      _meta: Keyword.get(opts, :_meta)
+    }
+  end
+
+  defp skill_resources(dynamic) when dynamic in [:dynamic, "dynamic"] do
+    "dynamic"
+  end
+
+  defp skill_resources(resources) when is_list(resources) do
+    Enum.map(resources, fn
+      %SkillResource{} = resource -> resource
+      %{uri: _, digest: _, size: _} = resource -> struct!(SkillResource, resource)
+    end)
+  end
+
+  @doc """
+  Builds a skill entry from a skill directory on disk.
+
+  `skill_md_path` is the path of a `SKILL.md` file. The directory that contains
+  it is the skill: every file under it, at any depth, belongs to the skill. The
+  function reads them all and returns `{skill, files}`:
+
+  * `skill` is the `GenMCP.MCP.V2607.Skill` entry, with the frontmatter parsed
+    from `SKILL.md` and a manifest holding the SHA-256 digest and the size of
+    each file.
+  * `files` maps the URI of each file to
+    `%{path: relative_path, text?: boolean, mime_type: mime_type}`. `path` is
+    relative to the skill directory, `text?` tells whether the content is valid
+    UTF-8, and `mime_type` comes from `MIME.from_path/1`. Use it to serve the
+    files in `c:GenMCP.Suite.ResourceRepo.read/3`: return a UTF-8 file as `:text`
+    and any other file as a base64 `:blob`, so the bytes the host receives are
+    the ones the digest covers.
+
+  The skill's URI is `base_uri`, then the frontmatter `name`, then `/SKILL.md`.
+  Each file gets the URI of the skill directory followed by its relative path.
+  The name and the path segments are URI-encoded, and a `/` separates `base_uri`
+  from the name when `base_uri` does not end with one. The name of the directory
+  on disk plays no part.
+
+  The frontmatter is the YAML block between the two `---` lines at the top of
+  `SKILL.md`. It is parsed with `:yamerl`, an optional dependency to add to your
+  project: `{:yamerl, "~> 0.10"}`. Keys are strings and YAML `null` values are
+  `nil`.
+
+  This function is made for compile time, as `GenMCP.Suite.SkillRepo.Static`
+  uses it. It raises an `ArgumentError` when `SKILL.md` has no frontmatter, when
+  the frontmatter is invalid YAML, or when `name` or `description` is missing. It
+  emits a warning when the name departs from the Agent Skills naming rules (at
+  most 64 lowercase letters, digits and single hyphens), and when the skill
+  exceeds 512 files or 16 MiB, the sizes every host accepts.
+
+  ### Options
+
+  * `:extensions` - a list of file extensions with their leading dot, such as
+    `[".md", ".py"]`. Only the files with one of these extensions are part of
+    the skill. The `SKILL.md` given as `skill_md_path` is always included.
+    Defaults to every file.
+
+  ### Examples
+
+  Building the entry of a skill kept in the application's `priv` directory:
+
+      {skill, files} =
+        MCP.skill_entry_from_path(
+          "priv/skills/refunds/SKILL.md",
+          "skill://acme/",
+          extensions: [".md", ".json"]
+        )
+
+      skill.uri
+      #=> "skill://acme/refunds/SKILL.md"
+
+      files["skill://acme/refunds/references/policy.md"]
+      #=> %{path: "references/policy.md", text?: true, mime_type: "text/markdown"}
+  """
+  @spec skill_entry_from_path(Path.t(), String.t(), keyword) ::
+          {Skill.t(), %{String.t() => skill_file_info}}
+  def skill_entry_from_path(skill_md_path, base_uri, opts \\ []) do
+    SkillFiles.skill_entry_from_path(skill_md_path, base_uri, opts)
   end
 
   @doc """

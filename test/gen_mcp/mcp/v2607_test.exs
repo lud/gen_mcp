@@ -1138,4 +1138,285 @@ defmodule GenMCP.MCP.V2607Test do
              } = new_data
     end
   end
+
+  describe "get_skill_result/1 and skill/1" do
+    @skill_digest "sha256:" <> String.duplicate("0", 64)
+
+    test "builds the entry from flat options" do
+      result =
+        MCP.get_skill_result(
+          uri: "skill://acme/a/SKILL.md",
+          frontmatter: %{"name" => "a", "description" => "A"},
+          resources: [%{uri: "skill://acme/a/SKILL.md", digest: @skill_digest, size: 3}],
+          cache_scope: :public,
+          ttl_ms: 1000
+        )
+
+      assert %MCP.GetSkillResult{
+               resultType: "complete",
+               cacheScope: :public,
+               ttlMs: 1000,
+               skill: %MCP.Skill{
+                 uri: "skill://acme/a/SKILL.md",
+                 frontmatter: %{"name" => "a", "description" => "A"},
+                 resources: [
+                   %MCP.SkillResource{
+                     uri: "skill://acme/a/SKILL.md",
+                     digest: @skill_digest,
+                     size: 3
+                   }
+                 ]
+               }
+             } = result
+    end
+
+    test "accepts a ready-made entry and defaults to no cache" do
+      skill =
+        MCP.skill(
+          uri: "skill://acme/a/SKILL.md",
+          frontmatter: %{"name" => "a", "description" => "A"},
+          resources: :dynamic
+        )
+
+      assert %MCP.Skill{resources: "dynamic"} = skill
+
+      assert %MCP.GetSkillResult{skill: ^skill, cacheScope: :private, ttlMs: 0} =
+               MCP.get_skill_result(skill: skill)
+    end
+
+    test "requires uri, frontmatter and resources" do
+      assert_raise KeyError, ~r/:resources is required/, fn ->
+        MCP.skill(uri: "skill://acme/a/SKILL.md", frontmatter: %{})
+      end
+    end
+  end
+
+  describe "skill_entry_from_path/3" do
+    test "builds the entry and the file index of a skill directory" do
+      assert {%MCP.Skill{uri: "skill://acme/alpha/SKILL.md", frontmatter: %{"name" => "alpha"}} =
+                skill, index} =
+               MCP.skill_entry_from_path(
+                 "priv/test_skills/main/alpha-dir/SKILL.md",
+                 "skill://acme",
+                 extensions: [".md", ".bin"]
+               )
+
+      assert [
+               "skill://acme/alpha/SKILL.md",
+               "skill://acme/alpha/assets/logo.bin",
+               "skill://acme/alpha/nested/SKILL.md"
+             ] == skill.resources |> Enum.map(& &1.uri) |> Enum.sort()
+
+      assert %{
+               "skill://acme/alpha/SKILL.md" => %{
+                 path: "SKILL.md",
+                 text?: true,
+                 mime_type: "text/markdown"
+               },
+               "skill://acme/alpha/assets/logo.bin" => %{
+                 path: "assets/logo.bin",
+                 text?: false,
+                 mime_type: "application/octet-stream"
+               },
+               "skill://acme/alpha/nested/SKILL.md" => %{path: "nested/SKILL.md", text?: true}
+             } = index
+
+      assert 3 == map_size(index)
+    end
+
+    test "encodes the name and file paths as URI segments" do
+      {{skill, index}, _stderr} =
+        ExUnit.CaptureIO.with_io(:stderr, fn ->
+          MCP.skill_entry_from_path("priv/test_skills/encoding/odd/SKILL.md", "skill://acme/")
+        end)
+
+      assert "skill://acme/my%20skill/SKILL.md" == skill.uri
+
+      assert ["skill://acme/my%20skill/SKILL.md", "skill://acme/my%20skill/notes%231.md"] ==
+               skill.resources |> Enum.map(& &1.uri) |> Enum.sort()
+
+      assert %{path: "notes#1.md"} = index["skill://acme/my%20skill/notes%231.md"]
+    end
+
+    test "computes the digest and size of the raw bytes" do
+      {skill, _} =
+        MCP.skill_entry_from_path("priv/test_skills/main/gamma/SKILL.md", "skill://acme/")
+
+      bytes = File.read!("priv/test_skills/main/gamma/SKILL.md")
+
+      assert [%MCP.SkillResource{uri: "skill://acme/gamma/SKILL.md", size: size, digest: digest}] =
+               skill.resources
+
+      assert byte_size(bytes) == size
+      assert "sha256:" <> Base.encode16(:crypto.hash(:sha256, bytes), case: :lower) == digest
+    end
+  end
+
+  describe "skills extension entities encode to the wire shape" do
+    @digest "sha256:" <> String.duplicate("ab", 32)
+
+    defp wire(data) do
+      data |> JSON.encode!() |> JSON.decode!()
+    end
+
+    test "list skills result with a manifest and pass-through frontmatter" do
+      result = %MCP.ListSkillsResult{
+        resultType: "complete",
+        ttlMs: 0,
+        cacheScope: :private,
+        skills: [
+          %MCP.Skill{
+            uri: "skill://acme/billing/refunds/SKILL.md",
+            frontmatter: %{
+              "name" => "refunds",
+              "description" => "Process refunds",
+              "license" => nil,
+              "allowed-tools" => ["Read", "Grep"],
+              "metadata" => %{"owner" => %{"team" => "billing", "oncall" => nil}}
+            },
+            resources: [
+              %MCP.SkillResource{
+                uri: "skill://acme/billing/refunds/SKILL.md",
+                digest: @digest,
+                size: 0
+              },
+              %MCP.SkillResource{
+                uri: "skill://acme/billing/refunds/scripts/refund.py",
+                digest: @digest,
+                size: 1024
+              }
+            ]
+          }
+        ]
+      }
+
+      assert %{
+               "resultType" => "complete",
+               "ttlMs" => 0,
+               "cacheScope" => "private",
+               "skills" => [
+                 %{
+                   "uri" => "skill://acme/billing/refunds/SKILL.md",
+                   "frontmatter" => %{
+                     "name" => "refunds",
+                     "description" => "Process refunds",
+                     "license" => nil,
+                     "allowed-tools" => ["Read", "Grep"],
+                     "metadata" => %{"owner" => %{"team" => "billing", "oncall" => nil}}
+                   },
+                   "resources" => [
+                     %{
+                       "uri" => "skill://acme/billing/refunds/SKILL.md",
+                       "digest" => @digest,
+                       "size" => 0
+                     },
+                     %{
+                       "uri" => "skill://acme/billing/refunds/scripts/refund.py",
+                       "digest" => @digest,
+                       "size" => 1024
+                     }
+                   ]
+                 } = skill
+               ]
+             } = encoded = wire(result)
+
+      refute Map.has_key?(encoded, "nextCursor")
+      refute Map.has_key?(encoded, "_meta")
+      refute Map.has_key?(skill, "_meta")
+    end
+
+    test "list skills result carries the next cursor" do
+      result = %MCP.ListSkillsResult{
+        resultType: "complete",
+        ttlMs: 0,
+        cacheScope: :private,
+        skills: [],
+        nextCursor: "page-2"
+      }
+
+      assert %{"skills" => [], "nextCursor" => "page-2"} = wire(result)
+    end
+
+    test "get skill result with a dynamic skill" do
+      result = %MCP.GetSkillResult{
+        resultType: "complete",
+        ttlMs: 60_000,
+        cacheScope: :public,
+        skill: %MCP.Skill{
+          uri: "skill://acme/generated/SKILL.md",
+          frontmatter: %{"name" => "generated", "description" => "Generated on demand"},
+          resources: "dynamic"
+        }
+      }
+
+      assert %{
+               "resultType" => "complete",
+               "ttlMs" => 60_000,
+               "cacheScope" => "public",
+               "skill" => %{
+                 "uri" => "skill://acme/generated/SKILL.md",
+                 "frontmatter" => %{"name" => "generated", "description" => "Generated on demand"},
+                 "resources" => "dynamic"
+               }
+             } = wire(result)
+    end
+
+    test "skills results carry the server info in _meta" do
+      server_info = %MCP.Implementation{name: "TestServer", version: "1.0.0"}
+
+      result = %MCP.GetSkillResult{
+        resultType: "complete",
+        ttlMs: 0,
+        cacheScope: :private,
+        skill: %MCP.Skill{
+          uri: "skill://acme/generated/SKILL.md",
+          frontmatter: %{"name" => "generated", "description" => "Generated on demand"},
+          resources: "dynamic"
+        },
+        _meta: %MCP.ResultMetaObject{"io.modelcontextprotocol/serverInfo": server_info}
+      }
+
+      assert %{
+               "_meta" => %{
+                 "io.modelcontextprotocol/serverInfo" => %{
+                   "name" => "TestServer",
+                   "version" => "1.0.0"
+                 }
+               }
+             } = wire(result)
+    end
+
+    test "skill entries validate against their schema" do
+      skill = %{
+        "uri" => "skill://acme/billing/refunds/SKILL.md",
+        "frontmatter" => %{
+          "name" => "refunds",
+          "description" => "Process refunds",
+          "metadata" => %{"owner" => "billing"}
+        },
+        "resources" => [
+          %{"uri" => "skill://acme/billing/refunds/SKILL.md", "digest" => @digest, "size" => 12}
+        ]
+      }
+
+      root = JSV.build!(MCP.Skill)
+
+      assert {:ok, %MCP.Skill{frontmatter: %{"metadata" => %{"owner" => "billing"}}}} =
+               JSV.validate(skill, root)
+
+      assert {:ok, %MCP.Skill{resources: "dynamic"}} =
+               JSV.validate(%{skill | "resources" => "dynamic"}, root)
+
+      assert {:error, _} = JSV.validate(%{skill | "resources" => "static"}, root)
+
+      assert {:error, _} =
+               JSV.validate(put_in(skill, ["frontmatter"], %{"name" => "refunds"}), root)
+
+      bad_digest = [%{"uri" => "skill://a/SKILL.md", "digest" => "sha256:ABC", "size" => 1}]
+      assert {:error, _} = JSV.validate(%{skill | "resources" => bad_digest}, root)
+
+      bad_size = [%{"uri" => "skill://a/SKILL.md", "digest" => @digest, "size" => -1}]
+      assert {:error, _} = JSV.validate(%{skill | "resources" => bad_size}, root)
+    end
+  end
 end

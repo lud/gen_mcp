@@ -1,7 +1,7 @@
 defmodule GenMCP.Suite.Extension do
   @moduledoc """
-  Behaviour for contributing tools, resource repositories, and prompt
-  repositories to a `GenMCP.Suite` based on the request.
+  Behaviour for contributing tools, resource repositories, prompt repositories,
+  and skill repositories to a `GenMCP.Suite` based on the request.
 
   A plain Suite serves the providers you list in its `:tools`, `:resources`, and
   `:prompts` options. An extension serves the same kinds of providers, but it
@@ -11,7 +11,8 @@ defmodule GenMCP.Suite.Extension do
   client `meta` and the auth assigns merged into it.
 
   An extension answers three questions, one per callback: which tools, which
-  resource repositories, and which prompt repositories to add. Each callback
+  resource repositories, and which prompt repositories to add. The optional
+  `c:skills/2` callback adds skill repositories the same way. Each callback
   returns provider specs (bare modules or `{module, arg}` tuples), not built
   results. The Suite invokes the extension while gathering capabilities and while
   listing or dispatching, then expands and runs the providers it returns.
@@ -58,7 +59,7 @@ defmodule GenMCP.Suite.Extension do
   ## Ordering
 
   The providers configured directly on the Suite (`:tools`, `:resources`,
-  `:prompts`) always come first, ahead of any extension. Extensions then
+  `:prompts`, `:skills`) always come first, ahead of any extension. Extensions then
   contribute in the order they appear in the `:extensions` list. This ordering
   is what `tools/list` and the resource and prompt listings reflect, and it
   decides precedence when two providers define the same tool: the first one wins.
@@ -135,6 +136,29 @@ defmodule GenMCP.Suite.Extension do
   @callback prompts(Channel.t(), arg) :: [Suite.PromptRepo.prompt_repo()]
 
   @doc """
+  Returns the skill repositories this extension contributes for the request.
+
+  Each entry is a `GenMCP.Suite.SkillRepo` spec, a bare module or a
+  `{module, arg}` tuple. Return an empty list to contribute nothing. The
+  `channel` carries the request context, and `arg` is the value configured next
+  to the extension module.
+
+  This callback is optional. An extension that leaves it out contributes no
+  skill repository.
+
+      @impl true
+      def skills(channel, _arg) do
+        case channel.meta do
+          %{current_user: %{role: :admin}} -> [MyApp.Skills, MyApp.AdminSkills]
+          _ -> [MyApp.Skills]
+        end
+      end
+  """
+  @callback skills(Channel.t(), arg) :: [Suite.SkillRepo.skill_repo()]
+
+  @optional_callbacks skills: 2
+
+  @doc """
   Normalizes an extension spec into a descriptor map.
 
   Accepts the three forms an extension may be configured as and returns a
@@ -190,5 +214,20 @@ defmodule GenMCP.Suite.Extension do
   """
   def prompts(%{mod: mod, arg: arg}, channel) do
     mod.prompts(channel, arg)
+  end
+
+  @doc """
+  Invokes the `c:skills/2` callback of the extension `descriptor` for `channel`.
+
+  Counterpart of `tools/2` for skill repositories. Returns an empty list when the
+  extension module does not export `c:skills/2`.
+  """
+  # TODO(v3) make the skills/2 callback mandatory, and warn when it is missing
+  def skills(%{mod: mod, arg: arg}, channel) do
+    if Code.ensure_loaded?(mod) and function_exported?(mod, :skills, 2) do
+      mod.skills(channel, arg)
+    else
+      []
+    end
   end
 end
